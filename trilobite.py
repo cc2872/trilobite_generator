@@ -1,15 +1,3 @@
-"""
-trilobite.py v4 — anatomically sculpted, physically enrollable, parametric trilobite.
-
-THE IDEA: the dorsal exoskeleton is a FUNCTION z(x, y). Vault + axial lobe + glabella + eyes
-+ border are positive terms; every furrow (axial, ring, pleural, glabellar, occipital, border)
-is a smooth trough. The surface is sampled on a grid that follows each part's plan outline,
-turned into a spline surface and thickened into a shell. Booleans are used only for what a
-surface cannot express: hinges, stops, spines, doublure.
-
-Coordinates: X across, Y along the body (head at -Y), Z up. Each part's front hinge (the
-head's rear hinge) is at its local y = 0.  Parameters: schema.py.  Fields: fields.py.
-"""
 import math
 import numpy as np
 from build123d import *
