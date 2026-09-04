@@ -4,53 +4,53 @@ from build123d import *
 import schema
 from fields import (width_curve, seg_halfwidth, head_halfwidth, tail_halfwidth,
                     pleural_spine_field, furrow_amp, landmarks)
-
+ 
 VIEWER_PORT = 3939
 P = schema.defaults()
-
+ 
 # =====================================================================
 #  derived scalars
 # =====================================================================
 def pitch(P):
     return P["length"] * (1 - P["cephFrac"] - P["pygFrac"]) / P["segCount"]
-
+ 
 def ring_top(P):
     return P["relief"] * (1 + P["axisRise"])
-
+ 
 def hinge_z(P):
     """Hinge axis height. The clearance groove (radius barrelR + clearance) must sit clear below the
     shell's inner surface at the ring furrow, and the knuckle top must clear the flap above it."""
     return ring_top(P) - P["barrelR"] - P["wall"] - P["clearance"] - 0.4 - 0.7 * furrow_amp(P)
-
+ 
 def hinge_width(P):
     """Constant for every joint, sized to the narrowest axial ring (last segment)."""
     return 2 * P["axisFrac"] * seg_halfwidth(P, P["segCount"] - 1) - 2
-
+ 
 def joint_offsets(P):
     d = pitch(P)
     return [0] + [d] * P["segCount"]
-
+ 
 # =====================================================================
 #  surface vocabulary (all numpy, all smooth)
 # =====================================================================
 def smoothstep(e0, e1, x):
     t = np.clip((x - e0) / (e1 - e0), 0, 1)
     return t * t * (3 - 2 * t)
-
+ 
 def plateau(v, half, edge=0.7):
     """1 inside |v| < half, 0 outside, smooth over `edge`."""
     return 1 - smoothstep(half - edge, half + edge, np.abs(v))
-
+ 
 def trough(dist, sigma):
     return np.exp(-(dist / sigma) ** 2)
-
+ 
 def vault(u, P):
     """Cross-section height factor vs normalized lateral position u ∈ [-1, 1], with a fulcrum."""
     u = np.abs(u); f = P["fulcrum"]
     inner = 1 - 0.35 * (u / f) ** 2
     outer = 0.65 * (1 - (np.maximum(u - f, 0) / (1 - f)) ** 1.6)
     return np.where(u <= f, inner, outer)
-
+ 
 # =====================================================================
 #  plate builder: grid → spline surface → shell solid, plus an "under" envelope
 # =====================================================================
@@ -72,12 +72,12 @@ def _grid(outline, zfun, nu, nv, dz=0.0, floor=None, passes=2):
     zs = np.maximum(zs + dz, 0.05)
     if floor is not None: zs[:] = floor
     return [[(float(xs[j, i]), float(ys[j, i]), float(zs[j, i])) for i in range(nu)] for j in range(nv)]
-
+ 
 def _surface(rows):
     """Least-squares B-spline approximation to a small tolerance. (Variational smoothing washes the
     sculpture out; pure interpolation overshoots on sharp features.)"""
     return Face.make_surface_from_array_of_points(rows, tol=0.08, max_deg=3)
-
+ 
 def plate(outline, zfun, t, nu=45, nv=27):
     """Shell of thickness t under the surface z = zfun(x, y), on the plan given by outline(u, v)."""
     top = _surface(_grid(outline, zfun, nu, nv))
@@ -88,7 +88,7 @@ def plate(outline, zfun, t, nu=45, nv=27):
         e2 = min(bot.edges(), key=lambda e: (e.position_at(0.5) - m).length)
         sides.append(Face.make_surface_from_curves(e1, e2))
     return Solid(Shell([top, bot] + sides))
-
+ 
 def under(outline, zfun, nu=45, nv=27):
     """Solid filling everything under the surface down to z = -1 (envelope for clipping)."""
     top = _surface(_grid(outline, zfun, nu, nv))
@@ -99,12 +99,26 @@ def under(outline, zfun, nu=45, nv=27):
         e2 = min(bot.edges(), key=lambda e: (e.position_at(0.5) - m).length)
         sides.append(Face.make_surface_from_curves(e1, e2))
     return Solid(Shell([top, bot] + sides))
-
+ 
+def tubercles(x, y, P, region, seed, count_scale):
+    """Seeded granules: sum of small Gaussian bumps inside `region(xk, yk) -> bool`."""
+    if P["tubercles"] <= 0.001: return 0.0
+    rng = np.random.default_rng(int(P["seed"]) * 1000 + seed)
+    n = int(P["tubercles"] * count_scale)
+    xmin, xmax, ymin, ymax = region["box"]
+    z = np.zeros_like(x, dtype=float); r = P["tubercleSize"]; k = 0; tries = 0
+    while k < n and tries < 20 * n + 20:
+        tries += 1
+        xk = rng.uniform(xmin, xmax); yk = rng.uniform(ymin, ymax)
+        if not region["ok"](xk, yk): continue
+        z += 0.45 * r * np.exp(-((x - xk) ** 2 + (y - yk) ** 2) / (0.55 * r) ** 2); k += 1
+    return z
+ 
 def spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0):
     """Tapered spine from `at`, pointing +Y (rear); yaw about Z (+ toward +X), pitch up."""
     s = Cone(base_r, tip_r, length, align=(Align.CENTER, Align.CENTER, Align.MIN)).rotate(Axis.X, -90)
     return s.rotate(Axis.X, pitch_deg).rotate(Axis.Z, -yaw_deg).moved(Location(at))
-
+ 
 # =====================================================================
 #  hinge (unchanged mechanism: interleaving knuckles, pin bore, stop block, ventral bevel)
 # =====================================================================
@@ -113,10 +127,10 @@ def add_hinge(part, envelope, P, y_axis, rear):
     zh, Wh = hinge_z(P), hinge_width(P)
     kw, x0 = Wh / nK, -Wh / 2
     W = P["width"]
-
+ 
     def barrel(xc, length, r):
         return Cylinder(r, length).rotate(Axis.Y, 90).moved(Location((xc, y_axis, zh)))
-
+ 
     part -= barrel(0, Wh + 4, rB + c)
     webs = None
     for i in range(nK):
@@ -138,7 +152,7 @@ def add_hinge(part, envelope, P, y_axis, rear):
         wedge = Box(W + 40, L, L, align=(Align.CENTER, Align.MAX, Align.MAX)).rotate(Axis.X, phi)
     part -= wedge.moved(Location((0, y_axis, zh))) - barrel(0, Wh + 4, rB + c)
     return part
-
+ 
 # =====================================================================
 #  THORACIC SEGMENT i
 # =====================================================================
@@ -151,12 +165,12 @@ def build_segment(P, i=0):
     rise = P["axisRise"] * h
     F = furrow_amp(P)
     sweep = P["tipSweep"] * d
-
+ 
     def outline(u, v):
         x = u * w
         yr = d + flap + sweep * (max(abs(x) - a, 0) / (w - a)) ** 2      # rear margin sweeps back
         return x, v * yr
-
+ 
     def zfun(x, y):
         ax = np.abs(x)
         z = margin + (h - margin) * vault(x / w, P)
@@ -165,12 +179,14 @@ def build_segment(P, i=0):
         z -= 0.7 * F * trough(y - d, 0.8) * plateau(x, a + 1.5, 1.0)         # ring furrow at the flap
         px = np.clip((ax - a) / (w - a), 0, 1); ly = 0.30 * d + px * 0.45 * d
         z -= 0.8 * F * trough(y - ly, 0.9) * (ax > a + 1.0)                  # pleural furrow
+        z += tubercles(x, y, P, dict(box=(-w + 2, w - 2, ovl + 1, d - 1), ok=lambda xk, yk: abs(xk) > a + 1.5 or abs(xk) < a - 1.5),
+                       seed=i, count_scale=0.9 * w)
         drop = np.minimum(t + c + 0.7 * F + 0.3, np.maximum(z - (t + 0.6), 0))    # never thinner than the wall
         z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y))                               # stepped front under the previous flap
         return z
-
-    seg = plate(outline, zfun, t)
-    env = under(outline, zfun)
+ 
+    seg = plate(outline, zfun, t, nu=53, nv=29)
+    env = under(outline, zfun, nu=53, nv=29)
     # doublure: vertical rim + inward lip along the margins, on the exposed part of the body only
     for s in (1, -1):
         seg += Box(t, d - ovl, margin - t, align=(Align.MAX if s > 0 else Align.MIN, Align.MIN, Align.MIN)).moved(Location((s * w, ovl, 0)))
@@ -180,11 +196,14 @@ def build_segment(P, i=0):
     # pleural spines from the field — added AFTER the hinge so the stop bevel never trims them;
     # whether they clear the next segment when curling is the instrument's job to find out
     Ls = pleural_spine_field(P)[i] * w
+    r = 0.5 * margin
     if Ls > 0.5:
-        for s in (1, -1):
-            seg += spine(0.5 * margin, 0.6, Ls, (s * (w - 0.5 * margin), d - 0.5, 0.5 * margin), s * P["spineSweep"])
+        for s in (1, -1):   # base straddles the rear-outer corner, body of the spine outboard of the next segment
+            seg += spine(r, 0.6, Ls, (s * (w + 0.35 * r), d - 0.6 * r, r), s * P["spineSweep"])
+    if P["axialSpine"] > 0.02:
+        seg += spine(0.6 * r + 0.6, 0.5, P["axialSpine"] * h, (0, ovl + 0.45 * (d - ovl), h + rise - 1.0), 0, pitch_deg=60)
     return seg
-
+ 
 # =====================================================================
 #  CEPHALON
 # =====================================================================
@@ -199,21 +218,21 @@ def build_cephalon(P):
     rise = P["axisRise"] * h
     F = furrow_amp(P)
     Le = Lc - par                                                       # elliptical front length
-
+ 
     def xmax(y):
         yy = np.asarray(y, float)
         front = np.clip((-yy - par) / Le, 0, 1)
         return np.maximum(wh * np.sqrt(np.clip(1 - front ** 2, 0, 1)), 1.5)
-
+ 
     def outline(u, v):
         y = flap - v * (Lc + flap)
         return u * float(xmax(y)), y
-
+ 
     def glab_half(y):
         yy = np.asarray(y, float)
         f = np.clip(-yy / Lc, 0, 1)
         return a * (1 + (P["glabInflate"] - 1) * f)
-
+ 
     def zfun(x, y):
         ax = np.abs(x)
         xm = xmax(y)
@@ -238,6 +257,7 @@ def build_cephalon(P):
             eH = 0.10 * h + 0.35 * eR
             z += 0.6 * eH * np.exp(-(r / (0.75 * eR)) ** 2)                 # palpebral lobe
             z += eH * trough(r - eR, 0.9) * mask                              # visual surface ridge
+        z += tubercles(x, y, P, dict(box=(-wh + 3, wh - 3, -Lc + 4, -2), ok=lambda xk, yk: True), seed=99, count_scale=2.2 * wh)
         # border: furrow and raised rim along the outline
         if P["borderWidth"] > 0.005:
             bw = P["borderWidth"] * wh
@@ -245,16 +265,18 @@ def build_cephalon(P):
             z -= 0.8 * F * trough(dist - bw, 0.8 + 0.2 * bw)
             z += 0.35 * F * plateau(dist, 0.45 * bw, 0.4 * bw)
         return z
-
+ 
     head = plate(outline, zfun, t, nu=45, nv=33)
     env = under(outline, zfun, nu=45, nv=33)
     head = add_hinge(head, env, P, 0, rear=True)
     if P["genalSpine"] > 0.02:                      # after the hinge: the bevel must not trim them
         Lg = P["genalSpine"] * Lc
         for s in (1, -1):
-            head += spine(0.55 * margin, 0.6, Lg, (s * (wh + 0.15 * margin), -0.10 * Lc, 0.5 * margin), s * 0.5 * P["genalCurve"])
+            head += spine(0.55 * margin, 0.6, Lg, (s * (wh - 0.1 * margin), -0.12 * Lc, 0.5 * margin), s * (15 + 0.5 * P["genalCurve"]))
+    if P["occipitalSpine"] > 0.02:
+        head += spine(0.6 * margin, 0.5, P["occipitalSpine"] * Lc, (0, -0.07 * Lc, ring_top(P) - 1.0), 0, pitch_deg=55)
     return head
-
+ 
 # =====================================================================
 #  PYGIDIUM
 # =====================================================================
@@ -268,15 +290,15 @@ def build_pygidium(P):
     rise = P["axisRise"] * h
     F = furrow_amp(P)
     n = int(P["pygRings"])
-
+ 
     def xmax(y):
         yy = np.clip(np.asarray(y, float) / Lp, 0, 1)
         return np.maximum(wp * np.sqrt(np.clip(1 - yy ** 2, 0, 1)), 1.5)
-
+ 
     def outline(u, v):
         y = v * Lp
         return u * float(xmax(y)), y
-
+ 
     def zfun(x, y):
         ax = np.abs(x); xm = xmax(y); yy = np.clip(y / Lp, 0, 1)
         tz = np.sqrt(np.clip(1 - yy ** 2, 0, 1)) * 0.9 + 0.1
@@ -295,10 +317,12 @@ def build_pygidium(P):
             dist = np.minimum(xm - ax, (1 - yy) * Lp)
             z -= 0.8 * F * trough(dist - bw, 0.8 + 0.2 * bw)
             z += 0.35 * F * plateau(dist, 0.45 * bw, 0.4 * bw)
+        z += tubercles(x, y, P, dict(box=(-wp + 3, wp - 3, ovl + 1, Lp - 3), ok=lambda xk, yk: abs(xk) < wp * math.sqrt(max(0.0, 1 - (yk / Lp) ** 2)) - 2.5),
+                       seed=77, count_scale=1.6 * wp)
         drop = np.minimum(t + c + 0.7 * F + 0.3, np.maximum(z - (t + 0.6), 0))
         z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y))                               # stepped front under the last flap
         return z
-
+ 
     tail = plate(outline, zfun, t, nu=45, nv=27)
     env = under(outline, zfun, nu=45, nv=27)
     tail = add_hinge(tail, env, P, 0, rear=False)
@@ -308,17 +332,28 @@ def build_pygidium(P):
             tail += spine(0.5 * margin, 0.6, Ls, (s * 0.5 * wp, 0.6 * Lp, 0.5 * margin), s * P["pygSplay"])
     if P["termSpine"] > 0.02:
         tail += spine(0.5 * margin, 0.6, P["termSpine"] * Lp, (0, 0.85 * Lp, 0.5 * margin), 0)
+    n_m = int(P["pygMarginal"])
+    if n_m > 0:
+        Lm = P["pygMarginalLen"] * Lp; r = 0.4 * margin
+        for k in range(n_m):
+            phi = math.radians(15 + (150 * (k + 0.5) / n_m))            # around the elliptical margin, one side
+            for s in (1, -1):
+                bx, by = s * 0.92 * wp * math.cos(phi), 0.92 * Lp * math.sin(phi)
+                nx, ny = s * math.cos(phi) / wp, math.sin(phi) / Lp        # outward normal of the ellipse
+                dx, dy = nx, ny + 0.6 / Lp                                  # swept back
+                yaw = math.degrees(math.atan2(dx, dy))
+                tail += spine(r, 0.5, Lm, (bx, by, 0.5 * margin), yaw)
     return tail
-
+ 
 # =====================================================================
 #  ASSEMBLY, CHECK, ANIMATION, EXPORT
 # =====================================================================
 PART_NAMES = lambda P: ["head"] + [f"seg{i}" for i in range(int(P["segCount"]))] + ["tail"]
-
+ 
 def parts_list(P):
     P = schema.coerce(P)
     return [build_cephalon(P)] + [build_segment(P, i) for i in range(int(P["segCount"]))] + [build_pygidium(P)]
-
+ 
 def chain_transforms(P, enroll):
     """Location of each part for a uniform enrollment (0..1)."""
     zh = hinge_z(P); theta = enroll * P["maxAngle"]
@@ -328,11 +363,11 @@ def chain_transforms(P, enroll):
     for i in range(1, len(offs) + 1):
         loc = loc * (Location((0, offs[i - 1], 0)) * rot); locs.append(loc)
     return locs
-
+ 
 def assemble(P, enroll, parts=None):
     parts = parts or parts_list(P)
     return [p.moved(l) for p, l in zip(parts, chain_transforms(P, enroll))]
-
+ 
 def check_enrollment(P, samples=(0.0, 0.5, 0.95, 1.05, 1.3), parts=None):
     """Neighbour-pair overlap by CAD boolean (slow, exact). The instrument module does all pairs on meshes."""
     parts = parts or parts_list(P)
@@ -342,7 +377,7 @@ def check_enrollment(P, samples=(0.0, 0.5, 0.95, 1.05, 1.3), parts=None):
         vols = [((posed[i] & posed[i + 1]).volume if (posed[i] & posed[i + 1]) else 0.0) for i in range(len(posed) - 1)]
         print(f"  enroll={e:4.2f} ({e*P['maxAngle']:5.1f} deg): " + " ".join(f"{v:6.1f}" for v in vols)
               + f"  {'OK' if max(vols) < 1 else 'COLLIDES'}")
-
+ 
 def build_chain(P, parts=None):
     parts = parts or parts_list(P)
     zh, offs = hinge_z(P), joint_offsets(P); names = PART_NAMES(P)
@@ -353,7 +388,7 @@ def build_chain(P, parts=None):
         node = Compound(children=kids, label=names[i])
         if i > 0: node.location = Location((0, offs[i - 1], 0))
     return Compound(children=[node], label="trilobite").moved(Location((0, 0, zh))), names
-
+ 
 def animate_enrollment(P, parts=None, seconds=2.5):
     from ocp_vscode import show, Animation
     chain, names = build_chain(P, parts)
@@ -362,7 +397,7 @@ def animate_enrollment(P, parts=None, seconds=2.5):
     for i in range(1, len(names)):
         anim.add_track("/trilobite/" + "/".join(names[:i + 1]), "rx", times, [0, -P["maxAngle"], 0])
     anim.animate(speed=1)
-
+ 
 # =====================================================================
 #  meshing / export (build123d's export_stl uses a tolerance far too fine for spline shells)
 # =====================================================================
@@ -370,12 +405,18 @@ def to_trimesh(part, tol=0.15, ang=0.3):
     """Robust tessellation: OpenCascade occasionally skips a face at a given tolerance, so retry with
     nearby tolerances, then fall back to meshing face by face and stitching."""
     import trimesh
+    best = None
     for k in (1.0, 0.8, 1.25, 0.6, 1.6):
         try:
             v, tris = part.tessellate(tol * k, ang)
-            return trimesh.Trimesh(np.array([(p.X, p.Y, p.Z) for p in v]), np.array(tris), process=True)
         except AttributeError:
             continue
+        m = trimesh.Trimesh(np.array([(p.X, p.Y, p.Z) for p in v]), np.array(tris), process=True)
+        if m.is_watertight: return m
+        trimesh.repair.fill_holes(m)
+        if m.is_watertight: return m
+        if best is None or len(m.faces) > len(best.faces): best = m
+    if best is not None: return best
     pieces = []
     for f in part.faces():
         try:
@@ -385,18 +426,18 @@ def to_trimesh(part, tol=0.15, ang=0.3):
             pass
     m = trimesh.util.concatenate(pieces); m.merge_vertices(); trimesh.repair.fix_normals(m); trimesh.repair.fill_holes(m)
     return m
-
+ 
 def save_mesh(part, path, tol=0.15, ang=0.3):
     """STL/GLB/OBJ export by extension. Returns the trimesh."""
     m = to_trimesh(part, tol, ang)
     m.export(path)
     return m
-
+ 
 def save_posed(P, enroll, parts, path, tol=0.2):
     import trimesh
     ms = [to_trimesh(p, tol, 0.4) for p in assemble(P, enroll, parts)]
     trimesh.util.concatenate(ms).export(path)
-
+ 
 if __name__ == "__main__":
     import sys, time
     P = schema.defaults()
