@@ -1,14 +1,18 @@
+"""
+trilobite_web.py — the generator as a website (v4: schema-driven, instrument-backed).
 
+    python trilobite_web.py        →  http://localhost:8765     (Render/Railway set PORT)
+"""
 import json, os, time, threading, io, contextlib, webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
 import schema, fields, instrument
 import trilobite as T
- 
+
 PORT = int(os.environ.get("PORT", 8765))
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "web_out"); os.makedirs(OUT, exist_ok=True)
- 
+
 PRESETS = {
     "Reference": {},
     "Smooth (effaced)": dict(effacement=0.85, spineBase=0.0, genalSpine=0.0, pygSpine=0.0, tubercles=0.0),
@@ -20,7 +24,7 @@ PRESETS = {
 }
 KNOBS = [(p.key, p.label, p.lo, p.hi, p.step, p.group) for p in schema.PARAMS]
 INT_KEYS = [p.key for p in schema.PARAMS if p.kind in ("int", "odd_int")]
- 
+
 def derived(P):
     v = instrument.print_validity(P)
     joints = P["segCount"] + 1; total = joints * P["maxAngle"]
@@ -29,9 +33,9 @@ def derived(P):
              head_mm=round(P["cephFrac"] * P["length"]), thorax_mm=round(v["pitch"] * P["segCount"]), tail_mm=round(P["pygFrac"] * P["length"]),
              last_width=round(2 * fields.seg_halfwidth(P, P["segCount"] - 1)), warnings=v["violations"])
     return v
- 
+
 CACHE, LOCK = {}, threading.Lock()
- 
+
 def build(P, mode):
     k = schema.param_hash(P) + ("s" if mode == "segment" else "a")
     with LOCK:
@@ -42,13 +46,17 @@ def build(P, mode):
         else:
             parts = T.parts_list(P); names = T.PART_NAMES(P); offs = T.joint_offsets(P)
             meas = instrument.measure(P, instrument.part_meshes(P, parts))
-        urls = []
+        urls, blobs = [], {}
         for n, p in zip(names, parts):
-            T.save_mesh(p, os.path.join(folder, f"{n}.stl"), 0.12, 0.15); urls.append(f"/web_out/{k}/{n}.stl")
+            m = T.to_trimesh(p, 0.12, 0.15)
+            blobs[n] = m.export(file_type="stl")                      # bytes, kept in memory
+            urls.append(f"/api/mesh/{k}/{n}.stl")
+            try: m.export(os.path.join(folder, f"{n}.stl"))         # also on disk, for downloads while it lasts
+            except Exception: pass
         CACHE[k] = dict(key=k, names=names, urls=urls, offsets=offs, hinge_z=T.hinge_z(P), maxAngle=P["maxAngle"],
-                        seconds=round(time.time() - t0, 1), measure=meas)
+                        seconds=round(time.time() - t0, 1), measure=meas, blobs=blobs)
         return CACHE[k]
- 
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw): super().__init__(*a, directory=HERE, **kw)
     def log_message(self, *a): pass
@@ -59,6 +67,17 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/": self.path = "/index.html"
+        if path.startswith("/api/mesh/"):                              # /api/mesh/<key>/<name>.stl from memory
+            _, _, _, key, fname = path.split("/", 4)
+            entry = CACHE.get(key); name = fname[:-4] if fname.endswith(".stl") else fname
+            if not entry or name not in entry["blobs"]:
+                return self.send_json(dict(error="mesh not in cache (server restarted?) — press Build again"), 404)
+            data = entry["blobs"][name]
+            self.send_response(200); self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(data))); self.send_header("Cache-Control", "no-store")
+            self.end_headers(); self.wfile.write(data); return
+        if path == "/api/health":
+            return self.send_json(dict(ok=True, cached=list(CACHE), web_out=os.path.isdir(OUT), files=sum(len(f) for _, _, f in os.walk(OUT))))
         if path == "/api/config":
             return self.send_json(dict(knobs=KNOBS, presets=PRESETS, defaults=schema.defaults(), int_keys=INT_KEYS, schema=schema.SCHEMA_VERSION))
         return super().do_GET()
@@ -69,7 +88,7 @@ class Handler(SimpleHTTPRequestHandler):
             if self.path == "/api/derived": return self.send_json(derived(P))
             if self.path == "/api/build":
                 b = build(P, body.get("mode", "animal"))
-                return self.send_json(dict(b, derived=derived(P)))
+                return self.send_json(dict({k: v for k, v in b.items() if k != "blobs"}, derived=derived(P)))
             if self.path == "/api/check":
                 b = build(P, "animal"); m = b["measure"]
                 txt = (f"instrument {m['instrument']}  params {m['params']}\\n"
@@ -81,7 +100,7 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as ex:
             return self.send_json(dict(error=str(ex)), 500)
         self.send_json(dict(error="unknown endpoint"), 404)
- 
+
 if __name__ == "__main__":
     print(f"Trilobite generator at http://localhost:{PORT}  (Ctrl+C to stop)")
     if not os.environ.get("PORT"):
