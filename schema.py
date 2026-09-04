@@ -1,15 +1,9 @@
-"""
-schema.py — the parameter table as data.
 
-Every knob of the trilobite generator is declared once here. Everything else — defaults,
-validation, UI sliders, dataset columns, JSON round-trip, the parameter hash on every
-artifact — derives from this table. Add a parameter here and it exists everywhere.
-"""
 from dataclasses import dataclass, asdict
 import json, hashlib
-
+ 
 SCHEMA_VERSION = "4.0"
-
+ 
 @dataclass(frozen=True)
 class Param:
     key: str
@@ -22,7 +16,7 @@ class Param:
     doc: str = ""
     kind: str = "float"          # "float" | "int" | "odd_int"
     unit: str = ""
-
+ 
 PARAMS = [
     # ---- body proportions
     Param("length", "Body length", 130, 60, 250, 1, "Body", "Whole animal, head tip to tail shield tip (spines extra)", unit="mm"),
@@ -38,6 +32,7 @@ PARAMS = [
     # ---- outline (width curve)
     Param("widthMaxPos", "Widest point", 0.30, 0.10, 0.80, 0.01, "Outline", "Position of max width along the body (0 head, 1 tail)"),
     Param("widthHeadFront", "Head front width", 0.85, 0.3, 1.0, 0.01, "Outline", "Width at the head's front third / max width"),
+    Param("widthThoraxFront", "Shoulder width", 0.92, 0.6, 1.0, 0.01, "Outline", "Width of segment 0 / max width (the head–thorax shoulder)"),
     Param("widthThoraxRear", "Thorax rear width", 0.62, 0.3, 1.0, 0.01, "Outline", "Width at the last segment / max width"),
     Param("widthTail", "Tail tip width", 0.25, 0.0, 0.8, 0.01, "Outline", "Width near the tail tip / max width"),
     # ---- axis and furrows
@@ -69,6 +64,14 @@ PARAMS = [
     Param("pygSpine", "Tail spine length", 0.9, 0.0, 2.0, 0.05, "Tail", "Paired tail spines / shield length (0 = none)"),
     Param("pygSplay", "Tail spine splay", 20, 0, 45, 1, "Tail", "Outward angle of the tail spines", unit="deg"),
     Param("termSpine", "Terminal spine", 0.0, 0.0, 2.5, 0.05, "Tail", "Single median terminal spine / shield length (0 = none)"),
+    # ---- extra spine families and ornament
+    Param("axialSpine", "Axial spines", 0.0, 0.0, 2.5, 0.05, "Spines", "Dorsal spine on every thoracic ring / relief (0 = none)"),
+    Param("occipitalSpine", "Occipital spine", 0.0, 0.0, 1.5, 0.05, "Spines", "Spine on the occipital ring / head length (0 = none)"),
+    Param("pygMarginal", "Tail marginal spines", 0, 0, 10, 1, "Spines", "Spines around the tail margin (0 = none)", kind="int"),
+    Param("pygMarginalLen", "Tail marginal length", 0.5, 0.1, 1.5, 0.05, "Spines", "Marginal spine length / shield length"),
+    Param("tubercles", "Tubercles", 0.0, 0.0, 1.0, 0.01, "Ornament", "Density of granules on the shell (0 = smooth)"),
+    Param("tubercleSize", "Tubercle size", 1.6, 0.8, 3.0, 0.1, "Ornament", "Granule radius", unit="mm"),
+    Param("seed", "Ornament seed", 1, 0, 999, 1, "Ornament", "Random seed for ornament placement", kind="int"),
     # ---- articulation (held constant across a sweep: the fixed ruler)
     Param("maxAngle", "Stop angle", 18, 4, 40, 0.5, "Hinge", "Ventral flexion per joint before the stop engages", unit="deg"),
     Param("clearance", "Clearance", 0.3, 0.15, 0.6, 0.01, "Hinge", "Gap between moving parts", unit="mm"),
@@ -80,10 +83,10 @@ BY_KEY = {p.key: p for p in PARAMS}
 GROUPS = []
 for _p in PARAMS:
     if _p.group not in GROUPS: GROUPS.append(_p.group)
-
+ 
 def defaults():
     return {p.key: p.default for p in PARAMS}
-
+ 
 def coerce(P):
     """Fill missing keys with defaults, clamp to range, enforce int/odd-int kinds. Unknown keys are dropped."""
     Q = defaults()
@@ -97,19 +100,19 @@ def coerce(P):
                 if p.kind == "odd_int" and v % 2 == 0: v = min(v + 1, int(p.hi))
             Q[k] = v
     return Q
-
+ 
 def to_json(P):
     return json.dumps({"schema": SCHEMA_VERSION, "params": coerce(P)}, sort_keys=True)
-
+ 
 def from_json(s):
     return coerce(json.loads(s)["params"])
-
+ 
 def param_hash(P):
     return hashlib.md5(json.dumps(coerce(P), sort_keys=True).encode()).hexdigest()[:10]
-
+ 
 def table():
     return [asdict(p) for p in PARAMS]
-
+ 
 if __name__ == "__main__":
     for g in GROUPS:
         print(f"[{g}]")
