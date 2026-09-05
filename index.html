@@ -106,49 +106,48 @@ const fill=new T.DirectionalLight(0xffffff,0.35); fill.position.set(140,60,-120)
 const root=new T.Group(); scene.add(root);
 const pivot=new T.Group(); pivot.rotation.x=-Math.PI/2; root.add(pivot);
 
-const shellMat=new T.MeshStandardMaterial({color:0xdddddd,roughness:0.85,metalness:0.0,
-  flatShading:false,side:T.DoubleSide});
+const shellMat=new T.MeshStandardMaterial({color:0xcfcfcf,roughness:0.9,metalness:0.0,flatShading:false,side:T.DoubleSide});
 const legMat =new T.MeshStandardMaterial({color:0xbfbfbf,roughness:0.9,metalness:0.0});
 const boneMat=new T.LineBasicMaterial({color:0x111111});
 const nodeMat=new T.MeshBasicMaterial({color:0x111111});
 
-let shellMesh=null, legGroup=null, skelGroup=null, DATA=null;
-let rest={x:null,y:null,z:null,seg:null,faces:null,joints:null,L:1,relief:1,halfW:null};
+let pieceMeshes=[], pieceRest=[], legGroup=null, skelGroup=null, DATA=null;
+let joints=[], L=1, relief=1, halfW=y=>1;
+
+function clearPieces(){ for(const m of pieceMeshes){ pivot.remove(m); m.geometry.dispose(); } pieceMeshes=[]; pieceRest=[]; }
 
 function loadSpecies(name){
   P.name=name; const d=window.SPECIES[name]; DATA=d;
-  const V=d.verts, F=d.faces;
-  const n=V.length/3;
-  rest.x=new Float32Array(n); rest.y=new Float32Array(n); rest.z=new Float32Array(n);
-  for(let i=0;i<n;i++){ rest.x[i]=V[3*i]; rest.y[i]=V[3*i+1]; rest.z[i]=V[3*i+2]; }
-  rest.seg=d.seg; rest.faces=F; rest.joints=d.joints.slice(); rest.L=d.L; rest.relief=d.relief;
-  // rest half-width lookup
-  const nb=80, W=new Float32Array(nb);
-  for(let i=0;i<n;i++){ const b=clamp(Math.floor(rest.y[i]/rest.L*nb),0,nb-1); W[b]=Math.max(W[b],Math.abs(rest.x[i])); }
-  rest.halfW=y=>{ const b=clamp(Math.floor(y/rest.L*nb),0,nb-1); return W[b]||1; };
-  // geometry
-  if(shellMesh){ pivot.remove(shellMesh); shellMesh.geometry.dispose(); }
-  const g=new T.BufferGeometry();
-  g.setAttribute('position',new T.Float32BufferAttribute(new Float32Array(n*3),3));
-  g.setIndex(F);
-  shellMesh=new T.Mesh(g,shellMat); pivot.add(shellMesh);
-  // per-specimen segment slider availability
+  joints=d.joints.slice(); L=d.L; relief=d.relief;
+  clearPieces();
+  // half-width lookup across all pieces
+  const nb=90, W=new Float32Array(nb);
+  for(const p of d.pieces){ const v=p.v; for(let i=0;i<v.length;i+=3){ const b=Math.max(0,Math.min(nb-1,Math.floor(v[i+1]/L*nb))); W[b]=Math.max(W[b],Math.abs(v[i])); } }
+  halfW=y=>{ const b=Math.max(0,Math.min(nb-1,Math.floor(y/L*nb))); return W[b]||1; };
+  // one rigid mesh per piece
+  d.pieces.forEach(p=>{
+    const n=p.v.length/3;
+    const rx=new Float32Array(n), ry=new Float32Array(n), rz=new Float32Array(n);
+    for(let i=0;i<n;i++){ rx[i]=p.v[3*i]; ry[i]=p.v[3*i+1]; rz[i]=p.v[3*i+2]; }
+    pieceRest.push({rx,ry,rz});
+    const g=new T.BufferGeometry();
+    g.setAttribute('position',new T.Float32BufferAttribute(new Float32Array(n*3),3));
+    g.setIndex(p.f);
+    const mesh=new T.Mesh(g,shellMat); pivot.add(mesh); pieceMeshes.push(mesh);
+  });
   document.querySelectorAll('#species button').forEach(b=>b.classList.toggle('on',b.dataset.v===name));
   deform(); frameCamera();
 }
 
 function smap(s){
-  const sh0=rest.joints.length?rest.joints[0]/rest.L:0.30;
-  const st0=rest.joints.length?rest.joints[rest.joints.length-1]/rest.L:0.86;
-  const pyg=1-st0;
-  const xs=[0,sh0,st0,1], ys=[0,P.head,1-pyg,1];
-  let s2=clamp(s,0,1);
-  for(let i=0;i<3;i++){ if(s2<=xs[i+1]){ const t=(s2-xs[i])/((xs[i+1]-xs[i])||1); return ys[i]+(ys[i+1]-ys[i])*t; } }
+  const sh0=joints.length?joints[0]/L:0.30, st0=joints.length?joints[joints.length-1]/L:0.86, pyg=1-st0;
+  const xs=[0,sh0,st0,1], ys=[0,P.head,1-pyg,1]; s=clamp(s,0,1);
+  for(let i=0;i<3;i++){ if(s<=xs[i+1]){ const t=(s-xs[i])/((xs[i+1]-xs[i])||1); return ys[i]+(ys[i+1]-ys[i])*t; } }
   return 1;
 }
 function chainMats(){
-  const zh=rest.relief*0.55, th=-P.enroll*P.maxAngle*Math.PI/180;
-  const jp=rest.joints.map(j=>P.length*smap(j/rest.L));
+  const zh=relief*0.55, th=-P.enroll*P.maxAngle*Math.PI/180;
+  const jp=joints.map(j=>P.length*smap(j/L));
   const mats=[new T.Matrix4()]; let M=new T.Matrix4();
   for(const jy of jp){
     const hp=new T.Vector3(0,jy,zh).applyMatrix4(M);
@@ -157,70 +156,50 @@ function chainMats(){
       .multiply(new T.Matrix4().makeTranslation(-hp.x,-hp.y,-hp.z));
     M=new T.Matrix4().multiplyMatrices(M,R); mats.push(M.clone());
   }
-  return {mats, jp, zh};
+  return {mats,jp,zh};
 }
-
 function deform(){
-  const {mats,jp,zh}=chainMats();
-  const pos=shellMesh.geometry.attributes.position.array;
-  const v=new T.Vector3();
-  for(let i=0;i<rest.x.length;i++){
-    const s=rest.y[i]/rest.L;
-    v.set(rest.x[i], P.length*smap(s), rest.z[i]).applyMatrix4(mats[rest.seg[i]]||mats[0]);
-    pos[3*i]=v.x; pos[3*i+1]=v.y; pos[3*i+2]=v.z;
-  }
-  shellMesh.geometry.attributes.position.needsUpdate=true;
-  shellMesh.geometry.computeVertexNormals();
+  const {mats,jp,zh}=chainMats(); const v=new T.Vector3();
+  pieceMeshes.forEach((mesh,k)=>{
+    const R=pieceRest[k], pos=mesh.geometry.attributes.position.array, M=mats[Math.min(k,mats.length-1)];
+    for(let i=0;i<R.rx.length;i++){
+      v.set(R.rx[i], P.length*smap(R.ry[i]/L), R.rz[i]).applyMatrix4(M);
+      pos[3*i]=v.x; pos[3*i+1]=v.y; pos[3*i+2]=v.z;
+    }
+    mesh.geometry.attributes.position.needsUpdate=true; mesh.geometry.computeVertexNormals();
+  });
   buildLegs(mats,jp); buildSkeleton(mats,jp,zh); updateReadout();
 }
 
 function buildLegs(mats,jp){
   if(legGroup){ pivot.remove(legGroup); legGroup.traverse(o=>o.geometry&&o.geometry.dispose()); }
   legGroup=new T.Group(); pivot.add(legGroup); legGroup.visible=P.legs;
-  if(!rest.joints.length) return;
+  if(!joints.length) return;
   for(let k=1;k<jp.length;k++){
-    const yc=0.5*(jp[k-1]+jp[k]); const yr=0.5*(rest.joints[k-1]+rest.joints[k]);
-    const W=rest.halfW(yr); const dp=jp[k]-jp[k-1]; const rel=rest.relief;
+    const yc=0.5*(jp[k-1]+jp[k]), yr=0.5*(joints[k-1]+joints[k]), W=halfW(yr), dp=jp[k]-jp[k-1], rel=relief;
     for(const side of [1,-1]){
-      // one box limb per side, angled down and back
-      const len=Math.hypot(W*0.35, rel*0.9)+dp*0.2;
-      const box=new T.Mesh(new T.BoxGeometry(2.2, len, 3.2), legMat);
-      const hip=new T.Vector3(side*W*0.82, yc, rel*0.05);
-      const foot=new T.Vector3(side*W*0.95, yc+dp*0.35, -rel*0.75);
-      const mid=hip.clone().add(foot).multiplyScalar(0.5);
-      box.position.copy(mid);
-      const dir=foot.clone().sub(hip).normalize();
-      box.quaternion.setFromUnitVectors(new T.Vector3(0,1,0), dir);
-      box.applyMatrix4(mats[k]||mats[0]);
-      legGroup.add(box);
+      const hip=new T.Vector3(side*W*0.82, yc, rel*0.02);
+      const foot=new T.Vector3(side*W*0.98, yc+dp*0.25, -rel*0.65);
+      const len=hip.distanceTo(foot);
+      const box=new T.Mesh(new T.BoxGeometry(1.5,len,2.2), legMat);
+      box.position.copy(hip.clone().add(foot).multiplyScalar(0.5));
+      box.quaternion.setFromUnitVectors(new T.Vector3(0,1,0), foot.clone().sub(hip).normalize());
+      box.applyMatrix4(mats[Math.min(k,mats.length-1)]); legGroup.add(box);
     }
   }
 }
-
 function buildSkeleton(mats,jp,zh){
   if(skelGroup){ pivot.remove(skelGroup); skelGroup.traverse(o=>o.geometry&&o.geometry.dispose()); }
-  skelGroup=new T.Group(); pivot.add(skelGroup); skelGroup.visible=P.skeleton && rest.joints.length>0;
-  // posed joint points (the pin-hinge chain), dropped to the ventral base so it reads "underneath"
-  const zbase=-rest.relief*0.9;
-  const pts=[new T.Vector3(0,0,zbase)];
-  for(let k=0;k<jp.length;k++){
-    const hp=new T.Vector3(0,jp[k],zh).applyMatrix4(mats[k]);
-    pts.push(new T.Vector3(hp.x, hp.y, zbase + (hp.z-zh)));  // keep the curl, sit at the base plane
-  }
-  const endM=mats[mats.length-1]; const tail=new T.Vector3(0,P.length,zh).applyMatrix4(endM);
-  pts.push(new T.Vector3(tail.x,tail.y,zbase+(tail.z-zh)));
-  const g=new T.BufferGeometry().setFromPoints(pts);
-  const line=new T.Line(g,boneMat); line.renderOrder=10; line.material.depthTest=false; skelGroup.add(line);
-  for(const p of pts.slice(1,-1)){
-    const nd=new T.Mesh(new T.SphereGeometry(1.7,10,8),nodeMat);
-    nd.position.copy(p); nd.renderOrder=11; nd.material.depthTest=false; skelGroup.add(nd);
-  }
+  skelGroup=new T.Group(); pivot.add(skelGroup); skelGroup.visible=P.skeleton && joints.length>0;
+  if(!joints.length) return;
+  const zbase=-relief*0.9, pts=[new T.Vector3(0,0,zbase)];
+  for(let k=0;k<jp.length;k++){ const hp=new T.Vector3(0,jp[k],zh).applyMatrix4(mats[k]); pts.push(new T.Vector3(hp.x,hp.y,zbase+(hp.z-zh))); }
+  const tail=new T.Vector3(0,P.length,zh).applyMatrix4(mats[mats.length-1]); pts.push(new T.Vector3(tail.x,tail.y,zbase+(tail.z-zh)));
+  const line=new T.Line(new T.BufferGeometry().setFromPoints(pts),boneMat); line.renderOrder=10; line.material.depthTest=false; skelGroup.add(line);
+  for(const p of pts.slice(1,-1)){ const nd=new T.Mesh(new T.SphereGeometry(1.7,10,8),nodeMat); nd.position.copy(p); nd.renderOrder=11; nd.material.depthTest=false; skelGroup.add(nd); }
 }
-
 function updateReadout(){
-  const el=document.getElementById('readout');
-  el.innerHTML=`${P.name}<br><span>segments</span> ${DATA.nseg}<br><span>length</span> ${P.length} mm`
-    +`<br><span>enroll</span> ${(P.enroll*P.maxAngle*(DATA.nseg+1)).toFixed(0)}°`;
+  document.getElementById('readout').innerHTML=`${P.name}<br><span>segments</span> ${DATA.nseg}<br><span>length</span> ${P.length} mm<br><span>enroll</span> ${(P.enroll*P.maxAngle*(DATA.nseg+1)).toFixed(0)}°`;
 }
 
 // camera / orbit
@@ -251,11 +230,11 @@ document.querySelectorAll('.ctrl[data-k] input').forEach(inp=>{
   const k=inp.parentElement.dataset.k, val=inp.parentElement.querySelector('.val');
   const fmt=v=> k==='enroll'?Math.round(v*100)+'%' : (k==='head'?(v*100).toFixed(0)+'%' : v+' mm');
   const paint=()=>val.textContent=fmt(+inp.value);
-  inp.addEventListener('input',()=>{ P[k]=parseFloat(inp.value); paint(); if(shellMesh) deform(); });
+  inp.addEventListener('input',()=>{ P[k]=parseFloat(inp.value); paint(); if(pieceMeshes.length) deform(); });
   paint();
 });
 document.getElementById('legs').addEventListener('change',e=>{P.legs=e.target.checked; if(legGroup)legGroup.visible=P.legs;});
-document.getElementById('skeleton').addEventListener('change',e=>{P.skeleton=e.target.checked; if(skelGroup)skelGroup.visible=P.skeleton && rest.joints.length>0;});
+document.getElementById('skeleton').addEventListener('change',e=>{P.skeleton=e.target.checked; if(skelGroup)skelGroup.visible=P.skeleton && joints.length>0;});
 
 resize(); loadSpecies("olenoides");
 (function loop(){ requestAnimationFrame(loop); renderer.render(scene,camera); })();
