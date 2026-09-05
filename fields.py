@@ -43,11 +43,13 @@ def width_curve(P):
     """Half-width of the body as a function of s (mm). Widest at widthMaxPos."""
     L = landmarks(P); W = P["width"] / 2
     smax = P["widthMaxPos"]
+    s0 = L["s_h"] + 0.5 * L["pitch_s"]                      # centre of segment 0
     pts = [(0.0, 0.08 * W),
            (min(0.10, smax - 0.02), P["widthHeadFront"] * W),
-           (smax, W),
-           (L["s_t"] if L["s_t"] > smax + 0.02 else smax + 0.02, P["widthThoraxRear"] * W),
-           (1.0, P["widthTail"] * W)]
+           (smax, W)]
+    if s0 > smax + 0.02: pts.append((s0, P["widthThoraxFront"] * W))
+    pts += [(L["s_t"] if L["s_t"] > s0 + 0.02 else s0 + 0.02, P["widthThoraxRear"] * W),
+            (1.0, P["widthTail"] * W)]
     return Curve(pts)
 
 def seg_halfwidth(P, i):
@@ -82,3 +84,17 @@ if __name__ == "__main__":
     print("half-width along s:", [round(float(wc(s)), 1) for s in np.linspace(0, 1, 11)])
     print("segment half-widths:", [round(seg_halfwidth(P, i), 1) for i in range(P["segCount"])])
     P2 = dict(P, macroIndex=2, spineGrad=-0.2); print("spine field:", [round(v, 2) for v in pleural_spine_field(P2)])
+
+
+# ---------------- derived scalars that the web readout needs WITHOUT importing the CAD kernel
+def pitch(P):
+    return P["length"] * (1 - P["cephFrac"] - P["pygFrac"]) / P["segCount"]
+
+def ring_top(P):
+    return P["relief"] * (1 + P["axisRise"])
+
+def hinge_z(P):
+    return ring_top(P) - P["barrelR"] - P["wall"] - P["clearance"] - 0.4 - 0.7 * furrow_amp(P)
+
+def hinge_width(P):
+    return 2 * P["axisFrac"] * seg_halfwidth(P, P["segCount"] - 1) - 2

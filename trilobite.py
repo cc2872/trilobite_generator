@@ -23,20 +23,7 @@ P = schema.defaults()
 # =====================================================================
 #  derived scalars
 # =====================================================================
-def pitch(P):
-    return P["length"] * (1 - P["cephFrac"] - P["pygFrac"]) / P["segCount"]
-
-def ring_top(P):
-    return P["relief"] * (1 + P["axisRise"])
-
-def hinge_z(P):
-    """Hinge axis height. The clearance groove (radius barrelR + clearance) must sit clear below the
-    shell's inner surface at the ring furrow, and the knuckle top must clear the flap above it."""
-    return ring_top(P) - P["barrelR"] - P["wall"] - P["clearance"] - 0.4 - 0.7 * furrow_amp(P)
-
-def hinge_width(P):
-    """Constant for every joint, sized to the narrowest axial ring (last segment)."""
-    return 2 * P["axisFrac"] * seg_halfwidth(P, P["segCount"] - 1) - 2
+from fields import pitch, ring_top, hinge_z, hinge_width   # shared with the web readout (no CAD import needed there)
 
 def joint_offsets(P):
     d = pitch(P)
@@ -118,7 +105,7 @@ def tubercles(x, y, P, region, seed, count_scale):
     rng = np.random.default_rng(int(P["seed"]) * 1000 + seed)
     n = int(P["tubercles"] * count_scale)
     xmin, xmax, ymin, ymax = region["box"]
-    if xmax <= xmin or ymax <= ymin: return 0.0     # degenerate plan (e.g. a very short pygidium/head): skip, don't crash
+    if xmax <= xmin or ymax <= ymin: return 0.0     # degenerate plan (very short pygidium/head at slider extremes): skip, don't crash
     z = np.zeros_like(x, dtype=float); r = P["tubercleSize"]; k = 0; tries = 0
     while k < n and tries < 20 * n + 20:
         tries += 1
@@ -159,10 +146,11 @@ def add_hinge(part, envelope, P, y_axis, rear):
               align=(Align.CENTER, Align.MAX if rear else Align.MIN, Align.MIN)).moved(Location((0, y_axis, 0)))
     part += blk
     phi, L = P["maxAngle"] / 2, 80
+    band = 2 * (P["axisFrac"] * (W / 2)) + 0.45 * W          # bevel only the axis and inner pleurae; blades sweep freely
     if rear:
-        wedge = Box(W + 40, L, L, align=(Align.CENTER, Align.MIN, Align.MAX)).rotate(Axis.X, -phi)
+        wedge = Box(band, L, L, align=(Align.CENTER, Align.MIN, Align.MAX)).rotate(Axis.X, -phi)
     else:
-        wedge = Box(W + 40, L, L, align=(Align.CENTER, Align.MAX, Align.MAX)).rotate(Axis.X, phi)
+        wedge = Box(band, L, L, align=(Align.CENTER, Align.MAX, Align.MAX)).rotate(Axis.X, phi)
     part -= wedge.moved(Location((0, y_axis, zh))) - barrel(0, Wh + 4, rB + c)
     return part
 
@@ -179,10 +167,21 @@ def build_segment(P, i=0):
     F = furrow_amp(P)
     sweep = P["tipSweep"] * d
 
+    L0 = d + flap
+    def q_of(x):
+        return np.clip((np.abs(x) - a) / (w - a), 0, 1)
+    def edges(x):
+        """Front and rear edge of the pleural blade at lateral position x: a sickle that sweeps back
+        and narrows toward its tip."""
+        q = q_of(x)
+        yc = 0.5 * L0 + sweep * q ** 1.6
+        hb = 0.5 * L0 * (1 - P["tipTaper"] * q ** 2.5)
+        return yc - hb, yc + hb
     def outline(u, v):
-        x = u * w
-        yr = d + flap + sweep * (max(abs(x) - a, 0) / (w - a)) ** 2      # rear margin sweeps back
-        return x, v * yr
+        q = np.clip((abs(u) * w - a) / (w - a), 0, 1)
+        x = u * w * (1 + 0.06 * q ** 2)                                  # tips reach slightly outward
+        yf, yr = edges(np.array([abs(x)]))
+        return x, float(yf[0] + v * (yr[0] - yf[0]))
 
     def zfun(x, y):
         ax = np.abs(x)
@@ -190,29 +189,34 @@ def build_segment(P, i=0):
         z += rise * plateau(x, a)                                            # axial ring
         z -= F * trough(ax - (a + 0.6), 0.9)                                 # axial furrows
         z -= 0.7 * F * trough(y - d, 0.8) * plateau(x, a + 1.5, 1.0)         # ring furrow at the flap
-        px = np.clip((ax - a) / (w - a), 0, 1); ly = 0.30 * d + px * 0.45 * d
-        z -= 0.8 * F * trough(y - ly, 0.9) * (ax > a + 1.0)                  # pleural furrow
+        yf0, _ = edges(x); px = q_of(x); ly = yf0 + 0.30 * d + px * 0.25 * d
+        z -= 0.8 * F * trough(y - ly, 0.9) * (ax > a + 1.0)                  # pleural furrow, following the blade
         z += tubercles(x, y, P, dict(box=(-w + 2, w - 2, ovl + 1, d - 1), ok=lambda xk, yk: abs(xk) > a + 1.5 or abs(xk) < a - 1.5),
                        seed=i, count_scale=0.9 * w)
+        yf, _ = edges(x)
         drop = np.minimum(t + c + 0.7 * F + 0.3, np.maximum(z - (t + 0.6), 0))    # never thinner than the wall
-        z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y))                               # stepped front under the previous flap
+        z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y - yf))                          # stepped front band, following the blade
         return z
 
     seg = plate(outline, zfun, t, nu=53, nv=29)
     env = under(outline, zfun, nu=53, nv=29)
-    # doublure: vertical rim + inward lip along the margins, on the exposed part of the body only
-    for s in (1, -1):
-        seg += Box(t, d - ovl, margin - t, align=(Align.MAX if s > 0 else Align.MIN, Align.MIN, Align.MIN)).moved(Location((s * w, ovl, 0)))
-        seg += Box(0.08 * P["width"], d - ovl, t, align=(Align.MAX if s > 0 else Align.MIN, Align.MIN, Align.MIN)).moved(Location((s * w, ovl, 0)))
+    # doublure: vertical rim + inward lip along the blade's margin (the blade is swept, so follow it)
+    yf_m, yr_m = (float(v[0]) for v in edges(np.array([w])))
+    rim_len = (yr_m - yf_m) - 1.0
+    if rim_len > 2.0 and P["tipTaper"] < 0.3:                 # doublure lips only on broad, square-tipped pleurae
+        for s in (1, -1):
+            seg += Box(t, rim_len, max(margin - t, 1.0), align=(Align.MAX if s > 0 else Align.MIN, Align.MIN, Align.MIN)).moved(Location((s * w, yf_m + 0.5, 0)))
+            seg += Box(0.06 * P["width"], rim_len, t, align=(Align.MAX if s > 0 else Align.MIN, Align.MIN, Align.MIN)).moved(Location((s * w, yf_m + 0.5, 0)))
     seg = add_hinge(seg, env, P, d, rear=True)
     seg = add_hinge(seg, env, P, 0, rear=False)
     # pleural spines from the field — added AFTER the hinge so the stop bevel never trims them;
     # whether they clear the next segment when curling is the instrument's job to find out
     Ls = pleural_spine_field(P)[i] * w
-    r = 0.5 * margin
+    r = 0.45 * margin
     if Ls > 0.5:
-        for s in (1, -1):   # base straddles the rear-outer corner, body of the spine outboard of the next segment
-            seg += spine(r, 0.6, Ls, (s * (w + 0.35 * r), d - 0.6 * r, r), s * P["spineSweep"])
+        _, yr_tip = edges(np.array([w]))
+        for s in (1, -1):   # needle spine continuing the blade tip
+            seg += spine(r, 0.5, Ls, (s * (w - 0.3 * r), float(yr_tip[0]) - 1.2 * r, r), s * P["spineSweep"])
     if P["axialSpine"] > 0.02:
         seg += spine(0.6 * r + 0.6, 0.5, P["axialSpine"] * h, (0, ovl + 0.45 * (d - ovl), h + rise - 1.0), 0, pitch_deg=60)
     return seg
@@ -237,8 +241,13 @@ def build_cephalon(P):
         front = np.clip((-yy - par) / Le, 0, 1)
         return np.maximum(wh * np.sqrt(np.clip(1 - front ** 2, 0, 1)), 1.5)
 
+    gs = P["genalSweep"] * pitch(P)
+    def cheek(u):
+        q = np.clip((abs(u) * wh - a) / (wh - a), 0, 1)
+        return flap + gs * q ** 2.2                              # rear edge sweeps back toward the genal angle
     def outline(u, v):
-        y = flap - v * (Lc + flap)
+        yr = cheek(u)
+        y = yr - v * (Lc + yr)
         return u * float(xmax(y)), y
 
     def glab_half(y):
@@ -267,9 +276,9 @@ def build_cephalon(P):
             r = np.hypot(ax - xe, y - ye)
             ang = np.degrees(np.arctan2(y - ye, ax - xe))
             mask = plateau(ang, P["eyeArc"] / 2, 12)
-            eH = 0.10 * h + 0.35 * eR
-            z += 0.6 * eH * np.exp(-(r / (0.75 * eR)) ** 2)                 # palpebral lobe
-            z += eH * trough(r - eR, 0.9) * mask                              # visual surface ridge
+            eH = P["eyeHeight"] * eR
+            z += eH * np.exp(-(r / (0.95 * eR)) ** 4)                        # domed eye (super-Gaussian, flat top)
+            z += 0.35 * eH * trough(r - eR, 1.0) * mask                       # crescent visual surface rim
         z += tubercles(x, y, P, dict(box=(-wh + 3, wh - 3, -Lc + 4, -2), ok=lambda xk, yk: True), seed=99, count_scale=2.2 * wh)
         # border: furrow and raised rim along the outline
         if P["borderWidth"] > 0.005:
@@ -285,7 +294,7 @@ def build_cephalon(P):
     if P["genalSpine"] > 0.02:                      # after the hinge: the bevel must not trim them
         Lg = P["genalSpine"] * Lc
         for s in (1, -1):
-            head += spine(0.55 * margin, 0.6, Lg, (s * (wh - 0.1 * margin), -0.12 * Lc, 0.5 * margin), s * (15 + 0.5 * P["genalCurve"]))
+            head += spine(0.55 * margin, 0.6, Lg, (s * (wh + 0.3 * margin), -0.14 * Lc, 0.5 * margin), s * (18 + 0.5 * P["genalCurve"]))
     if P["occipitalSpine"] > 0.02:
         head += spine(0.6 * margin, 0.5, P["occipitalSpine"] * Lc, (0, -0.07 * Lc, ring_top(P) - 1.0), 0, pitch_deg=55)
     return head

@@ -58,8 +58,15 @@ def _aabb_hit(a, b, pad=0.5):
     return bool(np.all(a.bounds[0] - pad <= b.bounds[1]) and np.all(b.bounds[0] - pad <= a.bounds[1]))
 
 def overlap_volume(a, b):
-    r = trimesh.boolean.intersection([a, b], engine="manifold")
-    return float(abs(r.volume)) if r is not None and len(r.faces) else 0.0
+    """Exact shared volume (Manifold). If a mesh is not a closed volume, fall back to FCL contact
+    with a penetration threshold — approximate, but never silently 'no collision'."""
+    if a.is_volume and b.is_volume:
+        r = trimesh.boolean.intersection([a, b], engine="manifold")
+        return float(abs(r.volume)) if r is not None and len(r.faces) else 0.0
+    cm = CollisionManager(); cm.add_object("a", a)
+    hit, data = cm.in_collision_single(b, return_data=True)
+    depth = max((d.depth for d in data), default=0.0)
+    return OVERLAP_TOL + 1.0 if depth > 0.5 else 0.0
 
 def collisions(P, meshes, enroll, joint_angles=None):
     """List of (i, j, mm^3) for every pair of parts sharing more than OVERLAP_TOL of volume."""
@@ -93,8 +100,7 @@ def closure_gap(P, meshes, enroll):
 # ---------------------------------------------------------------- verdicts
 def print_validity(P):
     P = schema.coerce(P)
-    import trilobite as T
-    d = T.pitch(P); zh, Wh = T.hinge_z(P), T.hinge_width(P)
+    d = fields.pitch(P); zh, Wh = fields.hinge_z(P), fields.hinge_width(P)
     knuckle = Wh / P["nKnuckles"] - P["clearance"]; pin_wall = P["barrelR"] - P["boreDia"] / 2
     margin = P["marginHeight"] * P["relief"]
     v = []
