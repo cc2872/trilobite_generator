@@ -45,6 +45,10 @@ PARAMS = [
     Param("axisRise", "Axial ring rise", 0.15, 0.0, 0.40, 0.01, "Axis & furrows", "Ring stands this fraction of relief above the vault"),
     Param("furrowDepth", "Furrow depth", 1.2, 0.0, 3.0, 0.1, "Axis & furrows", "Depth of the furrows at full expression", unit="mm"),
     Param("effacement", "Effacement", 0.0, 0.0, 1.0, 0.01, "Axis & furrows", "0 = fully sculpted, 1 = smooth (Nileus)"),
+    # ---- ornament (granules scattered over the cuticle)
+    Param("tubercles", "Tubercle density", 0.0, 0.0, 1.5, 0.05, "Ornament", "0 = smooth cuticle, higher = denser granulation"),
+    Param("tubercleSize", "Tubercle size", 1.0, 0.3, 3.0, 0.1, "Ornament", "Radius of each granule", unit="mm"),
+    Param("seed", "Ornament seed", 0, 0, 999, 1, "Ornament", "Random seed for tubercle placement", kind="int"),
     # ---- head
     Param("cephParallel", "Head parallel rear", 0.45, 0.0, 0.8, 0.01, "Head", "Fraction of head length that is parallel-sided"),
     Param("glabInflate", "Glabella expansion", 1.25, 0.6, 2.0, 0.01, "Head", "Glabella front width / rear width (club shape)"),
@@ -56,6 +60,7 @@ PARAMS = [
     Param("borderWidth", "Border width", 0.10, 0.0, 0.30, 0.01, "Head", "Raised border / head half-width (0 = none)"),
     Param("genalSpine", "Genal spine length", 0.35, 0.0, 1.5, 0.01, "Head", "Genal spine length / head length (0 = none)"),
     Param("genalCurve", "Genal spine curve", 20, 0, 60, 1, "Head", "Inward curl of the genal spines", unit="deg"),
+    Param("occipitalSpine", "Occipital spine", 0.0, 0.0, 1.5, 0.05, "Head", "Single median spine on the occipital ring / head length (0 = none)"),
     # ---- thorax pleurae and spines (fields along the thorax)
     Param("tipSweep", "Pleural tip sweep", 0.25, 0.0, 0.8, 0.01, "Thorax", "How far the pleural margin sweeps back / pitch"),
     Param("spineBase", "Pleural spine base", 0.30, 0.0, 1.2, 0.01, "Thorax", "Spine length on segment 0 / half-width"),
@@ -63,12 +68,15 @@ PARAMS = [
     Param("macroIndex", "Macropleural segment", -1, -1, 15, 1, "Thorax", "Index of a segment with extra-long spines (-1 = none)", kind="int"),
     Param("macroAmp", "Macropleural extra", 0.8, 0.0, 2.0, 0.05, "Thorax", "Extra spine length on that segment / half-width"),
     Param("spineSweep", "Spine sweep", 45, 0, 80, 1, "Thorax", "Pleural spines sweep back by this angle", unit="deg"),
+    Param("axialSpine", "Axial spine", 0.0, 0.0, 1.5, 0.05, "Thorax", "Median spine on each segment's axial ring / relief (0 = none)"),
     # ---- tail
     Param("pygWidth", "Tail width", 0.90, 0.5, 1.1, 0.01, "Tail", "Tail shield width / last segment width"),
     Param("pygRings", "Tail axial rings", 4, 0, 12, 1, "Tail", "Axial rings on the pygidium", kind="int"),
     Param("pygSpine", "Tail spine length", 0.9, 0.0, 2.0, 0.05, "Tail", "Paired tail spines / shield length (0 = none)"),
     Param("pygSplay", "Tail spine splay", 20, 0, 45, 1, "Tail", "Outward angle of the tail spines", unit="deg"),
     Param("termSpine", "Terminal spine", 0.0, 0.0, 2.5, 0.05, "Tail", "Single median terminal spine / shield length (0 = none)"),
+    Param("pygMarginal", "Marginal spines", 0, 0, 12, 1, "Tail", "Extra spines fanned around the shield margin, per side (0 = none)", kind="int"),
+    Param("pygMarginalLen", "Marginal spine length", 0.3, 0.0, 1.0, 0.05, "Tail", "Marginal spine length / shield length"),
     # ---- articulation (held constant across a sweep: the fixed ruler)
     Param("maxAngle", "Stop angle", 18, 4, 40, 0.5, "Hinge", "Ventral flexion per joint before the stop engages", unit="deg"),
     Param("clearance", "Clearance", 0.3, 0.15, 0.6, 0.01, "Hinge", "Gap between moving parts", unit="mm"),

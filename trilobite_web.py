@@ -3,14 +3,16 @@ trilobite_web.py — the generator as a local website.
 
     python trilobite_web.py          then open  http://localhost:8765
 
-Sliders + number boxes for every knob, presets, an instant readout with printability warnings,
+Sliders + number boxes for every knob (driven by schema.py — the single source of truth for
+every parameter), a family/preset dropdown, an instant readout with printability warnings,
 "Build" (runs build123d, 30-60 s), a full-screen 3D view with an enrollment scrub slider and
 play button (posing happens in the browser — no rebuild needed to roll), the collision check,
-and STL downloads. Needs only trilobite.py next to it and the Python standard library.
+and STL downloads. Needs trilobite.py, schema.py, fields.py and instrument.py next to it.
 """
-import json, os, time, threading, hashlib, io, contextlib, webbrowser
+import json, os, time, threading, io, contextlib, webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
+import schema, instrument
 import trilobite as T
 
 PORT = int(os.environ.get("PORT", 8765))          # hosts like Render/Railway set PORT
@@ -18,81 +20,58 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "web_out")
 os.makedirs(OUT, exist_ok=True)
 
-# (key, label, min, max, step, group)
-KNOBS = [
-    ("length","Body length (mm)",60,250,1,"Body"), ("width","Body width (mm)",30,140,1,"Body"),
-    ("relief","Relief / dorsal height (mm)",6,40,0.5,"Body"), ("segCount","Thoracic segments",2,16,1,"Body"),
-    ("taper","Taper per segment",0.80,1.00,0.005,"Body"), ("axisFrac","Axial ring width fraction",0.20,0.50,0.01,"Body"),
-    ("axisRise","Axial ring rise",0.00,0.40,0.01,"Body"), ("marginHeight","Pleural margin height",0.00,0.60,0.01,"Body"),
-    ("overlap","Shingle overlap (× pitch)",0.10,0.80,0.01,"Body"),
-    ("cephFrac","Head length fraction",0.18,0.45,0.005,"Head"), ("cephParallel","Head: parallel rear fraction",0.00,0.80,0.01,"Head"),
-    ("glabInflate","Glabella inflation",0.70,1.60,0.01,"Head"), ("eyeSize","Eye size",0.00,0.20,0.005,"Head"),
-    ("eyePos","Eye position (rear→front)",0.10,0.90,0.01,"Head"),
-    ("pygFrac","Tail shield length fraction",0.05,0.40,0.005,"Tail"), ("pygWidth","Tail width (× last segment)",0.50,1.10,0.01,"Tail"),
-    ("pygSpine","Tail spine length (× shield)",0.00,2.00,0.05,"Tail"), ("pygSplay","Tail spine splay (°)",0,45,1,"Tail"),
-    ("pleuralSpine","Pleural spine length",0.00,1.00,0.01,"Spines"), ("spineSweep","Pleural spine sweep (°)",0,80,1,"Spines"),
-    ("maxAngle","Stop angle per joint (°)",4,40,0.5,"Hinge"), ("clearance","Joint clearance (mm)",0.15,0.60,0.01,"Hinge"),
-    ("wall","Shell wall (mm)",1.2,4.0,0.1,"Hinge"), ("barrelR","Knuckle radius (mm)",1.8,4.0,0.1,"Hinge"),
-    ("nKnuckles","Knuckles (odd)",3,7,2,"Hinge"),
-]
-INT_KEYS = {"segCount", "nKnuckles"}
-PRESETS = {
-    "Reference (Weaver STL)": {},
-    "Slender & smooth": dict(width=48, taper=0.95, pleuralSpine=0.0, pygSpine=0.3, marginHeight=0.15, segCount=8),
+# (key, label, min, max, step, group) — derived straight from schema.py, the single source of truth
+KNOBS = [(p.key, f"{p.label} ({p.unit})" if p.unit else p.label, p.lo, p.hi, p.step, p.group) for p in schema.PARAMS]
+INT_KEYS = sorted(p.key for p in schema.PARAMS if p.kind in ("int", "odd_int"))
+
+# Families: named regions of parameter space, from the plain reference body to named real groups.
+FAMILY = {
+    "Reference (defaults)": {},
+    "Slender & smooth": dict(width=56, segCount=8, effacement=0.7, spineBase=0.0, pygSpine=0.3, marginHeight=0.20),
     "Broad, macropygous": dict(width=80, cephFrac=0.26, pygFrac=0.30, pygWidth=1.0, pygSpine=0.0, segCount=5),
-    "Spiny": dict(pleuralSpine=0.8, spineSweep=55, pygSpine=1.4, pygSplay=30, eyeSize=0.12),
-    "Many segments, tight roll": dict(segCount=12, maxAngle=12, taper=0.97, overlap=0.4),
-    "Phacopid (big eyes, blunt)": dict(eyeSize=0.16, eyePos=0.55, glabInflate=1.3, pleuralSpine=0.15, pygSpine=0.0, cephParallel=0.3),
+    "Spiny": dict(spineBase=0.8, spineSweep=55, pygSpine=1.4, pygSplay=30, eyeSize=0.12, genalSpine=0.6, termSpine=0.6),
+    "Many segments, tight roll": dict(segCount=13, length=160, maxAngle=12, overlap=0.4),
+    "Phacopid (big eyes, blunt)": dict(eyeSize=0.18, eyeArc=200, eyePos=0.55, glabInflate=1.15,
+                                        spineBase=0.10, pygSpine=0.0, cephParallel=0.30, borderWidth=0.05),
+    "Sculpted paradoxidid": dict(segCount=9, cephFrac=0.20, pygFrac=0.08, genalSpine=1.1, genalCurve=8,
+                                  glabInflate=1.35, glabLobes=3, glabRise=0.22, effacement=0.0, furrowDepth=1.6,
+                                  tubercles=0.7, tubercleSize=1.1, eyeSize=0.07, eyeArc=110, spineBase=0.12,
+                                  spineGrad=0.1, pygSpine=0.0, pygSplay=15, width=72, length=180, wall=2.2),
 }
 
-def clean(P):
-    """Coerce a client dict into a valid parameter set (ints, odd knuckles, defaults for anything missing)."""
-    Q = dict(T.P); Q.update({k: float(v) for k, v in P.items() if k in T.P})
-    for k in INT_KEYS: Q[k] = int(round(Q[k]))
-    if Q["nKnuckles"] % 2 == 0: Q["nKnuckles"] += 1
-    return Q
-
 def derived(P):
+    """Readout shown under the sliders: geometry summary + printability/enrollment warnings."""
     d = T.pitch(P); joints = P["segCount"] + 1; total = joints * P["maxAngle"]
-    zh, Wh = T.hinge_z(P), T.hinge_width(P)
-    knuckle = Wh / P["nKnuckles"] - P["clearance"]; pin_wall = P["barrelR"] - P["boreDia"] / 2
     ratio = P["pygFrac"] / P["cephFrac"]
     pyg = "micropygous" if ratio < 0.6 else ("isopygous" if ratio < 1.15 else "macropygous")
-    warns = []
-    if P["wall"] < 1.5: warns.append("wall < 1.5 mm — fragile on FDM")
-    if pin_wall < 1.2: warns.append(f"only {pin_wall:.1f} mm around the pin bore — raise knuckle radius")
-    if knuckle < 3.0: warns.append(f"knuckles {knuckle:.1f} mm long — too small: fewer segments, wider axis, or fewer knuckles")
-    if zh < P["barrelR"] + 3: warns.append("hinge axis too low — raise relief or lower knuckle radius")
-    if d < 8: warns.append(f"segment pitch {d:.1f} mm — very short: fewer segments or longer body")
+    v = instrument.print_validity(P)
+    warns = list(v["violations"])
     if total > 360: warns.append(f"total curl {total:.0f}° > 360° — tail would pass the head; lower the stop angle")
-    if P["pleuralSpine"] > 0 and P["marginHeight"] * P["relief"] < P["wall"] + 0.5: warns.append("margin rim thinner than the spine base — spines will be weak")
     return dict(
         pitch=round(d, 1), joints=joints, total_curl=round(total), pyg_class=pyg,
-        hinge_z=round(zh, 1), hinge_width=round(Wh, 1), knuckle=round(knuckle, 1), pin_wall=round(pin_wall, 1),
+        hinge_z=v["hinge_z"], hinge_width=v["hinge_width"], knuckle=v["knuckle"], pin_wall=v["pin_wall"],
         head_mm=round(P["cephFrac"] * P["length"]), thorax_mm=round(d * P["segCount"]), tail_mm=round(P["pygFrac"] * P["length"]),
         last_width=round(2 * T.seg_halfwidth(P, P["segCount"] - 1)), warnings=warns)
 
-# ---- build cache: parts keyed by the parameter set
+# ---- build cache: parts keyed by the parameter hash
 CACHE = {}
 LOCK = threading.Lock()
 
-def key_of(P): return hashlib.md5(json.dumps(P, sort_keys=True).encode()).hexdigest()[:10]
-
 def build(P, mode):
-    k = key_of(P) + ("s" if mode == "segment" else "a")
+    k = schema.param_hash(P) + ("s" if mode == "segment" else "a")
     with LOCK:
         if k in CACHE: return CACHE[k]
         t0 = time.time()
         folder = os.path.join(OUT, k); os.makedirs(folder, exist_ok=True)
         if mode == "segment":
-            parts = [T.build_segment(P, 2)]; names = ["segment"]; offs = []
+            parts = [T.build_segment(P, min(2, P["segCount"] - 1))]; names = ["segment"]; offs = []
         else:
             parts = T.parts_list(P)
-            names = ["head"] + [f"seg{i}" for i in range(P["segCount"])] + ["tail"]
+            names = T.PART_NAMES(P)
             offs = T.joint_offsets(P)
         files = []
         for n, p in zip(names, parts):
-            f = os.path.join(folder, f"{n}.stl"); T.export_stl(p, f); files.append(f"/web_out/{k}/{n}.stl")
+            f = os.path.join(folder, f"{n}.stl"); T.save_mesh(p, f); files.append(f"/web_out/{k}/{n}.stl")
         CACHE[k] = dict(key=k, parts=parts, names=names, urls=files, offsets=offs, hinge_z=T.hinge_z(P),
                         maxAngle=P["maxAngle"], seconds=round(time.time() - t0, 1))
         return CACHE[k]
@@ -115,11 +94,11 @@ class Handler(SimpleHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/": self.path = "/index.html"
         if path == "/api/config":
-            return self.send_json(dict(knobs=KNOBS, presets=PRESETS, defaults=T.P, int_keys=sorted(INT_KEYS)))
+            return self.send_json(dict(knobs=KNOBS, family=FAMILY, defaults=schema.defaults(), int_keys=INT_KEYS))
         return super().do_GET()
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0)); body = json.loads(self.rfile.read(n) or b"{}")
-        P = clean(body.get("P", {}))
+        P = schema.coerce(body.get("P", {}))
         try:
             if self.path == "/api/derived": return self.send_json(derived(P))
             if self.path == "/api/build":

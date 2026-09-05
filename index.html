@@ -96,8 +96,8 @@ async function init(){
   CFG = await (await fetch('/api/config')).json();
   INT = new Set(CFG.int_keys); P = {...CFG.defaults};
   const sel = $('preset');
-  for (const name of Object.keys(CFG.presets)) { const o = document.createElement('option'); o.textContent = name; sel.appendChild(o); }
-  sel.onchange = () => { P = {...CFG.defaults, ...CFG.presets[sel.value]}; syncAll(); refreshDerived(); };
+  for (const name of Object.keys(CFG.family)) { const o = document.createElement('option'); o.textContent = name; sel.appendChild(o); }
+  sel.onchange = () => { P = {...CFG.defaults, ...CFG.family[sel.value]}; syncAll(); refreshDerived(); };
   const host = $('knobs'); let group = null, body = null;
   for (const [key,label,lo,hi,step,g] of CFG.knobs){
     if (g !== group){
