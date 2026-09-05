@@ -92,10 +92,13 @@ async function init(){
     setStatus('config failed: ' + e.message + ' — the server did not return the knob list; check /api/config', false);
     return;
   }
-  INT = new Set(CFG.int_keys); P = {...CFG.defaults};
+  INT = new Set(CFG.int_keys);
   const sel = $('preset');
   for (const name of Object.keys(CFG.presets)) { const o = document.createElement('option'); o.textContent = name; sel.appendChild(o); }
   sel.onchange = () => { P = {...CFG.defaults, ...CFG.presets[sel.value]}; syncAll(); refreshDerived(); };
+  const DEFAULT_PRESET = 'Sculpted, with legs';
+  if (DEFAULT_PRESET in CFG.presets) sel.value = DEFAULT_PRESET;
+  P = {...CFG.defaults, ...CFG.presets[sel.value]};
   const host = $('knobs'); let group = null, body = null;
   // primary (macro) knobs: one slider drives several parameters
   if (CFG.macros && CFG.macros.length){
