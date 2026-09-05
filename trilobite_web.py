@@ -21,6 +21,8 @@ PRESETS = {
                      pygSpine=0.0, segCount=11, maxAngle=30, taper=0.96, tubercles=0.7),
     "Olenellid": dict(segCount=14, taper=0.95, genalSpine=1.2, macroIndex=2, macroAmp=1.2, termSpine=1.8, pygFrac=0.06, maxAngle=8),
     "Many segments, tight roll": dict(segCount=12, maxAngle=12, taper=0.97, overlap=0.4),
+    "Sculpted head (Olenoides skin)": dict(headSkin=1.0, skinOlenoides=1.0),
+    "Sculpted head (Olenoides x Harpetida)": dict(headSkin=1.0, skinOlenoides=0.5, skinHarpetida=0.5),
 }
 KNOBS = [(p.key, p.label, p.lo, p.hi, p.step, p.group) for p in schema.PARAMS]
 INT_KEYS = [p.key for p in schema.PARAMS if p.kind in ("int", "odd_int")]

@@ -5,7 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 RUN pip install --no-cache-dir build123d trimesh manifold3d python-fcl numpy rtree
-COPY schema.py fields.py trilobite.py instrument.py trilobite_web.py index.html ./
+COPY schema.py fields.py trilobite.py instrument.py trilobite_web.py index.html skins.py ./
+COPY skins/ ./skins/
 ENV PORT=8080
 EXPOSE 8080
 CMD ["python", "trilobite_web.py"]

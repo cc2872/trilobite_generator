@@ -59,6 +59,12 @@ PARAMS = [
     Param("borderWidth", "Border width", 0.10, 0.0, 0.30, 0.01, "Head", "Raised border / head half-width (0 = none)"),
     Param("genalSpine", "Genal spine length", 0.35, 0.0, 1.5, 0.01, "Head", "Genal spine length / head length (0 = none)"),
     Param("genalCurve", "Genal spine curve", 20, 0, 60, 1, "Head", "Inward curl of the genal spines", unit="deg"),
+    # ---- head skin (blend of registered real-specimen skins from skins.py, laid over the parametric head)
+    Param("headSkin", "Head skin blend", 1.0, 0.0, 1.0, 0.01, "Skin", "0 = pure parametric head, 1 = fully the blended real skin (outline stays yours)"),
+    Param("skinOlenoides", "Skin: Olenoides", 1.0, 0.0, 1.0, 0.01, "Skin", "Blend weight for the registered Olenoides skin"),
+    Param("skinGltf", "Skin: purchased sculpt", 0.0, 0.0, 1.0, 0.01, "Skin", "Blend weight for the registered purchased-sculpt skin"),
+    Param("skinHarpetida", "Skin: Harpetida", 0.0, 0.0, 1.0, 0.01, "Skin", "Blend weight for the registered Harpetida skin"),
+    Param("skinProetida", "Skin: Proetida", 0.0, 0.0, 1.0, 0.01, "Skin", "Blend weight for the registered Proetida skin"),
     # ---- thorax pleurae and spines (fields along the thorax)
     Param("tipSweep", "Pleural tip sweep", 0.5, 0.0, 2.0, 0.01, "Thorax", "How far the pleural blades sweep back / pitch"),
     Param("tipTaper", "Pleural tip taper", 0.55, 0.0, 0.95, 0.01, "Thorax", "How much the blade narrows toward its tip (0 = square, 0.95 = needle)"),

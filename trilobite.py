@@ -237,6 +237,27 @@ def build_segment(P, i=0):
 # =====================================================================
 #  CEPHALON
 # =====================================================================
+_SKIN_CACHE = {}
+_SKIN_NAMES = ("olenoides", "gltf", "harpetida", "proetida")           # matches skins/*.npz and the schema's skin<Name> weights
+
+def _load_skin_cached(name):
+    if name not in _SKIN_CACHE:
+        import os
+        import skins
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skins", f"{name}.npz")
+        _SKIN_CACHE[name] = skins.load_skin(path)
+    return _SKIN_CACHE[name]
+
+def head_skin_zfun(P, Lc, wh):
+    """Blend of the registered reference head skins (skins.py), resampled to this head's own
+    footprint (mm). Falls back to pure Olenoides if every weight is ~0."""
+    import skins
+    weights = [P[f"skin{n.capitalize()}"] for n in _SKIN_NAMES]
+    if sum(weights) < 1e-6: weights = [1.0, 0.0, 0.0, 0.0]
+    blended = skins.blend([_load_skin_cached(n) for n in _SKIN_NAMES], weights)
+    _, zfun_skin = skins.skin_functions(blended, Lc, wh)
+    return zfun_skin
+
 def build_cephalon(P):
     t, c, h = P["wall"], P["clearance"], P["relief"]
     Lc = P["cephFrac"] * P["length"]
@@ -248,6 +269,7 @@ def build_cephalon(P):
     rise = P["axisRise"] * h
     F = furrow_amp(P)
     Le = Lc - par                                                       # elliptical front length
+    skin_zfun = head_skin_zfun(P, Lc, wh) if P["headSkin"] > 0.001 else None
 
     def xmax(y):
         yy = np.asarray(y, float)
@@ -299,6 +321,8 @@ def build_cephalon(P):
             dist = np.minimum(xm - ax, np.where(-y > par, (1 - front) * Le, 1e9))
             z -= 0.8 * F * trough(dist - bw, 0.8 + 0.2 * bw)
             z += 0.35 * F * plateau(dist, 0.45 * bw, 0.4 * bw)
+        if skin_zfun is not None:                                           # blend toward the real registered skin(s)
+            z = (1 - P["headSkin"]) * z + P["headSkin"] * skin_zfun(x, y)
         return z
 
     head = plate(outline, zfun, t, nu=45, nv=33)
