@@ -100,7 +100,8 @@ def closure_gap(P, meshes, enroll):
 # ---------------------------------------------------------------- verdicts
 def print_validity(P):
     P = schema.coerce(P)
-    d = fields.pitch(P); zh, Wh = fields.hinge_z(P), fields.hinge_width(P)
+    import trilobite as T
+    d = T.pitch(P); zh, Wh = T.hinge_z(P), T.hinge_width(P)
     knuckle = Wh / P["nKnuckles"] - P["clearance"]; pin_wall = P["barrelR"] - P["boreDia"] / 2
     margin = P["marginHeight"] * P["relief"]
     v = []

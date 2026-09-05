@@ -27,7 +27,7 @@ PARAMS = [
     # ---- body proportions
     Param("length", "Body length", 130, 60, 250, 1, "Body", "Whole animal, head tip to tail shield tip (spines extra)", unit="mm"),
     Param("width", "Max width", 65, 30, 140, 1, "Body", "Widest point of the body", unit="mm"),
-    Param("relief", "Relief", 16, 6, 60, 0.5, "Body", "Dorsal height of the vault at the axis", unit="mm"),
+    Param("relief", "Relief", 16, 6, 40, 0.5, "Body", "Dorsal height of the vault at the axis", unit="mm"),
     Param("segCount", "Thoracic segments", 6, 2, 16, 1, "Body", "Number of articulating thoracic segments", kind="int"),
     Param("cephFrac", "Head length fraction", 0.33, 0.18, 0.45, 0.005, "Body", "Cephalon length / body length"),
     Param("pygFrac", "Tail shield fraction", 0.14, 0.05, 0.40, 0.005, "Body", "Pygidium length / body length (spines extra)"),
@@ -81,15 +81,6 @@ PARAMS = [
     Param("tubercles", "Tubercles", 0.0, 0.0, 1.0, 0.01, "Ornament", "Density of granules on the shell (0 = smooth)"),
     Param("tubercleSize", "Tubercle size", 1.6, 0.8, 3.0, 0.1, "Ornament", "Granule radius", unit="mm"),
     Param("seed", "Ornament seed", 1, 0, 999, 1, "Ornament", "Random seed for ornament placement", kind="int"),
-    # ---- composite family: which real anatomy goes where
-    Param("glabBlend", "Glabella: Olenoides → Phacops", 0.0, 0.0, 1.0, 0.01, "Composite", "Blend of the sculpted glabella patches"),
-    Param("eyeType", "Eye type", 1, 0, 2, 1, "Composite", "0 = none, 1 = Olenoides lobe, 2 = Phacops turret", kind="int"),
-    Param("segBlend", "Segment: Olenoides → Phacops", 0.0, 0.0, 1.0, 0.01, "Composite", "Blend of the sculpted segment patches (tiled segCount times)"),
-    Param("pygBlend", "Tail: Olenoides → Phacops", 0.0, 0.0, 1.0, 0.01, "Composite", "Blend of the sculpted pygidium patches"),
-    Param("brim", "Harpetid brim", 0, 0, 1, 1, "Composite", "1 = add the harpetid brim around the head", kind="int"),
-    Param("brimWidth", "Brim width", 0.30, 0.10, 0.50, 0.01, "Composite", "Brim as a fraction of the head half-width"),
-    # ---- model family
-    Param("legs", "Legs", 0, 0, 1, 1, "Extras", "1 = add the sculpt's legs to their segments (display only)", kind="int"),
     # ---- articulation (held constant across a sweep: the fixed ruler)
     Param("maxAngle", "Stop angle", 18, 4, 40, 0.5, "Hinge", "Ventral flexion per joint before the stop engages", unit="deg"),
     Param("clearance", "Clearance", 0.3, 0.15, 0.6, 0.01, "Hinge", "Gap between moving parts", unit="mm"),

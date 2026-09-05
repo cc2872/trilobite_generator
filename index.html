@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Trilobite — skin on skeleton</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trilobite Morphospace</title>
 <style>
-
   :root{--bg:#ffffff;--ink:#000000;--mid:#666666;--line:#e5e5e5;--soft:#f5f5f5}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;overflow:hidden;font-size:12px}
@@ -37,7 +37,6 @@
   .rollbar .val{min-width:130px;text-align:right;font-variant-numeric:tabular-nums}
   .log{position:absolute;right:16px;bottom:64px;width:380px;max-height:220px;overflow:auto;background:var(--bg);border:1px solid var(--line);padding:8px 10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;white-space:pre;display:none}
   .links{display:flex;flex-wrap:wrap;gap:4px 10px} .links a{color:var(--ink);font-size:11px}
-  .sub{color:var(--mid);font-size:11px;margin:2px 0 12px}
 </style>
 <script type="importmap">
 { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
@@ -48,17 +47,21 @@
 <div id="app">
   <aside class="panel">
     <div class="controls" id="controls">
-      <div class="gtitle">Skeleton</div>
-      <div class="sub">Your parametric skeleton. The sculpt is laid on it as skin.</div>
+      <select id="preset"></select>
       <div id="knobs"></div>
+      <div class="links" id="links"></div>
     </div>
     <div class="actions">
-      <button class="primary" id="download">Download STL</button>
-      <button id="reset">Reset to sculpt</button>
+      <button class="primary" id="build">Build</button>
+      <button id="preview">Segment</button>
+      <button id="check">Check</button>
+      <button id="dump">Copy P</button>
     </div>
   </aside>
   <div class="stage" id="stage">
     <div class="overlay" id="overlay"></div>
+    <div class="status" id="status"></div>
+    <div class="log" id="log"></div>
     <div class="rollbar">
       <input type="range" id="enroll" min="0" max="1" step="0.005" value="0">
       <div class="val" id="enrollval">0% · 0°</div>
@@ -66,133 +69,172 @@
     </div>
   </div>
 </div>
-<script src="skin_data.js"></script>
+
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-const $=id=>document.getElementById(id); const SK=window.SKIN;
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 
-// ---- your fields.py, ported
-function landmarks(P){ const s_h=P.cephFrac,s_t=1-P.pygFrac; return {s_h,s_t,pitch_s:(s_t-s_h)/P.segCount}; }
-function curve(pts){ pts=pts.slice().sort((a,b)=>a[0]-b[0]); const s=pts.map(p=>p[0]),v=pts.map(p=>p[1]),n=s.length,m=[];
-  for(let i=0;i<n;i++){ if(i===0)m[i]=(v[1]-v[0])/(s[1]-s[0]); else if(i===n-1)m[i]=(v[n-1]-v[n-2])/(s[n-1]-s[n-2]);
-    else m[i]=0.5*((v[i+1]-v[i])/(s[i+1]-s[i])+(v[i]-v[i-1])/(s[i]-s[i-1])); }
-  return x=>{ x=Math.max(s[0],Math.min(s[n-1],x)); let i=0; while(i<n-2&&x>s[i+1])i++;
-    const s0=s[i],s1=s[i+1],h=s1-s0,t=(x-s0)/h,h00=2*t**3-3*t**2+1,h10=t**3-2*t**2+t,h01=-2*t**3+3*t**2,h11=t**3-t**2;
-    return h00*v[i]+h10*h*m[i]+h01*v[i+1]+h11*h*m[i+1]; }; }
-function widthCurve(P){ const L=landmarks(P),W=P.width/2,smax=P.widthMaxPos,s0=L.s_h+0.5*L.pitch_s;
-  const pts=[[0,0.08*W],[Math.min(0.10,smax-0.02),P.widthHeadFront*W],[smax,W]];
-  if(s0>smax+0.02)pts.push([s0,P.widthThoraxFront*W]);
-  pts.push([L.s_t>s0+0.02?L.s_t:s0+0.02,P.widthThoraxRear*W],[1.0,P.widthTail*W]); return curve(pts); }
-function pitch(P){ return P.length*(1-P.cephFrac-P.pygFrac)/P.segCount; }
-function hingeZ(P){ const ring_top=P.relief*(1+P.axisRise),fur=P.furrowDepth*(1-P.effacement);
-  return ring_top-P.barrelR-P.wall-P.clearance-0.4-0.7*fur; }
+const $ = id => document.getElementById(id);
+let CFG, P = {}, INT = new Set();
+let built = null;          // last build result
+let groups = [];           // nested three.js groups, one per joint
+let enroll = 0, playing = false, flip = 1;
 
-// ---- P0: the parameters that reproduce the sculpt unchanged (your wrap.P0_from)
-let Wsculpt=0; for(const p of SK.pieces) for(let i=0;i<p.v.length;i+=3) Wsculpt=Math.max(Wsculpt,Math.abs(p.v[i]));
-// sculpt's own half-width profile -> fitted P0 (your wrap.P0_from); axisRise=0 because the sculpt's relief already includes its ring
-const NB0=200, WB0=new Float32Array(NB0);
-for(const p of SK.pieces) for(let i=0;i<p.v.length;i+=3){ const b=Math.max(0,Math.min(NB0-1,Math.floor(p.v[i+1]/SK.L*NB0))); WB0[b]=Math.max(WB0[b],Math.abs(p.v[i])); }
-const Ws0=s=>WB0[Math.max(0,Math.min(NB0-1,Math.floor(s*NB0)))]||1;
-let smax=0; for(let b=1;b<NB0;b++) if(WB0[b]>WB0[Math.floor(smax*NB0)]) smax=b/NB0;
-const sh0=SK.joints[0]/SK.L, st0=SK.joints[SK.joints.length-1]/SK.L, n0=SK.pieces.length-2, s00=sh0+0.5*(st0-sh0)/n0;
-const P0={ length:SK.L, width:2*Wsculpt, relief:SK.relief, segCount:n0, cephFrac:sh0, pygFrac:1-st0,
-  widthMaxPos:smax, widthHeadFront:Ws0(Math.min(0.10,smax-0.02))/Wsculpt, widthThoraxFront:Ws0(s00)/Wsculpt,
-  widthThoraxRear:Ws0(st0)/Wsculpt, widthTail:Ws0(0.98)/Wsculpt,
-  axisRise:0.0, furrowDepth:1.2, effacement:0, barrelR:2.6, wall:2.0, clearance:0.3, maxAngle:18, overlap:0.5 };
-let P={...P0}, enroll=0, playing=false, flip=1;
-// sculpt's own half-width along s (for the width ratio)
-const NB=120, WB=new Float32Array(NB);
-for(const p of SK.pieces) for(let i=0;i<p.v.length;i+=3){ const b=Math.max(0,Math.min(NB-1,Math.floor(p.v[i+1]/SK.L*NB))); WB[b]=Math.max(WB[b],Math.abs(p.v[i])); }
-const Ws=s=>{ const b=Math.max(0,Math.min(NB-1,Math.floor(s*NB))); return WB[b]||1; };
-
-// ---- skin: lay the sculpt pieces on the skeleton slots (your wrap.py law), localized to their front hinge
-function skinParts(){
-  const L=P.length, n=P.segCount, lm=landmarks(P), d=pitch(P), Wc=widthCurve(P), Wc0=widthCurve(P0), zr=P.relief/SK.relief;
-  const J=[]; for(let k=0;k<=n;k++) J.push(L*lm.s_h+k*d);
-  const N=SK.pieces.length-2, Hs=SK.joints, Ls=SK.L, ov=0;
-  const remap=(piece,y0s,y1s,y0k,y1k,origin)=>{ const v=piece.v,out=new Float32Array(v.length),sc=(y1k-y0k)/Math.max(y1s-y0s,1e-6);
-    for(let i=0;i<v.length;i+=3){ const y=v[i+1],yn=y0k+(y-y0s)*sc; const xs=Wc(yn/L)/Math.max(Wc0(yn/L),1e-6);   // your wrap.py: WP/WP0
-      out[i]=v[i]*xs; out[i+1]=yn-origin; out[i+2]=v[i+2]*zr; } return {pos:out,idx:piece.f}; };
-  const parts=[];
-  parts.push(remap(SK.pieces[0],0,Hs[0],0,L*lm.s_h, L*lm.s_h));                        // head: origin = rear hinge
-  for(let k=0;k<n;k++){ const src=N>1?Math.round(k*(N-1)/Math.max(n-1,1)):0;
-    parts.push(remap(SK.pieces[1+src],Hs[src],Hs[src+1],J[k],J[k+1]+ov, J[k])); }        // segments, tiled
-  parts.push(remap(SK.pieces[N+1],Hs[N],Ls,L*lm.s_t,L, J[n]));                          // tail
-  // trim_overlaps: neighbours must not interleave, front wins, + clearance (in the global frame)
-  const origins=[L*lm.s_h].concat(J.slice(0,n)).concat([J[n]]);
-  for(let k=1;k<parts.length;k++){ const a=parts[k-1],b=parts[k]; const nb=60;
-    let xmin=Infinity,xmax=-Infinity; for(let i=0;i<a.pos.length;i+=3){xmin=Math.min(xmin,a.pos[i]);xmax=Math.max(xmax,a.pos[i]);} for(let i=0;i<b.pos.length;i+=3){xmin=Math.min(xmin,b.pos[i]);xmax=Math.max(xmax,b.pos[i]);}
-    const rear=new Float64Array(nb).fill(-Infinity), bin=x=>Math.max(0,Math.min(nb-1,Math.floor((x-xmin)/(xmax-xmin+1e-9)*nb)));
-    for(let i=0;i<a.pos.length;i+=3){ const bb=bin(a.pos[i]); rear[bb]=Math.max(rear[bb],a.pos[i+1]+origins[k-1]); }
-    const keep=[]; const idx=b.idx;
-    for(let t=0;t<idx.length;t+=3){ let ok=true; for(let c=0;c<3;c++){ const vi=idx[t+c]; const gy=b.pos[3*vi+1]+origins[k]; if(!(gy>rear[bin(b.pos[3*vi])]+P.clearance)){ok=false;break;} } if(ok) keep.push(idx[t],idx[t+1],idx[t+2]); }
-    b.idx=keep; }
-  return {parts, offsets:[0].concat(Array(n).fill(d)), hinge_z:hingeZ(P), maxAngle:P.maxAngle};  // your joint_offsets
-}
-
-// ---- three.js: your scene + nested chain (showBuild), verbatim structure
-let renderer,scene,camera,controls,root,groups=[];
-const mat=new THREE.MeshStandardMaterial({color:0xbfbfbf,roughness:0.8,metalness:0.0,side:THREE.DoubleSide});
-function initScene(){ const stage=$('stage');
-  renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(devicePixelRatio); stage.prepend(renderer.domElement);
-  scene=new THREE.Scene(); scene.background=new THREE.Color(0xffffff);
-  camera=new THREE.PerspectiveCamera(40,1,1,5000); camera.position.set(140,110,190);
-  controls=new OrbitControls(camera,renderer.domElement); controls.target.set(0,10,0);
-  scene.add(new THREE.HemisphereLight(0xffffff,0x888888,1.0));
-  const key=new THREE.DirectionalLight(0xffffff,1.2); key.position.set(80,160,120); scene.add(key);
-  const grid=new THREE.GridHelper(400,40,0xdddddd,0xeeeeee); grid.position.y=-0.5; scene.add(grid);
-  root=new THREE.Group(); root.rotation.x=-Math.PI/2; scene.add(root);
-  const resize=()=>{const w=stage.clientWidth,h=stage.clientHeight; renderer.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix();};
-  new ResizeObserver(resize).observe(stage); resize();
-  (function loop(t){ requestAnimationFrame(loop); if(playing){const u=(t%3600)/3600; setEnroll(0.5-0.5*Math.cos(u*2*Math.PI));} controls.update(); renderer.render(scene,camera); })(0); }
-function showBuild(b){
-  root.clear(); groups=[]; let parent=root;
-  b.parts.forEach((p,i)=>{ const g=new THREE.Group(); g.position.set(0,i===0?0:b.offsets[i-1],0);
-    const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.Float32BufferAttribute(p.pos,3)); geo.setIndex(p.idx); geo.computeVertexNormals();
-    const mesh=new THREE.Mesh(geo,mat); mesh.position.set(0,0,-b.hinge_z); g.add(mesh); parent.add(g); parent=g; groups.push(g); });
-  root.position.set(0,b.hinge_z,0); setEnroll(enroll); }
-let built=null;
-function rebuild(keepCam){ built=skinParts(); showBuild(built); if(!keepCam) frame(); overlay(); }
-function setEnroll(e){ enroll=e; $('enroll').value=e; const th=e*(built?built.maxAngle:P.maxAngle);
-  $('enrollval').textContent=`${Math.round(e*100)}% · ${th.toFixed(1)}° / joint`;
-  groups.forEach((g,i)=>{ if(i>0) g.rotation.x=-flip*THREE.MathUtils.degToRad(th); }); }
-function frame(){ const box=new THREE.Box3().setFromObject(root); const c=box.getCenter(new THREE.Vector3()); const s=box.getSize(new THREE.Vector3()).length()||100;
-  controls.target.copy(c); camera.position.copy(c).add(new THREE.Vector3(0.6,0.55,0.95).multiplyScalar(s*0.9)); camera.near=s/100; camera.far=s*10; camera.updateProjectionMatrix(); }
-function overlay(){ const d=pitch(P); $('overlay').innerHTML=`${d.toFixed(1)} mm pitch · ${P.segCount+1} × ${P.maxAngle}° = ${((P.segCount+1)*P.maxAngle).toFixed(0)}°<br>hinge ${hingeZ(P).toFixed(1)} · skin: Olenoides cut, tiled to ${P.segCount} segments`; }
-
-// ---- knobs (the skeleton's, from your schema)
-const KNOBS=[['length','Body length',60,250,1],['width','Max width',30,140,1],['relief','Relief',6,60,0.5],
-  ['segCount','Thoracic segments',2,16,1],['cephFrac','Head length fraction',0.18,0.45,0.005],['pygFrac','Tail shield fraction',0.05,0.40,0.005],
-  ['widthMaxPos','Widest point',0.10,0.80,0.01],['widthThoraxRear','Thorax rear width',0.3,1.0,0.01],['overlap','Shingle overlap',0.1,0.8,0.01],['maxAngle','Stop angle',4,40,0.5]];
-const INT=new Set(['segCount']);
-function buildKnobs(){ const host=$('knobs'); host.innerHTML='';
-  for(const [key,label,lo,hi,step] of KNOBS){ const c=document.createElement('div'); c.className='ctrl';
-    c.innerHTML=`<div class="lab"><span>${label}</span><span id="v-${key}"></span></div>
+// ---------------- controls
+async function init(){
+  let resp;
+  try {
+    resp = await fetch('/api/config');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} from /api/config`);
+    CFG = await resp.json();
+  } catch (e) {
+    setStatus('config failed: ' + e.message + ' — the server did not return the knob list; check /api/config', false);
+    return;
+  }
+  INT = new Set(CFG.int_keys); P = {...CFG.defaults};
+  const sel = $('preset');
+  for (const name of Object.keys(CFG.presets)) { const o = document.createElement('option'); o.textContent = name; sel.appendChild(o); }
+  sel.onchange = () => { P = {...CFG.defaults, ...CFG.presets[sel.value]}; syncAll(); refreshDerived(); };
+  const host = $('knobs'); let group = null, body = null;
+  // primary (macro) knobs: one slider drives several parameters
+  if (CFG.macros && CFG.macros.length){
+    const wrap = document.createElement('div'); wrap.className = 'group';
+    const t = document.createElement('div'); t.className = 'gtitle'; t.textContent = 'Primary'; t.onclick = () => wrap.classList.toggle('closed');
+    const mb = document.createElement('div'); mb.className = 'body'; wrap.append(t, mb); host.appendChild(wrap);
+    for (const [mk, label, def, maps] of CFG.macros){
+      const c = document.createElement('div'); c.className = 'ctrl';
+      c.innerHTML = `<div class="lab"><span>${label}</span><span id="v-m-${mk}">${def}</span></div>
+        <input type="range" id="m-${mk}" min="0" max="1" step="0.01" value="${def}">
+        <input type="number" id="mn-${mk}" min="0" max="1" step="0.01" value="${def}">`;
+      mb.appendChild(c);
+      const apply = v => { v = Math.max(0, Math.min(1, v)); $('v-m-'+mk).textContent = v.toFixed(2); $('m-'+mk).value = v; $('mn-'+mk).value = v;
+        for (const [pk, lo, hi] of maps){ let x = lo + (hi - lo) * v; if (INT.has(pk)) { x = Math.round(x); if (pk === 'nKnuckles' && x % 2 === 0) x += 1; } P[pk] = x; sync(pk); }
+        refreshDerived(); };
+      c.querySelector(`#m-${mk}`).addEventListener('input', e => apply(parseFloat(e.target.value)));
+      c.querySelector(`#mn-${mk}`).addEventListener('change', e => apply(parseFloat(e.target.value)));
+    }
+  }
+  for (const [key,label,lo,hi,step,g] of CFG.knobs){
+    if (g !== group){
+      group = g;
+      const wrap = document.createElement('div'); wrap.className = 'group';
+      const t = document.createElement('div'); t.className='gtitle'; t.textContent = g; t.onclick = () => wrap.classList.toggle('closed');
+      body = document.createElement('div'); body.className='body'; wrap.append(t, body); host.appendChild(wrap);
+    }
+    const c = document.createElement('div'); c.className = 'ctrl';
+    c.innerHTML = `<div class="lab"><span>${label}</span><span id="v-${key}"></span></div>
       <input type="range" id="s-${key}" min="${lo}" max="${hi}" step="${step}" value="${P[key]}">
       <input type="number" id="n-${key}" min="${lo}" max="${hi}" step="${step}" value="${P[key]}">`;
-    host.appendChild(c); const s=c.querySelector('#s-'+key),n=c.querySelector('#n-'+key);
-    s.addEventListener('input',()=>setP(key,parseFloat(s.value))); n.addEventListener('change',()=>setP(key,parseFloat(n.value))); }
-  syncAll(); }
-function setP(k,v){ if(INT.has(k))v=Math.round(v); P[k]=v; sync(k); rebuild(true); }
-function sync(k){ const v=P[k]; $('s-'+k).value=v; $('n-'+k).value=v; $('v-'+k).textContent=INT.has(k)?v:(+v).toFixed(3).replace(/\.?0+$/,''); }
-function syncAll(){ for(const k of KNOBS) sync(k[0]); }
+    body.appendChild(c);
+    const s = c.querySelector(`#s-${key}`), n = c.querySelector(`#n-${key}`);
+    s.addEventListener('input', () => setP(key, parseFloat(s.value)));
+    n.addEventListener('change', () => setP(key, parseFloat(n.value)));
+  }
+  syncAll(); refreshDerived(); initScene();
+}
+function setP(key, v){
+  if (INT.has(key)) { v = Math.round(v); if (key === 'nKnuckles' && v % 2 === 0) v += 1; }
+  P[key] = v; sync(key); refreshDerived();
+}
+function sync(key){ const v = P[key]; $('s-'+key).value = v; $('n-'+key).value = v; $('v-'+key).textContent = INT.has(key) ? v : (+v).toFixed(3).replace(/\.?0+$/,''); }
+function syncAll(){ for (const k of CFG.knobs) sync(k[0]); }
 
-// ---- STL export of the current posed animal (binary)
-function exportSTL(){ root.updateMatrixWorld(true); const tris=[];
-  root.traverse(o=>{ if(o.isMesh){ const pos=o.geometry.attributes.position,idx=o.geometry.index,m=o.matrixWorld,get=i=>new THREE.Vector3().fromBufferAttribute(pos,i).applyMatrix4(m);
-    for(let i=0;i<idx.count;i+=3) tris.push([get(idx.getX(i)),get(idx.getX(i+1)),get(idx.getX(i+2))]); } });
-  const buf=new ArrayBuffer(84+tris.length*50),dv=new DataView(buf); dv.setUint32(80,tris.length,true); let off=84; const n=new THREE.Vector3(),a=new THREE.Vector3(),b=new THREE.Vector3();
-  for(const [p0,p1,p2] of tris){ a.subVectors(p1,p0); b.subVectors(p2,p0); n.crossVectors(a,b).normalize();
-    for(const q of [n,p0,p1,p2]){ dv.setFloat32(off,q.x,true);dv.setFloat32(off+4,q.y,true);dv.setFloat32(off+8,q.z,true); off+=12; } dv.setUint16(off,0,true); off+=2; }
-  const a2=document.createElement('a'); a2.href=URL.createObjectURL(new Blob([buf])); a2.download=`trilobite_seg${P.segCount}_L${P.length}_${Math.round(enroll*100)}pct.stl`; a2.click(); }
+let dTimer = null;
+function refreshDerived(){
+  clearTimeout(dTimer);
+  dTimer = setTimeout(async () => {
+    const d = await (await fetch('/api/derived', {method:'POST', body: JSON.stringify({P})})).json();
+    renderOverlay(d);
+  }, 80);
+}
+function renderOverlay(d, note){
+  $('overlay').innerHTML =
+    `${d.pitch} mm pitch · ${d.joints} × ${P.maxAngle}° = ${d.total_curl}° · ${d.pyg_class}<br>` +
+    `hinge ${d.hinge_z} · knuckle ${d.knuckle} · pin wall ${d.pin_wall}<br>` +
+    d.warnings.map(w => `<span class="warn">${w}</span>`).join('<br>');
+}
+function setStatus(t, busy){ const s = $('status'); s.textContent = t; s.className = 'status' + (busy ? ' busy' : ''); }
+function log(t){ const l = $('log'); l.style.display = 'block'; l.textContent = t; }
 
-$('enroll').addEventListener('input',e=>{playing=false;$('play').textContent='Roll';setEnroll(parseFloat(e.target.value));});
-$('play').onclick=()=>{playing=!playing;$('play').textContent=playing?'Pause':'Roll';};
-$('download').onclick=exportSTL;
-$('reset').onclick=()=>{P={...P0};enroll=0;syncAll();rebuild(false);};
-document.addEventListener('keydown',e=>{if(e.key==='f'){flip=-flip;setEnroll(enroll);}});
-initScene(); buildKnobs(); rebuild(false);
+// ---------------- three.js
+let renderer, scene, camera, controls, root;
+function initScene(){
+  const stage = $('stage');
+  renderer = new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(devicePixelRatio);
+  stage.prepend(renderer.domElement);
+  scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
+  camera = new THREE.PerspectiveCamera(40, 1, 1, 5000); camera.position.set(140, 110, 190);
+  controls = new OrbitControls(camera, renderer.domElement); controls.target.set(0, 10, 0);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));
+  const key = new THREE.DirectionalLight(0xffffff, 1.2); key.position.set(80, 160, 120); scene.add(key);
+  const grid = new THREE.GridHelper(400, 40, 0xdddddd, 0xeeeeee); grid.position.y = -0.5; scene.add(grid);
+  root = new THREE.Group(); root.rotation.x = -Math.PI / 2;   // build123d Z-up -> three.js Y-up
+  scene.add(root);
+  const resize = () => { const w = stage.clientWidth, h = stage.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); };
+  new ResizeObserver(resize).observe(stage); resize();
+  (function loop(t){ requestAnimationFrame(loop); if (playing){ const u = (t % 3200) / 3200; setEnroll(0.5 - 0.5 * Math.cos(u * 2 * Math.PI)); } controls.update(); renderer.render(scene, camera); })(0);
+}
+const mat = new THREE.MeshStandardMaterial({color: 0xbfbfbf, roughness: 0.8, metalness: 0.0});
+const loader = new STLLoader();
+const loadSTL = url => new Promise((res, rej) => loader.load(url + '?t=' + Date.now(), res, undefined, e => rej(new Error('mesh fetch failed: ' + url))));
+
+async function showBuild(b){
+  if (!root) { throw new Error('3D scene not initialised (config never loaded — reload the page)'); }
+  root.clear(); groups = [];
+  const geos = await Promise.all(b.urls.map(loadSTL));
+  if (b.names.length === 1){ root.add(new THREE.Mesh(geos[0], mat)); frame(); return; }
+  // nested chain: head > seg0 > ... > tail ; each group's origin is its front hinge (head: rear hinge)
+  let parent = root;
+  b.names.forEach((n, i) => {
+    const g = new THREE.Group();
+    g.position.set(0, i === 0 ? 0 : b.offsets[i - 1], 0);
+    const mesh = new THREE.Mesh(geos[i], mat); mesh.position.set(0, 0, -b.hinge_z); g.add(mesh);
+    parent.add(g); parent = g; groups.push(g);
+  });
+  root.position.set(0, b.hinge_z, 0);          // lift so the shells sit on the grid (world Y is up)
+  setEnroll(enroll); frame();
+}
+function setEnroll(e){
+  enroll = e; $('enroll').value = e;
+  const th = e * (built ? built.maxAngle : P.maxAngle);
+  $('enrollval').textContent = `${Math.round(e * 100)}% · ${th.toFixed(1)}° / joint`;
+  groups.forEach((g, i) => { if (i > 0) g.rotation.x = -flip * THREE.MathUtils.degToRad(th); });
+}
+function frame(){
+  const box = new THREE.Box3().setFromObject(root); const c = box.getCenter(new THREE.Vector3()); const s = box.getSize(new THREE.Vector3()).length();
+  controls.target.copy(c); camera.position.copy(c).add(new THREE.Vector3(0.6, 0.55, 0.95).multiplyScalar(s * 0.9)); camera.near = s / 100; camera.far = s * 10; camera.updateProjectionMatrix();
+}
+
+// ---------------- actions
+async function build(mode){
+  setStatus(mode === 'segment' ? 'building one segment…' : 'building whole animal (30–60 s)…', true);
+  document.querySelectorAll('.actions button').forEach(b => b.disabled = true);
+  try {
+    const r = await (await fetch('/api/build', {method:'POST', body: JSON.stringify({P, mode})})).json();
+    if (r.error) throw new Error(r.error);
+    built = r; await showBuild(r); renderOverlay(r.derived, `built in ${r.seconds}s`);
+    if (r.measure) { const m = r.measure; $('overlay').innerHTML += `<br><b>e_max ${m.e_max}</b> · free curl ${m.free_curl_deg}° of ${m.total_curl_deg}° · gap ${m.closure_gap_mm} mm · ${m.enroll_class}` + (m.stopped_by.length ? ` · stopped by parts ${m.stopped_by.map(x=>x[0]+'–'+x[1]).join(', ')}` : ''); }
+    $('links').innerHTML = r.urls.map((u, i) => `<a href="${u}" download>${r.names[i]}.stl</a>`).join('');
+    setStatus(`built in ${r.seconds}s`, false);
+  } catch (e) { setStatus('error: ' + e.message, false); }
+  document.querySelectorAll('.actions button').forEach(b => b.disabled = false);
+}
+$('build').onclick = () => build('animal');
+$('preview').onclick = () => build('segment');
+$('check').onclick = async () => {
+  setStatus('checking collisions at 5 enroll values…', true);
+  const r = await (await fetch('/api/check', {method:'POST', body: JSON.stringify({P})})).json();
+  log(r.text || r.error); setStatus('check done', false);
+};
+$('dump').onclick = () => {
+  const s = 'P = dict(' + Object.entries(P).map(([k, v]) => `${k}=${INT.has(k) ? Math.round(v) : +(+v).toFixed(4)}`).join(', ') + ')';
+  navigator.clipboard?.writeText(s); log(s);
+};
+$('enroll').addEventListener('input', e => { playing = false; $('play').textContent = 'Roll'; setEnroll(parseFloat(e.target.value)); });
+$('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Roll'; };
+document.addEventListener('keydown', e => { if (e.key === 'f') { flip = -flip; setEnroll(enroll); } });
+init();
 </script>
 </body>
 </html>

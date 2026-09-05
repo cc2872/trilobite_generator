@@ -84,17 +84,3 @@ if __name__ == "__main__":
     print("half-width along s:", [round(float(wc(s)), 1) for s in np.linspace(0, 1, 11)])
     print("segment half-widths:", [round(seg_halfwidth(P, i), 1) for i in range(P["segCount"])])
     P2 = dict(P, macroIndex=2, spineGrad=-0.2); print("spine field:", [round(v, 2) for v in pleural_spine_field(P2)])
-
-
-# ---------------- derived scalars that the web readout needs WITHOUT importing the CAD kernel
-def pitch(P):
-    return P["length"] * (1 - P["cephFrac"] - P["pygFrac"]) / P["segCount"]
-
-def ring_top(P):
-    return P["relief"] * (1 + P["axisRise"])
-
-def hinge_z(P):
-    return ring_top(P) - P["barrelR"] - P["wall"] - P["clearance"] - 0.4 - 0.7 * furrow_amp(P)
-
-def hinge_width(P):
-    return 2 * P["axisFrac"] * seg_halfwidth(P, P["segCount"] - 1) - 2
