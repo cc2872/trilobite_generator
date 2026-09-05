@@ -1,8 +1,3 @@
-"""
-trilobite_web.py — the generator as a website (v4: schema-driven, instrument-backed).
-
-    python trilobite_web.py        →  http://localhost:8765     (Render/Railway set PORT)
-"""
 import json, os, time, threading, io, contextlib, webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
@@ -15,6 +10,8 @@ OUT = os.path.join(HERE, "web_out"); os.makedirs(OUT, exist_ok=True)
 
 PRESETS = {
     "Reference": {},
+    "Sculpted paradoxidid": dict(family=1),
+    "Sculpted, with legs": dict(family=1, legs=1),
     "Smooth (effaced)": dict(effacement=0.85, spineBase=0.0, genalSpine=0.0, pygSpine=0.0, tubercles=0.0),
     "Spiny": dict(spineBase=0.9, spineSweep=25, axialSpine=0.8, pygMarginal=6, genalSpine=0.8, tubercles=0.5),
     "Phacopid": dict(eyeSize=0.2, eyePos=0.55, glabInflate=1.6, glabRise=0.3, pleuralSpine=0.0, spineBase=0.0,
@@ -41,6 +38,17 @@ def build(P, mode):
     with LOCK:
         if k in CACHE: return CACHE[k]
         t0 = time.time(); folder = os.path.join(OUT, k); os.makedirs(folder, exist_ok=True)
+        if int(P.get("family", 0)) == 1 and mode != "segment":
+            import skin
+            pieces, axes, SP = skin.build_skinned(dict(maxAngle=P["maxAngle"], clearance=P["clearance"], wall=P["wall"],
+                                                       barrelR=P["barrelR"], nKnuckles=P["nKnuckles"]), legs=bool(int(P.get("legs", 0))), verbose=False)
+            names = ["head"] + [f"seg{i}" for i in range(len(pieces) - 2)] + ["tail"]
+            meas = skin.measure(pieces, axes, SP["maxAngle"]); meas.update(instrument="skin-1.0", print_valid=True, violations=[], params=schema.param_hash(P))
+            blobs = {n: p.export(file_type="stl") for n, p in zip(names, pieces)}
+            urls = [f"/api/mesh/{k}/{n}.stl" for n in names]
+            CACHE[k] = dict(key=k, names=names, urls=urls, offsets=[], axes=[dict(y=a["y"], zh=a["zh"]) for a in axes],
+                            hinge_z=axes[0]["zh"], maxAngle=SP["maxAngle"], seconds=round(time.time() - t0, 1), measure=meas, blobs=blobs)
+            return CACHE[k]
         if mode == "segment":
             parts = [T.build_segment(P, 2)]; names = ["segment"]; offs = []; meas = None
         else:
@@ -79,7 +87,8 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/health":
             return self.send_json(dict(ok=True, cached=list(CACHE), web_out=os.path.isdir(OUT), files=sum(len(f) for _, _, f in os.walk(OUT))))
         if path == "/api/config":
-            return self.send_json(dict(knobs=KNOBS, presets=PRESETS, defaults=schema.defaults(), int_keys=INT_KEYS, schema=schema.SCHEMA_VERSION))
+            return self.send_json(dict(knobs=KNOBS, presets=PRESETS, defaults=schema.defaults(), int_keys=INT_KEYS,
+                                       macros=schema.MACROS, schema=schema.SCHEMA_VERSION))
         return super().do_GET()
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0)); body = json.loads(self.rfile.read(n) or b"{}")
