@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 RUN pip install --no-cache-dir build123d trimesh manifold3d python-fcl numpy shapely scipy rtree
-COPY schema.py fields.py trilobite.py instrument.py trilobite_web.py index.html skin.py slicer.py load_sculpt.py wrap.py mega.py ./
+COPY schema.py fields.py trilobite.py instrument.py trilobite_web.py index.html skin.py slicer.py load_sculpt.py wrap.py mega.py species_data.js generator.html ./
 COPY assets/ ./assets/
 ENV PORT=8080
 EXPOSE 8080
