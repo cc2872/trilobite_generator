@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trilobite Enrollment Simulator</title>
+<style>
+  :root{
+    --ground:#1b2026; --panel:#20262e; --line:#333d47;
+    --ink:#e8e2d4; --dim:#9aa3ac; --accent:#4fc4d6; --accent-dim:#2c6d76;
+    --bone:#e3d3aa; --bone2:#bf955e; --furrow:#5f4326; --stop:#f0a35a; --pin:#4fc4d6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(120% 90% at 70% 0%,#262d36 0%,var(--ground) 55%,#141920 100%);
+       color:var(--ink);font-family:"Inter","Segoe UI",system-ui,sans-serif;display:flex;min-height:100vh}
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;min-width:0;position:relative}
+  .stage::after{content:"";position:absolute;inset:16px;border:1px solid var(--line);pointer-events:none;border-radius:2px}
+  svg{width:min(820px,100%);height:auto;display:block}
+  .readout{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-size:12px;color:var(--dim);margin-top:14px;line-height:1.6;text-align:center}
+  .readout b{color:var(--accent);font-weight:500}
+  .readout .warn{color:var(--stop)}
+  .panel{flex:0 0 320px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;height:100vh}
+  header{padding:22px 22px 14px;border-bottom:1px solid var(--line)}
+  h1{font-size:16px;margin:0;font-weight:600}
+  .sub{font-size:12px;color:var(--dim);margin-top:4px}
+  .controls{padding:8px 22px 22px;overflow-y:auto;flex:1}
+  .gtitle{font-size:11px;color:var(--accent);font-weight:600;padding:6px 0;border-bottom:1px solid var(--line);margin:16px 0 8px}
+  .ctrl{margin:12px 0}
+  .lab{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px}
+  .lab .anat{color:var(--dim);font-size:11px}
+  .val{font-family:"IBM Plex Mono",monospace;font-size:11px}
+  input[type=range]{-webkit-appearance:none;width:100%;height:3px;border-radius:2px;background:var(--line);outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--accent);
+    cursor:pointer;border:2px solid var(--ground);box-shadow:0 0 0 1px var(--accent-dim)}
+  input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--ground)}
+  input[type=range].big{height:6px}
+  input[type=range].big::-webkit-slider-thumb{width:22px;height:22px}
+  .toggle{display:flex;align-items:center;gap:8px;font-size:12.5px;margin:10px 0}
+  .toggle input{accent-color:var(--accent)}
+  .actions{padding:16px 22px;border-top:1px solid var(--line);display:flex;gap:8px}
+  button{flex:1;background:var(--ground);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:9px 10px;font-size:12px;cursor:pointer;font-family:inherit}
+  button.primary{background:var(--accent);color:#08222a;border-color:var(--accent);font-weight:600}
+  button:hover{border-color:var(--accent)}
+  @media (max-width:820px){body{flex-direction:column}.panel{flex-basis:auto;height:auto;border-left:none;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <svg id="plate" viewBox="0 0 820 460" aria-label="Trilobite enrollment, side view"></svg>
+    <div class="readout" id="readout"></div>
+  </div>
+  <aside class="panel">
+    <header>
+      <h1>Enrollment Simulator</h1>
+      <div class="sub">Sagittal view. Head fixed at left; every joint rotates ventrally by the same angle.</div>
+    </header>
+    <div class="controls">
+      <div class="gtitle">Enroll</div>
+      <div class="ctrl"><div class="lab"><span>Enrollment <span class="anat">0 = flat, 1 = at the stops</span></span><span class="val" id="v-enroll"></span></div>
+        <input class="big" type="range" id="enroll" min="0" max="1" step="0.005" value="0"></div>
+
+      <div class="gtitle">Body plan</div>
+      <div class="ctrl"><div class="lab"><span>Thoracic segments <span class="anat">tergites</span></span><span class="val" id="v-n"></span></div>
+        <input type="range" id="n" min="2" max="20" step="1" value="6"></div>
+      <div class="ctrl"><div class="lab"><span>Per-joint stop angle <span class="anat">maxAngle</span></span><span class="val" id="v-theta"></span></div>
+        <input type="range" id="theta" min="4" max="45" step="0.5" value="18"></div>
+      <label class="toggle"><input type="checkbox" id="couple"> Couple stop angle to segment count (hold total curl)</label>
+      <div class="ctrl" id="curlCtrl" style="opacity:.45"><div class="lab"><span>Target total curl <span class="anat">degrees, tail vs head</span></span><span class="val" id="v-curl"></span></div>
+        <input type="range" id="curl" min="60" max="360" step="5" value="180"></div>
+
+      <div class="gtitle">Proportions</div>
+      <div class="ctrl"><div class="lab"><span>Head size <span class="anat">cephalon</span></span><span class="val" id="v-ceph"></span></div>
+        <input type="range" id="ceph" min="0.18" max="0.42" step="0.01" value="0.30"></div>
+      <div class="ctrl"><div class="lab"><span>Tail size <span class="anat">pygidium</span></span><span class="val" id="v-pyg"></span></div>
+        <input type="range" id="pyg" min="0.05" max="0.42" step="0.01" value="0.18"></div>
+      <div class="ctrl"><div class="lab"><span>Relief <span class="anat">dorsal height</span></span><span class="val" id="v-relief"></span></div>
+        <input type="range" id="relief" min="0.06" max="0.22" step="0.005" value="0.13"></div>
+    </div>
+    <div class="actions">
+      <button class="primary" id="play">▶ Roll</button>
+      <button id="reset">Reset</button>
+    </div>
+  </aside>
+
+<script>
+"use strict";
+const S = {enroll:0, n:6, theta:18, couple:false, curl:180, ceph:0.30, pyg:0.18, relief:0.13};
+const $ = id => document.getElementById(id);
+const fmt = (k,v) => k==="n" ? v : (k==="theta"||k==="curl") ? v.toFixed(1)+"°" : k==="enroll" ? (v*100).toFixed(0)+"%" : v.toFixed(2);
+
+function effectiveTheta(){ return S.couple ? S.curl/(S.n+1) : S.theta; }
+
+function render(){
+  const W=820, L=520, x0=90, y0=150;                 // body length in px, head anchor
+  const th = effectiveTheta();
+  const H  = L*S.relief;                              // segment height
+  const zh = 0.1*H;                                   // hinge sits this far below the roof
+  const Lc = L*S.ceph, Lp = L*S.pyg, Lt = L-Lc-Lp, d = Lt/S.n;
+  const b  = (H-zh)*Math.tan(th/2*Math.PI/180);       // ventral bevel inset per face
+  const ang = S.enroll*th;                            // actual joint rotation
+  const atStop = S.enroll>=0.995;
+
+  let out = `<defs>
+    <linearGradient id="bone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--bone)"/><stop offset="1" stop-color="var(--bone2)"/></linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity=".45"/></filter>
+  </defs><g filter="url(#soft)" transform="translate(${x0},${y0})">`;
+
+  // cephalon: root, rear-top hinge at (0,0). Drawn extending to -x.
+  out += `<path d="M 0 ${-zh} L ${-Lc*0.15} ${-zh} C ${-Lc*0.75} ${-zh-H*0.15} ${-Lc*1.02} ${H*0.25} ${-Lc*0.8} ${H*0.85}
+           Q ${-Lc*0.7} ${H} ${-Lc*0.55} ${H} L ${b} ${H-zh} Z" fill="url(#bone)" stroke="var(--furrow)" stroke-width="1.6" stroke-linejoin="round"/>`;
+  // eye
+  out += `<ellipse cx="${-Lc*0.62}" cy="${H*0.25}" rx="${H*0.12}" ry="${H*0.16}" fill="#2b3138" stroke="var(--furrow)" stroke-width=".8"/>`;
+
+  const stopCol = atStop ? "var(--stop)" : "var(--furrow)";
+  // thoracic chain: each joint = translate(d) rotate(ang) nested
+  const segQuad = () => `<path d="M 0 ${-zh} L ${d} ${-zh} L ${d-b} ${H-zh} L ${b} ${H-zh} Z" fill="url(#bone)" stroke="var(--furrow)" stroke-width="1.4" stroke-linejoin="round"/>
+      <line x1="${b}" y1="${H-zh}" x2="0" y2="${-zh}" stroke="${stopCol}" stroke-width="${atStop?2.2:0}" opacity=".9"/>
+      <line x1="${d-b}" y1="${H-zh}" x2="${d}" y2="${-zh}" stroke="${stopCol}" stroke-width="${atStop?2.2:0}" opacity=".9"/>
+      <path d="M ${d*0.1} ${-zh+H*0.18} q ${d*0.4} ${H*0.08} ${d*0.8} 0" fill="none" stroke="var(--furrow)" stroke-width=".8" opacity=".55"/>
+      <circle cx="0" cy="0" r="${Math.max(2.2,H*0.07)}" fill="var(--pin)" stroke="#0b2a30" stroke-width="1"/>`;
+
+  let open=0;
+  for(let i=0;i<S.n;i++){
+    out += `<g transform="rotate(${ang})">` + segQuad();
+    out += `<g transform="translate(${d},0)">`; open+=2;
+  }
+  // pygidium: hinged on the last segment's rear
+  out += `<g transform="rotate(${ang})">
+    <path d="M 0 ${-zh} L ${Lp*0.6} ${-zh} C ${Lp*0.95} ${-zh+H*0.05} ${Lp*1.02} ${H*0.55} ${Lp*0.75} ${H*0.9}
+      Q ${Lp*0.55} ${H} ${Lp*0.3} ${H-zh} L ${b} ${H-zh} Z" fill="url(#bone)" stroke="var(--furrow)" stroke-width="1.6" stroke-linejoin="round"/>
+    <circle cx="0" cy="0" r="${Math.max(2.2,H*0.07)}" fill="var(--pin)" stroke="#0b2a30" stroke-width="1"/></g>`;
+  out += "</g>".repeat(open) + "</g>";
+  $("plate").innerHTML = out;
+
+  const joints=S.n+1, total=joints*th, cur=joints*ang;
+  const closes = total>=330 && total<=380;
+  $("readout").innerHTML =
+    `<b>${joints}</b> joints × <b>${th.toFixed(1)}°</b> = total curl <b>${total.toFixed(0)}°</b>${closes?" · closes into a ball":total>380?` · <span class="warn">over-rotates: tail passes head</span>`:" · partial enrollment"}
+     <br>current: ${cur.toFixed(0)}° &nbsp;·&nbsp; ${atStop?"<span class='warn'>stops engaged — ventral faces in contact</span>":"joints free"}`;
+  $("v-theta").textContent = fmt("theta", th) + (S.couple?" (coupled)":"");
+}
+
+// ---- wiring ----
+for(const k of ["enroll","n","theta","curl","ceph","pyg","relief"]){
+  const el=$(k);
+  const upd=()=>{ S[k]=parseFloat(el.value); if(k==="n") S[k]=Math.round(S[k]); $("v-"+k).textContent=fmt(k,S[k]); render(); };
+  el.addEventListener("input",upd); upd();
+}
+$("couple").addEventListener("change",e=>{ S.couple=e.target.checked; $("curlCtrl").style.opacity=S.couple?1:.45; $("theta").disabled=S.couple; render(); });
+
+let playing=false, t0=0, raf=null;
+function loop(ts){
+  if(!playing) return;
+  if(!t0) t0=ts;
+  const T=3200, u=((ts-t0)%T)/T;
+  S.enroll = 0.5-0.5*Math.cos(u*2*Math.PI);
+  $("enroll").value=S.enroll; $("v-enroll").textContent=fmt("enroll",S.enroll);
+  render(); raf=requestAnimationFrame(loop);
+}
+$("play").onclick=()=>{ playing=!playing; $("play").textContent=playing?"❚❚ Pause":"▶ Roll"; if(playing){t0=0; raf=requestAnimationFrame(loop);} else cancelAnimationFrame(raf); };
+$("reset").onclick=()=>{ playing=false; $("play").textContent="▶ Roll"; cancelAnimationFrame(raf);
+  Object.assign(S,{enroll:0,n:6,theta:18,couple:false,curl:180,ceph:0.30,pyg:0.18,relief:0.13});
+  for(const k of ["enroll","n","theta","curl","ceph","pyg","relief"]){ $(k).value=S[k]; $("v-"+k).textContent=fmt(k,S[k]); }
+  $("couple").checked=false; $("theta").disabled=false; $("curlCtrl").style.opacity=.45; render(); };
+render();
+</script>
+</body>
+</html>

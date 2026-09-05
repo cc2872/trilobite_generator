@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Trilobite Morphospace</title>
+<title>Trilobite</title>
 <style>
   :root{--bg:#ffffff;--ink:#000000;--mid:#666666;--line:#e5e5e5;--soft:#f5f5f5}
   *{box-sizing:border-box}
@@ -32,7 +32,7 @@
   .overlay{position:absolute;left:16px;top:14px;color:var(--ink);line-height:1.5;pointer-events:none;max-width:60%;font-variant-numeric:tabular-nums}
   .overlay .warn{color:var(--ink);text-decoration:underline}
   .status{position:absolute;right:16px;top:14px;color:var(--mid)} .status.busy{color:var(--ink)}
-  .rollbar{position:absolute;left:16px;right:16px;bottom:16px;display:grid;grid-template-columns:1fr auto auto auto;gap:14px;align-items:center}
+  .rollbar{position:absolute;left:16px;right:16px;bottom:16px;display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center}
   .rollbar input[type=range]{height:1px} .rollbar input[type=range]::-webkit-slider-thumb{width:16px;height:16px}
   .rollbar .val{min-width:130px;text-align:right;font-variant-numeric:tabular-nums}
   .log{position:absolute;right:16px;bottom:64px;width:380px;max-height:220px;overflow:auto;background:var(--bg);border:1px solid var(--line);padding:8px 10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;white-space:pre;display:none}
@@ -65,7 +65,6 @@
     <div class="rollbar">
       <input type="range" id="enroll" min="0" max="1" step="0.005" value="0">
       <div class="val" id="enrollval">0% · 0°</div>
-      <button id="dl" disabled>Download STL</button>
       <button id="play">Roll</button>
     </div>
   </div>
@@ -98,24 +97,6 @@ async function init(){
   for (const name of Object.keys(CFG.presets)) { const o = document.createElement('option'); o.textContent = name; sel.appendChild(o); }
   sel.onchange = () => { P = {...CFG.defaults, ...CFG.presets[sel.value]}; syncAll(); refreshDerived(); };
   const host = $('knobs'); let group = null, body = null;
-  // primary (macro) knobs: one slider drives several parameters
-  if (CFG.macros && CFG.macros.length){
-    const wrap = document.createElement('div'); wrap.className = 'group';
-    const t = document.createElement('div'); t.className = 'gtitle'; t.textContent = 'Primary'; t.onclick = () => wrap.classList.toggle('closed');
-    const mb = document.createElement('div'); mb.className = 'body'; wrap.append(t, mb); host.appendChild(wrap);
-    for (const [mk, label, def, maps] of CFG.macros){
-      const c = document.createElement('div'); c.className = 'ctrl';
-      c.innerHTML = `<div class="lab"><span>${label}</span><span id="v-m-${mk}">${def}</span></div>
-        <input type="range" id="m-${mk}" min="0" max="1" step="0.01" value="${def}">
-        <input type="number" id="mn-${mk}" min="0" max="1" step="0.01" value="${def}">`;
-      mb.appendChild(c);
-      const apply = v => { v = Math.max(0, Math.min(1, v)); $('v-m-'+mk).textContent = v.toFixed(2); $('m-'+mk).value = v; $('mn-'+mk).value = v;
-        for (const [pk, lo, hi] of maps){ let x = lo + (hi - lo) * v; if (INT.has(pk)) { x = Math.round(x); if (pk === 'nKnuckles' && x % 2 === 0) x += 1; } P[pk] = x; sync(pk); }
-        refreshDerived(); };
-      c.querySelector(`#m-${mk}`).addEventListener('input', e => apply(parseFloat(e.target.value)));
-      c.querySelector(`#mn-${mk}`).addEventListener('change', e => apply(parseFloat(e.target.value)));
-    }
-  }
   for (const [key,label,lo,hi,step,g] of CFG.knobs){
     if (g !== group){
       group = g;
@@ -178,45 +159,22 @@ function initScene(){
 }
 const mat = new THREE.MeshStandardMaterial({color: 0xbfbfbf, roughness: 0.8, metalness: 0.0});
 const loader = new STLLoader();
-async function loadSTL(url){
-  let lastErr;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const r = await fetch(url + '?t=' + Date.now(), {cache: 'no-store'});
-      if (r.status === 404) throw new Error('server restarted mid-build (out of memory?) — press Build again');
-      if (!r.ok) throw new Error('HTTP ' + r.status + ' fetching ' + url);
-      return loader.parse(await r.arrayBuffer());
-    } catch (e) { lastErr = e; await new Promise(t => setTimeout(t, 800 * attempt)); }
-  }
-  throw lastErr;
-}
+const loadSTL = url => new Promise((res, rej) => loader.load(url + '?t=' + Date.now(), res, undefined, rej));
 
 async function showBuild(b){
   if (!root) { throw new Error('3D scene not initialised (config never loaded — reload the page)'); }
   root.clear(); groups = [];
-  const geos = []; for (let i = 0; i < b.urls.length; i++) { setStatus(`loading part ${i + 1} of ${b.urls.length}…`, true); geos.push(await loadSTL(b.urls[i])); }
+  const geos = await Promise.all(b.urls.map(loadSTL));
   if (b.names.length === 1){ root.add(new THREE.Mesh(geos[0], mat)); frame(); return; }
+  // nested chain: head > seg0 > ... > tail ; each group's origin is its front hinge (head: rear hinge)
   let parent = root;
-  if (b.axes && b.axes.length) {
-    // sculpted family: parts are in world coordinates, joints at (y_i, zh_i); nest groups at the joints
-    let py = 0, pz = 0;
-    b.names.forEach((n, i) => {
-      const g = new THREE.Group();
-      const ax = b.axes[Math.max(0, i - 1)];
-      g.position.set(0, ax.y - py, ax.zh - pz); py = ax.y; pz = ax.zh;
-      const mesh = new THREE.Mesh(geos[i], mat); mesh.position.set(0, -ax.y, -ax.zh); g.add(mesh);
-      parent.add(g); parent = g; groups.push(g);
-    });
-    root.position.set(0, 0, 0);
-  } else {
-    b.names.forEach((n, i) => {
-      const g = new THREE.Group();
-      g.position.set(0, i === 0 ? 0 : b.offsets[i - 1], 0);
-      const mesh = new THREE.Mesh(geos[i], mat); mesh.position.set(0, 0, -b.hinge_z); g.add(mesh);
-      parent.add(g); parent = g; groups.push(g);
-    });
-    root.position.set(0, b.hinge_z, 0);          // lift so the shells sit on the grid (world Y is up)
-  }
+  b.names.forEach((n, i) => {
+    const g = new THREE.Group();
+    g.position.set(0, i === 0 ? 0 : b.offsets[i - 1], 0);
+    const mesh = new THREE.Mesh(geos[i], mat); mesh.position.set(0, 0, -b.hinge_z); g.add(mesh);
+    parent.add(g); parent = g; groups.push(g);
+  });
+  root.position.set(0, b.hinge_z, 0);          // lift so the shells sit on the grid (world Y is up)
   setEnroll(enroll); frame();
 }
 function setEnroll(e){
@@ -238,9 +196,6 @@ async function build(mode){
     const r = await (await fetch('/api/build', {method:'POST', body: JSON.stringify({P, mode})})).json();
     if (r.error) throw new Error(r.error);
     built = r; await showBuild(r); renderOverlay(r.derived, `built in ${r.seconds}s`);
-    if (r.label) { $('overlay').innerHTML = `<b style="font-size:15px">${r.label.name}</b><br>${r.label.sentence}<br><br>` + $('overlay').innerHTML; }
-    $('dl').disabled = false; $('dl').onclick = () => { window.location = '/api/download/' + r.key + '.zip'; };
-    if (r.measure) { const m = r.measure; $('overlay').innerHTML += `<br><b>e_max ${m.e_max}</b> · free curl ${m.free_curl_deg}° of ${m.total_curl_deg}° · gap ${m.closure_gap_mm} mm · ${m.enroll_class}` + (m.stopped_by.length ? ` · stopped by parts ${m.stopped_by.map(x=>x[0]+'–'+x[1]).join(', ')}` : ''); }
     $('links').innerHTML = r.urls.map((u, i) => `<a href="${u}" download>${r.names[i]}.stl</a>`).join('');
     setStatus(`built in ${r.seconds}s`, false);
   } catch (e) { setStatus('error: ' + e.message, false); }

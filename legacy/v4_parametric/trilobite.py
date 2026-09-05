@@ -23,7 +23,20 @@ P = schema.defaults()
 # =====================================================================
 #  derived scalars
 # =====================================================================
-from fields import pitch, ring_top, hinge_z, hinge_width   # shared with the web readout (no CAD import needed there)
+def pitch(P):
+    return P["length"] * (1 - P["cephFrac"] - P["pygFrac"]) / P["segCount"]
+
+def ring_top(P):
+    return P["relief"] * (1 + P["axisRise"])
+
+def hinge_z(P):
+    """Hinge axis height. The clearance groove (radius barrelR + clearance) must sit clear below the
+    shell's inner surface at the ring furrow, and the knuckle top must clear the flap above it."""
+    return ring_top(P) - P["barrelR"] - P["wall"] - P["clearance"] - 0.4 - 0.7 * furrow_amp(P)
+
+def hinge_width(P):
+    """Constant for every joint, sized to the narrowest axial ring (last segment)."""
+    return 2 * P["axisFrac"] * seg_halfwidth(P, P["segCount"] - 1) - 2
 
 def joint_offsets(P):
     d = pitch(P)

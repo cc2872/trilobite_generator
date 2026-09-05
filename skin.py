@@ -37,14 +37,14 @@ def box_from_grids(A, B):
     if mesh.volume < 0: mesh.invert()
     return mesh
 
-def bevel_cutter(yfun, zh, phi_deg, rear, xr=62, zlo=-3):
+def bevel_cutter(yfun, zh, phi_deg, rear, xr=90, zlo=-3):
     """Region to remove below the axis: behind (rear=True) or in front of the tilted face."""
     xs = np.linspace(-xr, xr, 40); zs = np.linspace(zlo, zh, 16); t = math.tan(math.radians(phi_deg))
     A = np.array([[(x, yfun(x) - (zh - z) * t if rear else yfun(x) + (zh - z) * t, z) for z in zs] for x in xs])
     B = A.copy(); B[:, :, 1] = A[:, :, 1] + (60 if rear else -60)
     return box_from_grids(A, B)
 
-def strip_box(yfun, L_of_x, zbot_fn, ztop, xr=62, ny=8):
+def strip_box(yfun, L_of_x, zbot_fn, ztop, xr=90, ny=8):
     """Region above zbot(x,y) within the plan strip y ∈ [yfun(x), yfun(x)+L(x)], up to ztop."""
     xs = np.linspace(-xr, xr, 60)
     A = np.array([[(x, yfun(x) + L_of_x(x) * k / (ny - 1), zbot_fn(x, yfun(x) + L_of_x(x) * k / (ny - 1))) for k in range(ny)] for x in xs])
@@ -62,12 +62,31 @@ def top_lookup(xs, ys, Z):
         return float(Z[j, i])
     return f
 
-def build_skinned(P=None, legs=False, verbose=True):
-    P = dict(dict(wall=2.0, clearance=0.3, boreDia=1.95, barrelR=2.6, nKnuckles=3, maxAngle=18, overlap=3.5, axisFrac=0.24), **(P or {}))
-    parts, _ = load(); body = parts["Trilobite_spine"]
-    xs, ys, Z, mask = S.heightfield(body, 0.8); ztop = top_lookup(xs, ys, Z)
-    mins, crest = S.midline_furrows(xs, ys, Z, mask, 38, 124, min_gap=2.5)
-    traced = [S.trace_boundary(xs, ys, Z, mask, m, x_max=55) for m in mins]
+SCULPT_P0 = None   # the sculpt's own parameter vector (its landmarks, outline, count), filled on first build
+
+def sculpt_reference():
+    """P0: the knob values that reproduce the purchased sculpt unchanged."""
+    global SCULPT_P0
+    if SCULPT_P0 is None:
+        import wrap
+        parts, _ = load(); body = parts["Trilobite_spine"]
+        xs, ys, Z, mask = S.heightfield(body, 0.8)
+        mins, _ = S.midline_furrows(xs, ys, Z, mask, 38, 124, min_gap=2.5)
+        L = body.extents[1]
+        SCULPT_P0 = wrap.P0_from(body, mins[0] / L, mins[-1] / L, len(mins) - 1)
+    return dict(SCULPT_P0)
+
+def build_skinned(P=None, legs=False, verbose=True, body_override=None):
+    import wrap
+    P0 = sculpt_reference()
+    P = {**dict(wall=2.0, clearance=0.3, boreDia=1.95, barrelR=2.6, nKnuckles=3, maxAngle=18, overlap=3.5, axisFrac=0.24), **P0, **(P or {})}
+    parts, _ = load(); body0 = parts["Trilobite_spine"] if body_override is None else body_override; pr = wrap.profiles(parts["Trilobite_spine"])
+    body = wrap.wrap_mesh(body0, P, P0, pr)
+    if legs: parts["Trilobite_legs"] = wrap.wrap_mesh(parts["Trilobite_legs"], P, P0, pr)
+    L = float(body.extents[1]); xw = 0.56 * float(body.extents[0])
+    xs, ys, Z, mask = S.heightfield(body, 0.8 * L / 130); ztop = top_lookup(xs, ys, Z)
+    mins, crest = S.midline_furrows(xs, ys, Z, mask, 0.29 * L, 0.955 * L, min_gap=2.5 * L / 130)
+    traced = [S.trace_boundary(xs, ys, Z, mask, m, x_max=xw) for m in mins]
     # shared sweep beyond the margin so cuts never cross
     slopes = []
     for f, pts in traced:
@@ -79,10 +98,12 @@ def build_skinned(P=None, legs=False, verbose=True):
         xa = np.sort(np.unique(pts[:, 0])); ya = np.array([pts[pts[:, 0] == x, 1].mean() for x in xa])
         ya = np.convolve(np.pad(ya, 2, mode="edge"), np.array([1, 2, 3, 2, 1]) / 9, mode="valid"); xe, ye = xa[-1], ya[-1]
         funcs.append(lambda x, xa=xa, ya=ya, xe=xe, ye=ye: np.where(np.abs(np.asarray(x, float)) <= xe, np.interp(np.abs(np.asarray(x, float)), xa, ya), ye + slope * (np.abs(np.asarray(x, float)) - xe)))
-    pieces = S.slice_body(body, funcs, x_max=62)
+    pieces = S.slice_body(body, funcs, x_max=xw + 8)
     for i in range(len(pieces) - 1):      # the sculpt's spines overlap each other: give shared volume to the front piece
         d = trimesh.boolean.difference([pieces[i + 1], pieces[i]], engine="manifold")
         if d is not None and len(d.faces) and d.is_volume: pieces[i + 1] = d
+    if int(P.get("segCount", len(pieces) - 2)) != len(pieces) - 2:
+        pieces, funcs = wrap.resample_segments(pieces, funcs, int(P["segCount"]))
     n = len(pieces); t, c, rB, phi = P["wall"], P["clearance"], P["barrelR"], P["maxAngle"] / 2
     axes = []
     originals = [p.copy() for p in pieces]
@@ -117,6 +138,11 @@ def build_skinned(P=None, legs=False, verbose=True):
         if flange is not None and len(flange.faces) and flange.volume > 1: a = trimesh.boolean.union([a, flange], engine="manifold")
         pieces[i], pieces[i + 1] = a, b
         if verbose: print(f"joint {i}: y={y0:.1f} zh={zh:.1f} Wh={Wh:.1f} | {len(a.faces)}/{len(b.faces)} tris, volumes {a.is_volume}/{b.is_volume}", flush=True)
+    # rest-pose guarantee: any sliver two neighbours still share (sculpt self-overlaps, sampling mismatch at
+    # the flange edge) goes to the front part, so the instrument starts from a clean zero
+    for i in range(n - 1):
+        d = trimesh.boolean.difference([pieces[i + 1], pieces[i]], engine="manifold")
+        if d is not None and len(d.faces) and d.is_volume and d.volume > 0.5 * pieces[i + 1].volume: pieces[i + 1] = d
     if legs:
         comps = parts["Trilobite_legs"].split(only_watertight=False); bounds = [0] + [ax["y"] for ax in axes] + [200]
         for comp in comps:
@@ -140,7 +166,7 @@ def posed(pieces, axes, e, maxAngle):
     for p, M in zip(pieces, mats): q = p.copy(); q.apply_transform(M); out.append(q)
     return out
 
-def collisions(pieces, axes, e, maxAngle, tol=0.5):
+def collisions(pieces, axes, e, maxAngle, tol=5.0):   # mm^3; below this two parts merely touch (sub-millimetre slivers at full mesh resolution)
     ps = posed(pieces, axes, e, maxAngle); hits = []
     for i in range(len(ps)):
         for j in range(i + 1, len(ps)):

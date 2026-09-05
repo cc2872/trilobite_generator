@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trilobite Morphospace Generator</title>
+<style>
+  :root{
+    --ground:#1b2026;       /* graphite ground */
+    --ground-2:#232a32;
+    --panel:#20262e;
+    --line:#333d47;
+    --ink:#e8e2d4;          /* bone text */
+    --ink-dim:#9aa3ac;
+    --accent:#4fc4d6;       /* mineral cyan, active controls */
+    --accent-dim:#2c6d76;
+    --specimen-a:#e9d6ac;   /* warm carapace */
+    --specimen-b:#c69a63;
+    --furrow:#6d4e2c;
+    --axis-a:#dcc188;
+    --axis-b:#a9793f;
+    --eye:#2b3138;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    background:
+      radial-gradient(120% 90% at 70% 0%, #262d36 0%, var(--ground) 55%, #141920 100%);
+    color:var(--ink);
+    font-family:"Inter","Segoe UI",system-ui,sans-serif;
+    display:flex; min-height:100vh;
+  }
+  .stage{
+    flex:1 1 auto; position:relative;
+    display:flex; align-items:center; justify-content:center;
+    padding:24px; min-width:0;
+  }
+  .stage::after{ /* faint specimen-plate frame */
+    content:""; position:absolute; inset:16px; border:1px solid var(--line);
+    pointer-events:none; border-radius:2px;
+  }
+  #plate{ width:min(560px,100%); height:auto; display:block; }
+  .readout{
+    position:absolute; left:24px; bottom:24px; right:auto;
+    font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+    font-size:12px; letter-spacing:.02em; color:var(--ink-dim);
+    line-height:1.5; max-width:60%;
+  }
+  .readout b{color:var(--accent); font-weight:500;}
+
+  .panel{
+    flex:0 0 340px; background:var(--panel);
+    border-left:1px solid var(--line);
+    display:flex; flex-direction:column; height:100vh;
+  }
+  .panel header{ padding:22px 22px 14px; border-bottom:1px solid var(--line); }
+  .panel h1{ font-size:16px; font-weight:600; margin:0; letter-spacing:.01em; }
+  .panel .sub{ font-size:12px; color:var(--ink-dim); margin-top:4px; }
+  .controls{ overflow-y:auto; padding:8px 22px 22px; flex:1 1 auto; }
+  .group{ margin-top:16px; }
+  .group > .gtitle{
+    font-size:11px; color:var(--accent); font-weight:600;
+    padding:6px 0; border-bottom:1px solid var(--line); margin-bottom:8px;
+  }
+  .ctrl{ margin:12px 0; }
+  .ctrl .lab{ display:flex; justify-content:space-between; align-items:baseline;
+    font-size:12.5px; margin-bottom:6px; }
+  .ctrl .lab .anat{ color:var(--ink-dim); font-size:11px; }
+  .ctrl .lab .val{ font-family:"IBM Plex Mono",monospace; color:var(--ink); font-size:11px; }
+  input[type=range]{
+    -webkit-appearance:none; width:100%; height:3px; border-radius:2px;
+    background:var(--line); outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:15px; height:15px; border-radius:50%;
+    background:var(--accent); cursor:pointer; border:2px solid var(--ground);
+    box-shadow:0 0 0 1px var(--accent-dim);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:13px; height:13px; border-radius:50%; background:var(--accent);
+    cursor:pointer; border:2px solid var(--ground);
+  }
+  .seg{ display:flex; gap:6px; margin-top:6px; }
+  .seg button{
+    flex:1; background:var(--ground-2); color:var(--ink-dim);
+    border:1px solid var(--line); border-radius:3px; padding:6px 4px;
+    font-size:11px; cursor:pointer; font-family:inherit;
+  }
+  .seg button.on{ background:var(--accent-dim); color:var(--ink); border-color:var(--accent); }
+  .actions{ padding:16px 22px; border-top:1px solid var(--line); display:flex; gap:8px; flex-wrap:wrap; }
+  .actions button{
+    flex:1 1 auto; background:var(--ground-2); color:var(--ink);
+    border:1px solid var(--line); border-radius:3px; padding:9px 10px;
+    font-size:12px; cursor:pointer; font-family:inherit; min-width:90px;
+  }
+  .actions button.primary{ background:var(--accent); color:#08222a; border-color:var(--accent); font-weight:600; }
+  .actions button:hover{ border-color:var(--accent); }
+  @media (max-width:820px){
+    body{ flex-direction:column; }
+    .panel{ flex-basis:auto; height:auto; border-left:none; border-top:1px solid var(--line); }
+    .stage{ min-height:52vh; }
+    .readout{ position:static; max-width:100%; margin:8px 24px 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <svg id="plate" viewBox="0 0 360 560" xmlns="http://www.w3.org/2000/svg" aria-label="Generated trilobite"></svg>
+    <div class="readout" id="readout"></div>
+  </div>
+
+  <aside class="panel">
+    <header>
+      <h1>Trilobite Morphospace Generator</h1>
+      <div class="sub">Every slider is one axis of the body plan. Pick a point, get a specimen.</div>
+    </header>
+    <div class="controls" id="controls"></div>
+    <div class="actions">
+      <button class="primary" id="rand">Generate random</button>
+      <button id="reset">Reset</button>
+      <button id="dl-svg">Download SVG</button>
+      <button id="dl-png">Download PNG</button>
+    </div>
+  </aside>
+
+<script>
+"use strict";
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+/* ---- parameter definitions: the coordinate system over trilobite morphospace ---- */
+const DEFS=[
+  {g:"Overall body"},
+  {k:"lean",   name:"Leanness",         anat:"length : width",        min:0,max:1,def:0.35,step:0.01},
+  {k:"axis",   name:"Axis width",       anat:"axial vs pleural lobes", min:0.2,max:0.55,def:0.34,step:0.01},
+  {k:"taper",  name:"Taper toward tail",anat:"pleural narrowing",     min:0,max:1,def:0.35,step:0.01},
+
+  {g:"Head (cephalon)"},
+  {k:"cephFrac",name:"Head size",       anat:"cephalon length",       min:0.20,max:0.42,def:0.30,step:0.005},
+  {k:"glab",   name:"Forehead bump",    anat:"glabella inflation",    min:0,max:1,def:0.6,step:0.01},
+  {k:"genal",  name:"Corner spines",    anat:"genal spines",          min:0,max:1,def:0.45,step:0.01},
+
+  {g:"Eyes"},
+  {k:"eyeSize",name:"Eye size",         anat:"visual surface",        min:0,max:1,def:0.5,step:0.01},
+  {k:"eyePos", name:"Eye position",     anat:"front ↔ back on genae", min:0,max:1,def:0.45,step:0.01},
+
+  {g:"Body (thorax)"},
+  {k:"nSeg",   name:"Segments",         anat:"thoracic tergites",     min:2,max:20,def:11,step:1},
+  {k:"pleural",name:"Rib spines",       anat:"pleural spine tips",    min:0,max:1,def:0.3,step:0.01},
+
+  {g:"Tail shield (pygidium)"},
+  {k:"pygFrac",name:"Tail size",        anat:"micro → iso → macropygous", min:0.05,max:0.42,def:0.16,step:0.005},
+  {k:"pygShape",name:"Tail shape",      anat:"rounded ↔ triangular",  min:0,max:1,def:0.25,step:0.01},
+];
+const state={eyeType:"holochroal", palette:"specimen"};
+DEFS.forEach(d=>{ if(d.k) state[d.k]=d.def; });
+
+/* ---- geometry ---- */
+const YF=34, LTOT=486, CX=180;   // anterior tip, total body length, midline
+let P={};
+function recompute(){
+  const cephFrac=state.cephFrac;
+  let pygFrac=state.pygFrac;
+  // keep a real thorax between them
+  if(cephFrac+pygFrac>0.82) pygFrac=0.82-cephFrac;
+  P.Wmax = lerp(150,58,state.lean);
+  P.cephLen = cephFrac*LTOT;
+  P.pygLen  = pygFrac*LTOT;
+  P.thoraxLen = LTOT - P.cephLen - P.pygLen;
+  P.yCephRear = YF + P.cephLen;
+  P.yThoraxRear = P.yCephRear + P.thoraxLen;
+  P.yTail = YF + LTOT;
+  P.axisFrac=state.axis; P.taper=state.taper; P.glab=state.glab; P.pygShape=state.pygShape;
+}
+function hwAt(y){
+  if(y<=P.yCephRear){
+    let u=clamp((y-YF)/P.cephLen,0,1);
+    return P.Wmax*Math.sqrt(Math.max(0,1-(1-u)*(1-u)));
+  } else if(y<=P.yThoraxRear){
+    let v=(y-P.yCephRear)/P.thoraxLen;
+    return P.Wmax*(1-P.taper*0.42*v);
+  } else {
+    let p=clamp((y-P.yThoraxRear)/P.pygLen,0,1);
+    let We=P.Wmax*(1-P.taper*0.42);
+    let round=Math.sqrt(Math.max(0,1-p*p)), tri=(1-p);
+    return We*((1-P.pygShape)*round+P.pygShape*tri);
+  }
+}
+function axisAt(y){
+  let base=P.axisFrac*P.Wmax;
+  if(y<=P.yCephRear){
+    let gu=clamp((y-YF)/P.cephLen,0,1);
+    let g=0.5+0.95*P.glab*(1-gu*0.8);        // glabella club, wider toward front
+    return Math.min(base*g, hwAt(y)*0.88);
+  } else if(y<=P.yThoraxRear){
+    let v=(y-P.yCephRear)/P.thoraxLen;
+    return base*(1-P.taper*0.42*v);
+  } else {
+    let p=clamp((y-P.yThoraxRear)/P.pygLen,0,1);
+    let We=base*(1-P.taper*0.42);
+    return We*Math.max(0,1-Math.pow(p,0.8));
+  }
+}
+
+/* sample a symmetric filled path from a half-width function */
+function bodyPath(fn,pad){
+  pad=pad||0; const N=150; const R=[],L=[];
+  for(let i=0;i<=N;i++){
+    const y=YF+ (P.yTail-YF)*i/N;
+    const w=fn(y)+pad;
+    R.push([CX+w,y]); L.push([CX-w,y]);
+  }
+  let d="M "+R[0][0].toFixed(2)+" "+R[0][1].toFixed(2);
+  for(let i=1;i<R.length;i++) d+=" L "+R[i][0].toFixed(2)+" "+R[i][1].toFixed(2);
+  for(let i=L.length-1;i>=0;i--) d+=" L "+L[i][0].toFixed(2)+" "+L[i][1].toFixed(2);
+  return d+" Z";
+}
+const rnd=(n)=>Number(n).toFixed(2);
+
+function render(){
+  recompute();
+  const pal = state.palette;
+  const specA = pal==="blueprint" ? "#22506b" : "var(--specimen-a)";
+  const specB = pal==="blueprint" ? "#123449" : "var(--specimen-b)";
+  const axA   = pal==="blueprint" ? "#356f8f" : "var(--axis-a)";
+  const axB   = pal==="blueprint" ? "#0d2839" : "var(--axis-b)";
+  const furr  = pal==="blueprint" ? "#0a1c28" : "var(--furrow)";
+
+  let s=`<defs>
+    <linearGradient id="carapace" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="${specA}"/><stop offset="1" stop-color="${specB}"/></linearGradient>
+    <linearGradient id="axisgrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="${axA}"/><stop offset="1" stop-color="${axB}"/></linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.45"/></filter>
+  </defs>`;
+
+  let body=`<g filter="url(#soft)">`;
+
+  /* spines drawn under the body so they emerge from the margin */
+  // genal spines
+  if(state.genal>0.02){
+    const cy=P.yCephRear, cw=hwAt(cy);
+    const len=lerp(6,150,state.genal), out=lerp(4,26,state.genal);
+    const tri=(sgn)=>{
+      const bx=CX+sgn*cw;
+      const tipx=CX+sgn*(cw+out), tipy=cy+len;
+      const bx2=CX+sgn*(cw-8);
+      return `<path d="M ${rnd(bx)} ${rnd(cy-6)} Q ${rnd(bx+sgn*out)} ${rnd(cy+len*0.4)} ${rnd(tipx)} ${rnd(tipy)} L ${rnd(bx2)} ${rnd(cy+2)} Z" fill="url(#carapace)" stroke="${furr}" stroke-width="1"/>`;
+    };
+    body+=tri(1)+tri(-1);
+  }
+  // pleural spines per segment
+  if(state.pleural>0.02){
+    const segH=P.thoraxLen/state.nSeg;
+    const len=lerp(4,26,state.pleural);
+    for(let i=0;i<state.nSeg;i++){
+      const yb=P.yCephRear+(i+1)*segH, w=hwAt(yb);
+      const tip=(sgn)=>`<path d="M ${rnd(CX+sgn*w)} ${rnd(yb-segH*0.7)} L ${rnd(CX+sgn*(w+len))} ${rnd(yb+2)} L ${rnd(CX+sgn*w)} ${rnd(yb+1)} Z" fill="url(#carapace)" stroke="${furr}" stroke-width="0.6"/>`;
+      body+=tip(1)+tip(-1);
+    }
+  }
+
+  /* main carapace */
+  body+=`<path d="${bodyPath(hwAt,0)}" fill="url(#carapace)" stroke="${furr}" stroke-width="1.6" stroke-linejoin="round"/>`;
+  /* axial lobe */
+  body+=`<path d="${bodyPath(axisAt,0)}" fill="url(#axisgrad)" stroke="${furr}" stroke-width="1.1" stroke-linejoin="round" opacity="0.92"/>`;
+
+  /* furrows */
+  let f=`<g fill="none" stroke="${furr}" stroke-width="1" stroke-linecap="round" opacity="0.75">`;
+  // neck / occipital furrow
+  f+=`<path d="M ${rnd(CX-axisAt(P.yCephRear))} ${rnd(P.yCephRear)} Q ${CX} ${rnd(P.yCephRear-4)} ${rnd(CX+axisAt(P.yCephRear))} ${rnd(P.yCephRear)}"/>`;
+  // glabellar furrows (a couple of lateral grooves)
+  for(let g=1;g<=2;g++){
+    const gy=YF+P.cephLen*(0.35+0.22*g), a=axisAt(gy);
+    f+=`<path d="M ${rnd(CX-a)} ${rnd(gy)} L ${rnd(CX-a*0.45)} ${rnd(gy+3)}"/>`;
+    f+=`<path d="M ${rnd(CX+a)} ${rnd(gy)} L ${rnd(CX+a*0.45)} ${rnd(gy+3)}"/>`;
+  }
+  // thoracic segment furrows: axial rings + swept pleural grooves
+  const segH=P.thoraxLen/state.nSeg;
+  for(let i=1;i<state.nSeg;i++){
+    const y=P.yCephRear+i*segH;
+    const a=axisAt(y), w=hwAt(y), sw=segH*0.28;
+    f+=`<path d="M ${rnd(CX-a)} ${rnd(y)} Q ${CX} ${rnd(y+2.5)} ${rnd(CX+a)} ${rnd(y)}"/>`; // ring
+    f+=`<path d="M ${rnd(CX+a)} ${rnd(y)} Q ${rnd(CX+(a+w)/2)} ${rnd(y+sw*0.5)} ${rnd(CX+w)} ${rnd(y+sw)}"/>`;
+    f+=`<path d="M ${rnd(CX-a)} ${rnd(y)} Q ${rnd(CX-(a+w)/2)} ${rnd(y+sw*0.5)} ${rnd(CX-w)} ${rnd(y+sw)}"/>`;
+  }
+  // pygidial axial rings
+  const nRings=Math.max(2,Math.round(P.pygLen/9));
+  for(let i=1;i<nRings;i++){
+    const y=P.yThoraxRear+P.pygLen*i/nRings, a=axisAt(y);
+    if(a>2) f+=`<path d="M ${rnd(CX-a)} ${rnd(y)} Q ${CX} ${rnd(y+2)} ${rnd(CX+a)} ${rnd(y)}"/>`;
+  }
+  f+=`</g>`;
+  body+=f;
+
+  /* eyes on the genae, flanking the glabella */
+  if(state.eyeSize>0.03){
+    const ey=YF+P.cephLen*(0.28+0.5*state.eyePos);
+    const a=axisAt(ey), w=hwAt(ey);
+    const rx=lerp(3,10,state.eyeSize), ry=lerp(6,18,state.eyeSize);
+    const ex=CX+ (a + Math.max(6,(w-a)*0.42));
+    const eye=(sgn)=>{
+      let g=`<g><ellipse cx="${rnd(CX+sgn*(ex-CX))}" cy="${rnd(ey)}" rx="${rnd(rx)}" ry="${rnd(ry)}" fill="var(--eye)" stroke="${furr}" stroke-width="0.8"/>`;
+      if(state.eyeType==="schizochroal"){
+        const rows=Math.max(2,Math.round(ry/4));
+        for(let r=0;r<rows;r++){
+          const ly=ey-ry+ (2*ry)*(r+0.5)/rows;
+          g+=`<circle cx="${rnd(CX+sgn*(ex-CX))}" cy="${rnd(ly)}" r="${rnd(Math.min(rx*0.6,1.8))}" fill="none" stroke="#8fb2bd" stroke-width="0.5" opacity="0.8"/>`;
+        }
+      } else {
+        g+=`<ellipse cx="${rnd(CX+sgn*(ex-CX))}" cy="${rnd(ey-ry*0.3)}" rx="${rnd(rx*0.5)}" ry="${rnd(ry*0.5)}" fill="#cfe6ec" opacity="0.35"/>`;
+      }
+      return g+`</g>`;
+    };
+    body+=eye(1)+eye(-1);
+  }
+  body+=`</g>`;
+
+  document.getElementById("plate").innerHTML = s+body;
+  writeReadout();
+}
+
+function writeReadout(){
+  // auto descriptor
+  const ratio=state.pygFrac/state.cephFrac;
+  let pyg = ratio<0.6?"micropygous" : ratio<1.15?"isopygous" : "macropygous";
+  let build = state.lean>0.6?"slender" : state.lean<0.3?"broad" : "medium-bodied";
+  let spiny = (state.genal+state.pleural)/2 > 0.5 ? "spiny" : (state.genal+state.pleural)/2<0.15?"smooth-margined":"lightly spined";
+  let vis = state.eyeSize<0.08 ? "blind (effaced eyes)" : state.eyeType+"-eyed";
+  document.getElementById("readout").innerHTML =
+    `<b>${pyg}</b> · ${state.nSeg} thoracic segments · ${build} · ${spiny} · ${vis}`;
+}
+
+/* ---- UI ---- */
+function buildControls(){
+  const host=document.getElementById("controls");
+  let html="";
+  DEFS.forEach(d=>{
+    if(d.g){ html+=`<div class="group"><div class="gtitle">${d.g}</div></div>`; return; }
+    html+=`<div class="ctrl">
+      <div class="lab"><span>${d.name} <span class="anat">${d.anat}</span></span>
+        <span class="val" id="v-${d.k}"></span></div>
+      <input type="range" id="c-${d.k}" min="${d.min}" max="${d.max}" step="${d.step}" value="${state[d.k]}"></div>`;
+  });
+  // eye type toggle
+  html+=`<div class="group"><div class="gtitle">Eye type (Phacopid lenses)</div>
+    <div class="seg" id="eyeToggle">
+      <button data-v="holochroal" class="on">Holochroal · many tiny</button>
+      <button data-v="schizochroal">Schizochroal · few large</button></div></div>`;
+  // palette toggle
+  html+=`<div class="group"><div class="gtitle">Rendering</div>
+    <div class="seg" id="palToggle">
+      <button data-v="specimen" class="on">Specimen</button>
+      <button data-v="blueprint">Blueprint</button></div></div>`;
+  host.innerHTML=html;
+
+  DEFS.forEach(d=>{
+    if(!d.k) return;
+    const inp=document.getElementById("c-"+d.k);
+    const upd=()=>{
+      let v=parseFloat(inp.value); if(d.step>=1) v=Math.round(v);
+      state[d.k]=v;
+      document.getElementById("v-"+d.k).textContent = d.step>=1? v : v.toFixed(2);
+      render();
+    };
+    inp.addEventListener("input",upd); upd();
+  });
+  document.querySelectorAll("#eyeToggle button").forEach(b=>b.onclick=()=>{
+    state.eyeType=b.dataset.v;
+    document.querySelectorAll("#eyeToggle button").forEach(x=>x.classList.toggle("on",x===b));
+    render();
+  });
+  document.querySelectorAll("#palToggle button").forEach(b=>b.onclick=()=>{
+    state.palette=b.dataset.v;
+    document.querySelectorAll("#palToggle button").forEach(x=>x.classList.toggle("on",x===b));
+    render();
+  });
+}
+function syncSliders(){
+  DEFS.forEach(d=>{ if(!d.k) return;
+    const inp=document.getElementById("c-"+d.k); inp.value=state[d.k];
+    document.getElementById("v-"+d.k).textContent = d.step>=1? state[d.k] : state[d.k].toFixed(2);
+  });
+}
+document.getElementById("reset").onclick=()=>{ DEFS.forEach(d=>{if(d.k)state[d.k]=d.def;}); syncSliders(); render(); };
+document.getElementById("rand").onclick=()=>{
+  DEFS.forEach(d=>{ if(!d.k) return;
+    let v=lerp(d.min,d.max,Math.random()); if(d.step>=1) v=Math.round(v); state[d.k]=v;
+  });
+  state.eyeType=Math.random()<0.7?"holochroal":"schizochroal";
+  document.querySelectorAll("#eyeToggle button").forEach(x=>x.classList.toggle("on",x.dataset.v===state.eyeType));
+  syncSliders(); render();
+};
+
+/* ---- export ---- */
+function svgBlob(){
+  const svg=document.getElementById("plate").cloneNode(true);
+  svg.setAttribute("xmlns","http://www.w3.org/2000/svg");
+  // inline the palette colors used in the current render (resolve CSS vars)
+  const cs=getComputedStyle(document.documentElement);
+  let str=new XMLSerializer().serializeToString(svg);
+  ["--specimen-a","--specimen-b","--axis-a","--axis-b","--furrow","--eye"].forEach(v=>{
+    str=str.split(`var(${v})`).join(cs.getPropertyValue(v).trim());
+  });
+  str=`<?xml version="1.0" encoding="UTF-8"?>\n`+str;
+  return new Blob([str],{type:"image/svg+xml"});
+}
+function download(blob,name){
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+document.getElementById("dl-svg").onclick=()=>download(svgBlob(),"trilobite.svg");
+document.getElementById("dl-png").onclick=()=>{
+  const url=URL.createObjectURL(svgBlob());
+  const img=new Image();
+  img.onload=()=>{
+    const c=document.createElement("canvas"); c.width=720; c.height=1120;
+    const ctx=c.getContext("2d"); ctx.fillStyle="#1b2026"; ctx.fillRect(0,0,c.width,c.height);
+    ctx.drawImage(img,0,0,c.width,c.height);
+    c.toBlob(b=>{download(b,"trilobite.png"); URL.revokeObjectURL(url);});
+  };
+  img.src=url;
+};
+
+buildControls();
+render();
+</script>
+</body>
+</html>

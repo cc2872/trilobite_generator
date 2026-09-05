@@ -4,4 +4,5 @@ manifold3d
 python-fcl
 numpy
 shapely
+scipy
 rtree

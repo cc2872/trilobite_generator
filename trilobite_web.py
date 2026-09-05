@@ -19,15 +19,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "web_out"); os.makedirs(OUT, exist_ok=True)
 
 PRESETS = {
-    "Reference": {},
-    "Sculpted paradoxidid": dict(family=1),
-    "Sculpted, with legs": dict(family=1, legs=1),
-    "Smooth (effaced)": dict(effacement=0.85, spineBase=0.0, genalSpine=0.0, pygSpine=0.0, tubercles=0.0),
-    "Spiny": dict(spineBase=0.9, spineSweep=25, axialSpine=0.8, pygMarginal=6, genalSpine=0.8, tubercles=0.5),
-    "Phacopid": dict(eyeSize=0.2, eyePos=0.55, glabInflate=1.6, glabRise=0.3, pleuralSpine=0.0, spineBase=0.0,
-                     pygSpine=0.0, segCount=11, maxAngle=30, taper=0.96, tubercles=0.7),
-    "Olenellid": dict(segCount=14, taper=0.95, genalSpine=1.2, macroIndex=2, macroAmp=1.2, termSpine=1.8, pygFrac=0.06, maxAngle=8),
-    "Many segments, tight roll": dict(segCount=12, maxAngle=12, taper=0.97, overlap=0.4),
+    "Olenoides (base sculpt)": dict(length=130, width=98, relief=42.6, cephFrac=0.348, pygFrac=0.191, segCount=9, widthMaxPos=0.465, widthHeadFront=0.607, widthThoraxFront=0.971, widthThoraxRear=0.651, widthTail=0.276, spineBase=0.3, genalSpine=0.35),
+    "Phacopid-like": dict(length=130, width=98, relief=42.6, cephFrac=0.32, pygFrac=0.20, segCount=11, widthMaxPos=0.465, widthHeadFront=0.607, widthThoraxFront=0.971, widthThoraxRear=0.651, widthTail=0.276,
+                          glabBlend=1.0, eyeType=2, eyeSize=0.2, segBlend=1.0, pygBlend=1.0, spineBase=0.05, genalSpine=0.1),
+    "Harpetid-like": dict(length=130, width=98, relief=42.6, cephFrac=0.38, pygFrac=0.12, segCount=7, widthMaxPos=0.465, widthHeadFront=0.607, widthThoraxFront=0.971, widthThoraxRear=0.651, widthTail=0.276,
+                          brim=1, brimWidth=0.35, effacement=0.6, eyeType=0, spineBase=0.05, genalSpine=0.1),
+    "Slender, 13 segments": dict(length=160, width=70, relief=30, cephFrac=0.28, pygFrac=0.12, segCount=13, spineBase=0.6, widthMaxPos=0.465, widthHeadFront=0.607, widthThoraxFront=0.971, widthThoraxRear=0.651, widthTail=0.276, genalSpine=0.35),
+    "Broad, 5 segments": dict(length=110, width=110, relief=50, cephFrac=0.38, pygFrac=0.22, segCount=5, spineBase=0.1, genalSpine=0.1, widthMaxPos=0.465, widthHeadFront=0.607, widthThoraxFront=0.971, widthThoraxRear=0.651, widthTail=0.276),
 }
 KNOBS = [(p.key, p.label, p.lo, p.hi, p.step, p.group) for p in schema.PARAMS]
 INT_KEYS = [p.key for p in schema.PARAMS if p.kind in ("int", "odd_int")]
@@ -41,6 +39,24 @@ def derived(P):
              last_width=round(2 * fields.seg_halfwidth(P, P["segCount"] - 1)), warnings=v["violations"])
     return v
 
+def describe(P, m):
+    """Name what the sliders made: a morphotype guess plus the descriptors a paleontologist would use."""
+    n = int(P["segCount"]); ratio = P["pygFrac"] / P["cephFrac"]
+    pyg = "micropygous" if ratio < 0.6 else ("isopygous" if ratio < 1.15 else "macropygous")
+    sp = P["spineBase"]; ge = P["genalSpine"]
+    spiny = "spiny" if (sp > 0.45 or ge > 0.6) else ("smooth-margined" if (sp < 0.12 and ge < 0.15) else "moderately spined")
+    eyes = {0: "blind", 1: "holochroal-eyed", 2: "schizochroal-eyed"}[int(P["eyeType"])]
+    eff = "effaced, " if P["effacement"] > 0.5 else ""
+    if P["brim"] >= 0.5: fam, order = "harpetid-like", "Harpetida"
+    elif P["glabBlend"] > 0.5 and int(P["eyeType"]) == 2 and sp < 0.3: fam, order = "phacopid-like", "Phacopida"
+    elif n >= 12 and ge > 0.6 and P["pygFrac"] < 0.12: fam, order = "olenellid-like", "Redlichiida"
+    elif n <= 3: fam, order = "agnostid-like", "Agnostida"
+    else: fam, order = "Olenoides-like", "Corynexochida"
+    roll = {"none": "cannot enroll", "partial": f"partial enroller ({m['free_curl_deg']:.0f}° of curl)", "complete": "complete enroller"}[m["enroll_class"]]
+    name = f"{spiny.capitalize()}, {eff}{pyg} {fam} trilobite"
+    sentence = (f"{order}-type body plan · {n} thoracic segments · {eyes} · {P['length']:.0f} mm long · {roll}")
+    return dict(name=name, order=order, sentence=sentence)
+
 CACHE, LOCK = {}, threading.Lock()
 
 def build(P, mode):
@@ -48,16 +64,15 @@ def build(P, mode):
     with LOCK:
         if k in CACHE: return CACHE[k]
         t0 = time.time(); folder = os.path.join(OUT, k); os.makedirs(folder, exist_ok=True)
-        if int(P.get("family", 0)) == 1 and mode != "segment":
-            import skin
-            pieces, axes, SP = skin.build_skinned(dict(maxAngle=P["maxAngle"], clearance=P["clearance"], wall=P["wall"],
-                                                       barrelR=P["barrelR"], nKnuckles=P["nKnuckles"]), legs=bool(int(P.get("legs", 0))), verbose=False)
+        if mode != "segment":
+            import mega, skin
+            pieces, axes, MP = mega.build_mega(P)
             names = ["head"] + [f"seg{i}" for i in range(len(pieces) - 2)] + ["tail"]
-            meas = skin.measure(pieces, axes, SP["maxAngle"]); meas.update(instrument="skin-1.0", print_valid=True, violations=[], params=schema.param_hash(P))
+            meas = skin.measure(pieces, axes, MP["maxAngle"]); meas.update(instrument="sculpt-1.1", print_valid=True, violations=[], params=schema.param_hash(P))
             blobs = {n: p.export(file_type="stl") for n, p in zip(names, pieces)}
-            urls = [f"/api/mesh/{k}/{n}.stl" for n in names]
-            CACHE[k] = dict(key=k, names=names, urls=urls, offsets=[], axes=[dict(y=a["y"], zh=a["zh"]) for a in axes],
-                            hinge_z=axes[0]["zh"], maxAngle=SP["maxAngle"], seconds=round(time.time() - t0, 1), measure=meas, blobs=blobs)
+            CACHE[k] = dict(key=k, names=names, urls=[f"/api/mesh/{k}/{n}.stl" for n in names], offsets=[], axes=[dict(y=a["y"], zh=a["zh"]) for a in axes],
+                            hinge_z=axes[0]["zh"], maxAngle=MP["maxAngle"], seconds=round(time.time() - t0, 1), measure=meas, blobs=blobs,
+                            pieces=pieces, axes_full=axes, label=describe(P, meas))
             return CACHE[k]
         if mode == "segment":
             parts = [T.build_segment(P, 2)]; names = ["segment"]; offs = []; meas = None
@@ -94,6 +109,23 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_response(200); self.send_header("Content-Type", "application/octet-stream")
             self.send_header("Content-Length", str(len(data))); self.send_header("Cache-Control", "no-store")
             self.end_headers(); self.wfile.write(data); return
+        if path.startswith("/api/download/"):
+            key = path.split("/")[-1].replace(".zip", ""); entry = CACHE.get(key)
+            if not entry: return self.send_json(dict(error="build not in cache — press Build again"), 404)
+            import zipfile, io as _io, trimesh as _tm
+            buf = _io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+                for n, b in entry["blobs"].items(): z.writestr(f"parts/{n}.stl", b)
+                if entry.get("pieces"):
+                    import skin as _sk
+                    z.writestr("animal_flat.stl", _tm.util.concatenate(_sk.posed(entry["pieces"], entry["axes_full"], 0.0, entry["maxAngle"])).export(file_type="stl"))
+                    e = entry["measure"]["e_max"]
+                    if e > 0.02: z.writestr(f"animal_enrolled_{int(e*100)}pct.stl", _tm.util.concatenate(_sk.posed(entry["pieces"], entry["axes_full"], e, entry["maxAngle"])).export(file_type="stl"))
+                z.writestr("measurement.json", json.dumps(dict(label=entry.get("label"), measure=entry["measure"]), indent=1))
+                z.writestr("README.txt", "Print parts/*.stl individually (segments x N, head, tail); pin with 1.75 mm filament through the side bores.\nanimal_flat.stl is the assembled reference. See measurement.json for the enrollment verdict.")
+            data = buf.getvalue()
+            self.send_response(200); self.send_header("Content-Type", "application/zip"); self.send_header("Content-Disposition", f'attachment; filename="trilobite_{key}.zip"')
+            self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data); return
         if path == "/api/health":
             return self.send_json(dict(ok=True, cached=list(CACHE), web_out=os.path.isdir(OUT), files=sum(len(f) for _, _, f in os.walk(OUT))))
         if path == "/api/config":
@@ -107,7 +139,7 @@ class Handler(SimpleHTTPRequestHandler):
             if self.path == "/api/derived": return self.send_json(derived(P))
             if self.path == "/api/build":
                 b = build(P, body.get("mode", "animal"))
-                return self.send_json(dict({k: v for k, v in b.items() if k != "blobs"}, derived=derived(P)))
+                return self.send_json(dict({k: v for k, v in b.items() if k not in ("blobs", "pieces", "axes_full")}, derived=derived(P)))
             if self.path == "/api/check":
                 b = build(P, "animal"); m = b["measure"]
                 txt = (f"instrument {m['instrument']}  params {m['params']}\\n"
