@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 libglu1-mesa libxrender1 libxext6 libxi6 libxcursor1 libxft2 libxinerama1 libfontconfig1 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-RUN pip install --no-cache-dir build123d trimesh manifold3d python-fcl numpy
+RUN pip install --no-cache-dir build123d trimesh manifold3d python-fcl numpy rtree
 COPY schema.py fields.py trilobite.py instrument.py trilobite_web.py index.html ./
 ENV PORT=8080
 EXPOSE 8080

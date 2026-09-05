@@ -118,6 +118,7 @@ def tubercles(x, y, P, region, seed, count_scale):
     rng = np.random.default_rng(int(P["seed"]) * 1000 + seed)
     n = int(P["tubercles"] * count_scale)
     xmin, xmax, ymin, ymax = region["box"]
+    if xmax <= xmin or ymax <= ymin: return 0.0     # degenerate plan (very short pygidium/head at slider extremes): skip, don't crash
     z = np.zeros_like(x, dtype=float); r = P["tubercleSize"]; k = 0; tries = 0
     while k < n and tries < 20 * n + 20:
         tries += 1

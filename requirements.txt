@@ -3,3 +3,4 @@ trimesh
 manifold3d
 python-fcl
 numpy
+rtree
