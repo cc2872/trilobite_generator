@@ -32,7 +32,7 @@
   .overlay{position:absolute;left:16px;top:14px;color:var(--ink);line-height:1.5;pointer-events:none;max-width:60%;font-variant-numeric:tabular-nums}
   .overlay .warn{color:var(--ink);text-decoration:underline}
   .status{position:absolute;right:16px;top:14px;color:var(--mid)} .status.busy{color:var(--ink)}
-  .rollbar{position:absolute;left:16px;right:16px;bottom:16px;display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center}
+  .rollbar{position:absolute;left:16px;right:16px;bottom:16px;display:grid;grid-template-columns:1fr auto auto auto;gap:14px;align-items:center}
   .rollbar input[type=range]{height:1px} .rollbar input[type=range]::-webkit-slider-thumb{width:16px;height:16px}
   .rollbar .val{min-width:130px;text-align:right;font-variant-numeric:tabular-nums}
   .log{position:absolute;right:16px;bottom:64px;width:380px;max-height:220px;overflow:auto;background:var(--bg);border:1px solid var(--line);padding:8px 10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;white-space:pre;display:none}
@@ -65,6 +65,7 @@
     <div class="rollbar">
       <input type="range" id="enroll" min="0" max="1" step="0.005" value="0">
       <div class="val" id="enrollval">0% · 0°</div>
+      <button id="download" disabled>Download STL</button>
       <button id="play">Roll</button>
     </div>
   </div>
@@ -206,6 +207,34 @@ function frame(){
   controls.target.copy(c); camera.position.copy(c).add(new THREE.Vector3(0.6, 0.55, 0.95).multiplyScalar(s * 0.9)); camera.near = s / 100; camera.far = s * 10; camera.updateProjectionMatrix();
 }
 
+// ---------------- combined STL export (binary), whatever pose is currently shown
+function exportSTL(){
+  root.updateMatrixWorld(true);
+  const tris = [];
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    const pos = o.geometry.attributes.position, idx = o.geometry.index, m = o.matrixWorld;
+    const get = i => new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(m);
+    const n = idx ? idx.count : pos.count;
+    for (let i = 0; i < n; i += 3) {
+      const [a, b, c] = idx ? [idx.getX(i), idx.getX(i + 1), idx.getX(i + 2)] : [i, i + 1, i + 2];
+      tris.push([get(a), get(b), get(c)]);
+    }
+  });
+  const buf = new ArrayBuffer(84 + tris.length * 50), dv = new DataView(buf);
+  dv.setUint32(80, tris.length, true);
+  let off = 84; const nrm = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
+  for (const [p0, p1, p2] of tris) {
+    e1.subVectors(p1, p0); e2.subVectors(p2, p0); nrm.crossVectors(e1, e2).normalize();
+    for (const q of [nrm, p0, p1, p2]) { dv.setFloat32(off, q.x, true); dv.setFloat32(off + 4, q.y, true); dv.setFloat32(off + 8, q.z, true); off += 12; }
+    dv.setUint16(off, 0, true); off += 2;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([buf]));
+  a.download = `trilobite_${built ? built.key : 'model'}_${Math.round(enroll * 100)}pct.stl`;
+  a.click();
+}
+
 // ---------------- actions
 async function build(mode){
   setStatus(mode === 'segment' ? 'building one segment…' : 'building whole animal (30–60 s)…', true);
@@ -216,6 +245,7 @@ async function build(mode){
     built = r; await showBuild(r); renderOverlay(r.derived, `built in ${r.seconds}s`);
     if (r.measure) { const m = r.measure; $('overlay').innerHTML += `<br><b>e_max ${m.e_max}</b> · free curl ${m.free_curl_deg}° of ${m.total_curl_deg}° · gap ${m.closure_gap_mm} mm · ${m.enroll_class}` + (m.stopped_by.length ? ` · stopped by parts ${m.stopped_by.map(x=>x[0]+'–'+x[1]).join(', ')}` : ''); }
     $('links').innerHTML = r.urls.map((u, i) => `<a href="${u}" download>${r.names[i]}.stl</a>`).join('');
+    $('download').disabled = false;
     setStatus(`built in ${r.seconds}s`, false);
   } catch (e) { setStatus('error: ' + e.message, false); }
   document.querySelectorAll('.actions button').forEach(b => b.disabled = false);
@@ -233,6 +263,7 @@ $('dump').onclick = () => {
 };
 $('enroll').addEventListener('input', e => { playing = false; $('play').textContent = 'Roll'; setEnroll(parseFloat(e.target.value)); });
 $('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Roll'; };
+$('download').onclick = exportSTL;
 document.addEventListener('keydown', e => { if (e.key === 'f') { flip = -flip; setEnroll(enroll); } });
 init();
 </script>
