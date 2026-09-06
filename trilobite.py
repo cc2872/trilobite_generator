@@ -589,19 +589,30 @@ def build_pygidium(P):
 # =====================================================================
 PART_NAMES = lambda P: ["head"] + [f"seg{i}" for i in range(int(P["segCount"]))] + ["tail"]
 
+SANE_MESH_TOL = 0.12, 0.15         # matches trilobite_web.py's STL-export tessellation (see _sane())
+
 def _sane(part):
     """A part is sane if it is one solid of positive volume that fits in its own bounding box, AND its
-    tessellation (the same one instrument.py will collide-test) is watertight. A valid BREP can still
-    stitch into a mesh with a hairline seam gap on the custom plate/hinge side faces — invisible to the
-    volume check, but it silently forces every collision check touching that part onto instrument.py's
-    Monte-Carlo/FCL fallback (~50x slower per pair). Cheap to catch here and retry with a jittered grid."""
+    tessellation is watertight. A valid BREP can still stitch into a mesh with a hairline seam gap on
+    the custom plate/hinge side faces — invisible to the volume check, but it silently forces every
+    collision check touching that part onto instrument.py's Monte-Carlo/FCL fallback (~50x slower per
+    pair). Cheap to catch here and retry with a jittered grid.
+
+    Tessellates at SANE_MESH_TOL, the exact tolerance trilobite_web.py exports/measures at (previously
+    this checked a *different* tessellation tolerance than the one that got exported and fed to the
+    instrument - to_trimesh() tries several tolerance variants and returns whichever one happens to
+    come out watertight, so passing this check at one tolerance did not guarantee the mesh actually used
+    for measuring was watertight too). The validated mesh is cached on the part as `_checked_mesh` so
+    callers can reuse it instead of tessellating the same part a second time."""
     try:
         bb = part.bounding_box().size
         floor = 0.25 * bb.X * bb.Y * 2.0                     # at least a 2 mm plate over a quarter of the footprint
         if not (len(part.solids()) == 1 and floor < part.volume <= bb.X * bb.Y * bb.Z * 1.05):
             return False
-        m = to_trimesh(part, 0.15, 0.3)                      # same tessellation instrument.py's meshes use
-        return bool(m.is_watertight and m.is_volume)
+        m = to_trimesh(part, *SANE_MESH_TOL)
+        ok = bool(m.is_watertight and m.is_volume)
+        if ok: part._checked_mesh = m
+        return ok
     except Exception:
         return False
 

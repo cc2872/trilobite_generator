@@ -116,7 +116,10 @@ def _run_build(k, P, mode, folder, t0):
             parts = []
             for n, fn in zip(names_all, fns):
                 p = T._build_checked(fn, n); parts.append(p)
-                m = T.to_trimesh(p, 0.12, 0.15)
+                # _build_checked() already tessellated p at this exact tolerance to validate it (see
+                # trilobite._sane()) and cached the result; reusing it avoids tessellating twice and
+                # guarantees this is the same watertight-checked mesh, not a fresh, possibly different one.
+                m = getattr(p, "_checked_mesh", None) or T.to_trimesh(p, *T.SANE_MESH_TOL)
                 blob = m.export(file_type="stl")
                 try: m.export(os.path.join(folder, f"{n}.stl"))         # also on disk, for downloads while it lasts
                 except Exception: pass
