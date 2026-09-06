@@ -52,7 +52,13 @@ def _run_build(k, P, mode, folder, t0):
     a stray inside-out sliver alongside the real part) for no parameter-related reason, and retrying with
     a slightly different surface grid reliably fixes it. Streaming the raw, unchecked part (as this used
     to do) could hand the client — and the instrument's collision measurement — a badly broken mesh, which
-    is slow or pathological enough to make the whole single-process server look hung."""
+    is slow or pathological enough to make the whole single-process server look hung.
+
+    BUILD_CPU_LOCK covers only the CAD-construction loop above, not the measuring step below: it exists
+    to serialize access to trilobite.py's GRID_JITTER/BUILD_NOTES globals (mutated by _build_checked and
+    friends), and instrument.measure() never touches those. Keeping measuring outside the lock lets a
+    second build's part construction start as soon as this one's parts are done, instead of waiting out
+    a potentially multi-minute measuring pass it has nothing to do with."""
     try:
         with BUILD_CPU_LOCK:
             if mode == "segment":
@@ -73,14 +79,14 @@ def _run_build(k, P, mode, folder, t0):
                 except Exception: pass
                 with LOCK:
                     e = CACHE[k]; e["names"].append(n); e["urls"].append(f"/api/mesh/{k}/{n}.stl"); e["blobs"][n] = blob
+        with LOCK:
+            e = CACHE[k]; e["mesh_seconds"] = round(time.time() - t0, 1)
+            e["status"] = "done" if mode == "segment" else "measuring"
+            if mode == "segment": e["seconds"] = e["mesh_seconds"]
+        if mode != "segment":
+            meas = instrument.measure(P, instrument.part_meshes(P, parts), parts)
             with LOCK:
-                e = CACHE[k]; e["mesh_seconds"] = round(time.time() - t0, 1)
-                e["status"] = "done" if mode == "segment" else "measuring"
-                if mode == "segment": e["seconds"] = e["mesh_seconds"]
-            if mode != "segment":
-                meas = instrument.measure(P, instrument.part_meshes(P, parts), parts)
-                with LOCK:
-                    e = CACHE[k]; e["measure"] = meas; e["seconds"] = round(time.time() - t0, 1); e["status"] = "done"
+                e = CACHE[k]; e["measure"] = meas; e["seconds"] = round(time.time() - t0, 1); e["status"] = "done"
     except Exception as ex:
         with LOCK:
             CACHE[k]["status"] = "error"; CACHE[k]["error"] = str(ex)

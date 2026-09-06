@@ -590,11 +590,18 @@ def build_pygidium(P):
 PART_NAMES = lambda P: ["head"] + [f"seg{i}" for i in range(int(P["segCount"]))] + ["tail"]
 
 def _sane(part):
-    """A part is sane if it is one solid of positive volume that fits in its own bounding box."""
+    """A part is sane if it is one solid of positive volume that fits in its own bounding box, AND its
+    tessellation (the same one instrument.py will collide-test) is watertight. A valid BREP can still
+    stitch into a mesh with a hairline seam gap on the custom plate/hinge side faces — invisible to the
+    volume check, but it silently forces every collision check touching that part onto instrument.py's
+    Monte-Carlo/FCL fallback (~50x slower per pair). Cheap to catch here and retry with a jittered grid."""
     try:
         bb = part.bounding_box().size
         floor = 0.25 * bb.X * bb.Y * 2.0                     # at least a 2 mm plate over a quarter of the footprint
-        return len(part.solids()) == 1 and floor < part.volume <= bb.X * bb.Y * bb.Z * 1.05
+        if not (len(part.solids()) == 1 and floor < part.volume <= bb.X * bb.Y * bb.Z * 1.05):
+            return False
+        m = to_trimesh(part, 0.15, 0.3)                      # same tessellation instrument.py's meshes use
+        return bool(m.is_watertight and m.is_volume)
     except Exception:
         return False
 
