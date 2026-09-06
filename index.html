@@ -30,7 +30,7 @@
   .ruler{margin-top:22px}
   .ruler .sect{display:flex;justify-content:space-between;cursor:pointer;color:var(--ink)}
   .ruler.locked .body{display:none}
-  .actions{padding:14px 20px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .actions{padding:14px 20px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:8px}
   button{background:var(--bg);color:var(--ink);border:1px solid var(--ink);border-radius:0;padding:8px 6px;font:inherit;cursor:pointer}
   button.primary{background:var(--ink);color:var(--bg)}
   button:hover{background:var(--soft)} button.primary:hover{opacity:.85} button:disabled{opacity:.35;cursor:default}
@@ -38,6 +38,12 @@
   canvas{display:block}
   img.sheet{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
   .stage3d{position:absolute;inset:0}
+  /* #view3d lives inside the sheet's own blank title-block space by default (positioned by JS, which
+     knows the sheet's fixed layout); positionView3DButton()/setView() move it into a small corner
+     toggle (.corner) once the 3D view is active, since there's no sheet showing to overlay then. */
+  #view3d{position:absolute;z-index:5;display:none;align-items:center;justify-content:center;background:rgba(255,255,255,.06);color:var(--ink);border:2px solid var(--ink);font:inherit;letter-spacing:.14em;text-transform:uppercase;font-size:16px;cursor:pointer;transition:background .15s}
+  #view3d:hover{background:var(--ink);color:var(--bg)}
+  #view3d.corner{background:var(--bg);border:1px solid var(--ink);font-size:11px;letter-spacing:.06em;padding:8px 14px;right:16px;top:16px;left:auto!important;bottom:auto!important;width:auto!important;height:auto!important}
   .readout{position:absolute;left:16px;top:14px;line-height:1.6;pointer-events:none;font-variant-numeric:tabular-nums;text-shadow:0 0 6px #000, 0 0 6px #000}
   .readout b{font-weight:normal;border-bottom:1px solid var(--ink)}
   .readout .warn{text-decoration:underline}
@@ -99,12 +105,12 @@
     </div>
     <div class="actions">
       <button class="primary" id="build" disabled>Build</button>
-      <button id="view3d" disabled>View 3D</button>
       <button id="download" disabled>Download STL</button>
     </div>
   </div>
   <div class="stage" id="stage">
     <img class="sheet" id="sheetImg" alt="">
+    <button id="view3d">View 3D</button>
     <div class="stage3d" id="stage3d" style="display:none">
       <div class="rollbar">
         <input type="range" id="enroll" min="0" max="1" step="0.005" value="0">
@@ -293,6 +299,7 @@ function blueprintPart(geo){
   return [g, m];
 }
 function applyLook(){
+  document.body.classList.toggle('model', look === 'model');
   for (const s of document.querySelectorAll('#look span')) s.classList.toggle('on', s.dataset.look === look);
   if (!scene || !root) return;        // called once from initScene() before any parts are loaded, and from the
   scene.background.set(look === 'blueprint' ? 0x000000 : 0xffffff);         // #look click handler afterward
@@ -327,13 +334,34 @@ function frame(){
   const c = box.getCenter(new THREE.Vector3()); const s = box.getSize(new THREE.Vector3()).length(); if (!isFinite(s) || s === 0) return;
   controls.target.copy(c); camera.position.copy(c).add(new THREE.Vector3(0.6, 0.55, 0.95).multiplyScalar(s * 0.9)); camera.near = s / 100; camera.far = s * 10; camera.updateProjectionMatrix();
 }
+// The sheet is a fixed-layout image (blueprint.py: figsize=(16.5,11.7) @ dpi=110), so its blank
+// title-block area (below the drawing's text, inside the bordered box on the right) is always at the
+// same fraction of the sheet, regardless of window size. #view3d overlays that space directly instead
+// of living in the button row — positioned in real pixels here (accounting for the letterboxing
+// object-fit:contain can add) rather than with a CSS percentage, since the stage's aspect ratio rarely
+// matches the sheet's.
+const SHEET_W = 1815, SHEET_H = 1287;
+const TITLE_BLANK = {x: 0.805, y: 0.44, w: 0.155, h: 0.47};
+function positionView3DButton(){
+  const btn = $('view3d'); if (btn.classList.contains('corner')) return;
+  const stage = $('stage'); const cw = stage.clientWidth, ch = stage.clientHeight;
+  if (!cw || !ch) return;
+  const scale = Math.min(cw / SHEET_W, ch / SHEET_H);
+  const rw = SHEET_W * scale, rh = SHEET_H * scale, ox = (cw - rw) / 2, oy = (ch - rh) / 2;
+  btn.style.left = (ox + TITLE_BLANK.x * rw) + 'px'; btn.style.top = (oy + TITLE_BLANK.y * rh) + 'px';
+  btn.style.width = (TITLE_BLANK.w * rw) + 'px'; btn.style.height = (TITLE_BLANK.h * rh) + 'px';
+}
+new ResizeObserver(() => { if (view === 'sheet') positionView3DButton(); }).observe($('stage'));
 function setView(v){
   view = v;
   $('sheetImg').style.display = v === 'sheet' ? 'block' : 'none';
   $('stage3d').style.display = v === '3d' ? 'block' : 'none';
   $('look').style.display = v === '3d' ? '' : 'none';
-  $('view3d').textContent = v === '3d' ? 'View Sheet' : 'View 3D';
-  document.body.classList.toggle('model', v === '3d' && look === 'model');
+  document.body.classList.toggle('model', v === '3d' && look === 'model');   // sheet view always stays dark
+  const btn = $('view3d');
+  btn.textContent = v === '3d' ? 'View Sheet' : 'View 3D';
+  btn.classList.toggle('corner', v === '3d');
+  if (v === 'sheet') positionView3DButton();
 }
 $('view3d').onclick = async () => {
   if (!built || built.status !== 'done') return;
@@ -357,7 +385,7 @@ async function build(){
   const myGen = ++buildGen;
   built = null; lastLoadedKey = null;
   setView('sheet'); $('sheetImg').removeAttribute('src');
-  $('download').disabled = true; $('view3d').disabled = true;
+  $('download').disabled = true; $('view3d').style.display = 'none';
   setStatus('building…', true); $('build').disabled = true;
   try {
     let r = await (await fetch('/api/build', {method:'POST', body: JSON.stringify({P})})).json();
@@ -374,7 +402,7 @@ async function build(){
     built = r;
     renderReadout(r.derived, r.measure);
     $('download').disabled = !r.stl_url;
-    $('view3d').disabled = false;
+    $('view3d').style.display = 'flex'; positionView3DButton();
     let msg = `built in ${r.seconds}s`;
     if (r.sheet_url) $('sheetImg').src = r.sheet_url + '?t=' + Date.now();
     else msg += ' — sheet unavailable' + (r.error ? ': ' + r.error : '');
