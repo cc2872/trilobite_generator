@@ -1,4 +1,4 @@
-# Trilobite Morphospace Generator — mega folder (2026-09-05)
+# Trilobite Morphospace Generator
 
 Everything in one place: the generator, the enrollment instrument, the website, the skin system,
 the extracted reference assets, tests, renders.
