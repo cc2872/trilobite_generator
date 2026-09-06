@@ -266,8 +266,8 @@ function initScene(){
   scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));
   const keyLight = new THREE.DirectionalLight(0xffffff, 1.2); keyLight.position.set(80, 160, 120); scene.add(keyLight);
   grid = new THREE.GridHelper(400, 40, 0x2a2a2a, 0x161616); grid.position.y = -0.5; scene.add(grid);
-  applyLook();
   root = new THREE.Group(); root.rotation.x = -Math.PI / 2; scene.add(root);
+  applyLook();                        // must run after root exists: it unconditionally calls root.traverse()
   new ResizeObserver(resize3D).observe(stage);
   let down = null;
   renderer.domElement.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; });
@@ -294,8 +294,8 @@ function blueprintPart(geo){
 }
 function applyLook(){
   for (const s of document.querySelectorAll('#look span')) s.classList.toggle('on', s.dataset.look === look);
-  if (!scene) return;
-  scene.background.set(look === 'blueprint' ? 0x000000 : 0xffffff);
+  if (!scene || !root) return;        // called once from initScene() before any parts are loaded, and from the
+  scene.background.set(look === 'blueprint' ? 0x000000 : 0xffffff);         // #look click handler afterward
   if (grid) { scene.remove(grid); grid = look === 'blueprint' ? new THREE.GridHelper(400, 40, 0x2a2a2a, 0x161616) : new THREE.GridHelper(400, 40, 0xdddddd, 0xeeeeee); grid.position.y = -0.5; scene.add(grid); }
   for (const m of meshes) m.material = (look === 'blueprint' ? fill : shaded);
   root.traverse(o => { if (o.name === 'edges') o.visible = (look === 'blueprint'); });
@@ -338,12 +338,13 @@ function setView(v){
 $('view3d').onclick = async () => {
   if (!built || built.status !== 'done') return;
   if (view === '3d') { setView('sheet'); return; }
-  setView('3d'); initScene(); resize3D();
-  if (built.key !== lastLoadedKey) {
-    setStatus('loading 3D…', true);
-    try { await loadAllParts(); lastLoadedKey = built.key; setStatus(`built in ${built.seconds}s`, false); }
-    catch (e) { setStatus('3D load error: ' + e.message, false); }
-  } else { frame(); }
+  try {
+    setView('3d'); initScene(); resize3D();
+    if (built.key !== lastLoadedKey) {
+      setStatus('loading 3D…', true);
+      await loadAllParts(); lastLoadedKey = built.key; setStatus(`built in ${built.seconds}s`, false);
+    } else { frame(); }
+  } catch (e) { setStatus('3D view error: ' + e.message, false); }
 };
 $('enroll').addEventListener('input', e => { playing = false; $('play').textContent = 'Roll'; setEnroll(parseFloat(e.target.value)); });
 $('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Roll'; };
