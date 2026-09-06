@@ -1,9 +1,17 @@
 """
-trilobite_web.py — the generator as a website (v4: schema-driven, instrument-backed).
+trilobite_web.py — the generator as a website (v5: sheet-first, poll-based build pipeline).
 
     python trilobite_web.py        →  http://localhost:8765     (Render/Railway set PORT)
+
+Design: a build runs in a background thread (some parameter combinations take minutes) and moves
+through building -> measuring -> done/error. The client polls a single /api/status/<key> endpoint;
+there is no per-part streaming into a live 3D scene. Once done, the server has already rendered the
+blueprint technical sheet (the default result view) and a combined flat STL (the download) as the
+last two steps of the pipeline, so both are instantly available the moment status flips to done. The
+interactive 3D viewer is an opt-in, client-lazy-loaded secondary view that loads every part once, all
+at once, only after the build is already finished.
 """
-import json, os, time, threading, multiprocessing, io, contextlib, webbrowser
+import json, os, time, threading, multiprocessing, io, webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
 import schema, fields, instrument
@@ -34,36 +42,32 @@ def derived(P):
              last_width=round(2 * fields.seg_halfwidth(P, P["segCount"] - 1)), warnings=v["violations"])
     return v
 
-# RLock, not Lock: build() calls build_status() (which itself does `with LOCK:`) from inside its own
-# `with LOCK:` block on the already-cached-and-done fast path. With a plain Lock that is a guaranteed
-# self-deadlock the moment a client re-POSTs /api/build for params that already finished successfully
-# (status "done", not "error") - i.e. the very next time anyone reloads the page after the first build.
-# Once that thread wedges on re-acquiring its own lock, every other request that touches CACHE via LOCK
-# (build_status polls, new builds) hangs forever too, while endpoints that don't touch LOCK (/api/health,
-# /api/mesh/) keep responding fine - which is exactly the pattern this bug produced in production.
+# RLock (not Lock) as a defensive backstop: nothing below is written to call a LOCK-acquiring function
+# while already holding LOCK (that was a real self-deadlock bug in the previous design — a thread
+# re-acquiring a lock it already holds blocks forever), but an RLock makes that class of mistake
+# harmless even if a future edit reintroduces it by accident.
 CACHE, LOCK = {}, threading.RLock()
 # trilobite.py's retry-on-garbage machinery (_build_checked, GRID_JITTER, BUILD_NOTES) is module-global,
-# not thread-safe: two builds running their CAD/CPU work at once would race on that state (and could hand
-# a jittered grid to the wrong build mid-part, or corrupt the other's garbage-detection). Since a single
+# not thread-safe: two builds running their CAD/CPU work at once would race on that state. Since a single
 # OpenCascade-heavy build already saturates one core, there is nothing to gain from true concurrency here —
-# serialize the CPU-heavy portion of every build behind one lock so only one build ever runs it at a time.
+# serialize the CPU-heavy construction portion of every build behind one lock so only one build ever runs
+# it at a time. Measuring (below) is deliberately kept outside this lock so a second build's construction
+# can start as soon as this one's parts are done, instead of waiting out a multi-minute measuring pass.
 BUILD_CPU_LOCK = threading.Lock()
 
 # instrument.measure()'s own time budget (instrument.MEASURE_BUDGET_S) only checks the clock between
-# pairwise checks, so it cannot interrupt a single already-in-flight OpenCascade/trimesh call - and in
-# production that alone has hung the whole single-process server for over an hour on a pathological
-# mesh. MEASURE_HARD_TIMEOUT_S bounds that: it's the wall-clock ceiling _measure_hard_bounded() will
-# wait for the measuring subprocess before forcibly killing it. Set comfortably above
-# instrument.MEASURE_BUDGET_S to give a normal timeout its own soft budget a chance to return cleanly.
+# pairwise checks, so it cannot interrupt a single already-in-flight OpenCascade/trimesh call. Running it
+# in a subprocess lets the parent hard-kill it — regardless of what C call it's stuck inside — if it's
+# still running after MEASURE_HARD_TIMEOUT_S.
 MEASURE_HARD_TIMEOUT_S = instrument.MEASURE_BUDGET_S + 90
 
 def _measure_hard_bounded(P, folder, names_all, parts):
     """Run instrument.measure() in a subprocess and hard-kill it if it's still running after
-    MEASURE_HARD_TIMEOUT_S, regardless of what C call it's stuck inside. Reloads the STL files
-    _run_build() already exported to `folder` rather than re-tessellating; the subprocess has no
-    build123d `parts` to run instrument.py's volume-sanity checks against (those need the live CAD
-    objects), so print_validity() is re-run here in the parent — cheap, and unaffected by mesh quality
-    — to fill that back in regardless of whether the subprocess finished or was killed."""
+    MEASURE_HARD_TIMEOUT_S. Reloads the STL files _run_build() already exported to `folder` rather than
+    re-tessellating; the subprocess has no build123d `parts` to run instrument.py's volume-sanity checks
+    against (those need the live CAD objects), so print_validity() is re-run here in the parent — cheap,
+    and unaffected by mesh quality — to fill that back in regardless of whether the subprocess finished
+    or was killed."""
     mesh_paths = [os.path.join(folder, f"{n}.stl") for n in names_all]
     result_path = os.path.join(folder, "_measure_result.json")
     if os.path.exists(result_path):
@@ -92,34 +96,32 @@ def _measure_hard_bounded(P, folder, names_all, parts):
     meas.update(instrument.print_validity(P, parts))
     return meas
 
-def _run_build(k, P, mode, folder, t0):
-    """Runs in a background thread so no HTTP request ever blocks on it (some parameter combinations
-    take minutes). Parts are appended to CACHE[k] one at a time as they finish, so the client can
-    stream them into the viewer instead of waiting on a black screen; status moves
-    building -> measuring -> done, and the enrollment instrument only runs once every part exists.
-    Every part goes through trilobite._build_checked(), the same sanity-check-and-retry wrapper the
-    offline/console build already uses: OpenCascade occasionally hands back garbage (a failed fuse, or
-    a stray inside-out sliver alongside the real part) for no parameter-related reason, and retrying with
-    a slightly different surface grid reliably fixes it. Streaming the raw, unchecked part (as this used
-    to do) could hand the client — and the instrument's collision measurement — a badly broken mesh, which
-    is slow or pathological enough to make the whole single-process server look hung.
+def _generate_outputs(P, names_all, blobs, meas, folder):
+    """Render the technical sheet and a combined flat STL — the two things the client shows/downloads by
+    default. This is fast (posing + concatenating already-tessellated meshes, plus a matplotlib figure —
+    no CAD or collision work), so it runs directly in the build thread rather than a subprocess."""
+    import trimesh, blueprint
+    raw = [trimesh.load(io.BytesIO(blobs[n]), file_type="stl") for n in names_all]
+    mats0 = instrument.transforms(P, 0.0)
+    flat = trimesh.util.concatenate([r.copy().apply_transform(M) for r, M in zip(raw, mats0)])
+    flat.export(os.path.join(folder, "combined.stl"))
+    e_val = meas.get("e_max") or 0.0
+    mats_e = instrument.transforms(P, float(e_val))
+    enrolled = trimesh.util.concatenate([r.copy().apply_transform(M) for r, M in zip(raw, mats_e)])
+    blueprint.sheet(flat, P, meas, os.path.join(folder, "sheet.png"), enrolled=enrolled)
 
-    BUILD_CPU_LOCK covers only the CAD-construction loop above, not the measuring step below: it exists
-    to serialize access to trilobite.py's GRID_JITTER/BUILD_NOTES globals (mutated by _build_checked and
-    friends), and instrument.measure() never touches those. Keeping measuring outside the lock lets a
-    second build's part construction start as soon as this one's parts are done, instead of waiting out
-    a potentially multi-minute measuring pass it has nothing to do with."""
+def _run_build(k, P, folder, t0):
+    """Background thread: build every part (CAD + tessellate, serialized under BUILD_CPU_LOCK so
+    trilobite.py's retry-on-garbage globals stay safe), measure enrollment in a hard-bounded subprocess,
+    then render the sheet and combined STL. status moves building -> measuring -> done (or error)."""
     try:
         with BUILD_CPU_LOCK:
-            if mode == "segment":
-                names_all, fns, offs = ["segment"], [lambda: T.build_segment(P, 2)], []
-            else:
-                names_all = T.PART_NAMES(P)
-                fns = ([lambda: T.build_cephalon(P)] + [(lambda i=i: T.build_segment(P, i)) for i in range(int(P["segCount"]))]
-                       + [lambda: T.build_pygidium(P)])
-                offs = T.joint_offsets(P)
+            names_all = T.PART_NAMES(P)
+            fns = ([lambda: T.build_cephalon(P)] + [(lambda i=i: T.build_segment(P, i)) for i in range(int(P["segCount"]))]
+                   + [lambda: T.build_pygidium(P)])
+            offs = T.joint_offsets(P)
             with LOCK:
-                CACHE[k]["offsets"] = offs; CACHE[k]["hinge_z"] = T.hinge_z(P)
+                e = CACHE[k]; e["offsets"] = offs; e["hinge_z"] = T.hinge_z(P)
             parts = []
             for n, fn in zip(names_all, fns):
                 p = T._build_checked(fn, n); parts.append(p)
@@ -128,41 +130,70 @@ def _run_build(k, P, mode, folder, t0):
                 # guarantees this is the same watertight-checked mesh, not a fresh, possibly different one.
                 m = getattr(p, "_checked_mesh", None) or T.to_trimesh(p, *T.SANE_MESH_TOL)
                 blob = m.export(file_type="stl")
-                try: m.export(os.path.join(folder, f"{n}.stl"))         # also on disk, for downloads while it lasts
+                try: m.export(os.path.join(folder, f"{n}.stl"))         # measuring subprocess reloads from here
                 except Exception: pass
                 with LOCK:
-                    e = CACHE[k]; e["names"].append(n); e["urls"].append(f"/api/mesh/{k}/{n}.stl"); e["blobs"][n] = blob
+                    e = CACHE[k]; e["names"].append(n); e["blobs"][n] = blob
         with LOCK:
-            e = CACHE[k]; e["mesh_seconds"] = round(time.time() - t0, 1)
-            e["status"] = "done" if mode == "segment" else "measuring"
-            if mode == "segment": e["seconds"] = e["mesh_seconds"]
-        if mode != "segment":
-            meas = _measure_hard_bounded(P, folder, names_all, parts)
+            e = CACHE[k]; e["mesh_seconds"] = round(time.time() - t0, 1); e["status"] = "measuring"
+
+        meas = _measure_hard_bounded(P, folder, names_all, parts)
+        with LOCK:
+            e = CACHE[k]; e["measure"] = meas; blobs_snapshot = dict(e["blobs"])
+
+        try:
+            _generate_outputs(P, names_all, blobs_snapshot, meas, folder)
             with LOCK:
-                e = CACHE[k]; e["measure"] = meas; e["seconds"] = round(time.time() - t0, 1); e["status"] = "done"
+                e = CACHE[k]
+                e["sheet_ready"] = os.path.exists(os.path.join(folder, "sheet.png"))
+                e["stl_ready"] = os.path.exists(os.path.join(folder, "combined.stl"))
+        except Exception as ex:
+            with LOCK:
+                CACHE[k]["error"] = f"model measured OK, but sheet/STL generation failed: {ex}"
+
+        with LOCK:
+            e = CACHE[k]; e["seconds"] = round(time.time() - t0, 1); e["status"] = "done"
     except Exception as ex:
         with LOCK:
             CACHE[k]["status"] = "error"; CACHE[k]["error"] = str(ex)
 
+def _status_snapshot(e):
+    """Build the client-facing status dict from an already-fetched CACHE entry. Never touches LOCK —
+    callers must already hold it. This is the piece that avoids reintroducing the self-deadlock: build()
+    calls this directly on its already-cached-and-done fast path instead of calling build_status()
+    (which acquires LOCK itself) from inside its own `with LOCK:` block."""
+    out = {kk: vv for kk, vv in e.items() if kk not in ("blobs", "P", "names")}
+    out["done_parts"] = len(e["names"]); out["maxAngle"] = e["P"]["maxAngle"]
+    if e["status"] in ("measuring", "done"):
+        out["derived"] = derived(e["P"])
+    if e["status"] == "done":
+        out["sheet_url"] = f"/api/sheet/{e['key']}.png" if e.get("sheet_ready") else None
+        out["stl_url"] = f"/api/download/{e['key']}.stl" if e.get("stl_ready") else None
+        out["part_names"] = e["names"]
+    return out
+
 def build_status(k):
-    """Non-blocking snapshot of a build: building (mesh streaming in) / measuring (mesh done,
-    instrument running) / done / error. Never includes the raw STL bytes."""
+    """Non-blocking snapshot of a build for the client. Acquires LOCK itself — never call this from
+    inside a block that already holds LOCK; use _status_snapshot(e) there instead."""
     with LOCK:
         e = CACHE.get(k)
         if e is None: return dict(status="unknown", key=k)
-        return {kk: vv for kk, vv in e.items() if kk != "blobs"}
+        return _status_snapshot(e)
 
-def build(P, mode):
+def build(P):
     """Start a build if one for this exact P isn't already running or cached; always returns immediately."""
-    k = schema.param_hash(P) + ("s" if mode == "segment" else "a")
+    k = schema.param_hash(P)
     with LOCK:
         e = CACHE.get(k)
-        if e is not None and e["status"] != "error": return build_status(k)
-        CACHE[k] = dict(key=k, P=P, status="building", names=[], urls=[], offsets=[], hinge_z=None,
-                        maxAngle=P["maxAngle"], blobs={}, measure=None, seconds=None, mesh_seconds=None, error=None)
+        if e is not None and e["status"] != "error":
+            return _status_snapshot(e)
+        CACHE[k] = dict(key=k, P=P, status="building", names=[], blobs={}, offsets=None, hinge_z=None,
+                        total_parts=len(T.PART_NAMES(P)), measure=None, seconds=None, mesh_seconds=None,
+                        error=None, sheet_ready=False, stl_ready=False)
+        snap = _status_snapshot(CACHE[k])
     folder = os.path.join(OUT, k); os.makedirs(folder, exist_ok=True)
-    threading.Thread(target=_run_build, args=(k, P, mode, folder, time.time()), daemon=True).start()
-    return build_status(k)
+    threading.Thread(target=_run_build, args=(k, P, folder, time.time()), daemon=True).start()
+    return snap
 
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw): super().__init__(*a, directory=HERE, **kw)
@@ -174,23 +205,23 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/": self.path = "/index.html"
-        if path.startswith("/api/sheet/"):                                  # the blueprint sheet of a built animal
+        if path.startswith("/api/sheet/"):                                   # already-generated by _run_build
             key = path.split("/")[-1].replace(".png", "")
-            b = CACHE.get(key)
-            if b is None: return self.send_json(dict(error="not built"), 404)
             png = os.path.join(OUT, key, "sheet.png")
-            if not os.path.exists(png):
-                import trimesh, blueprint
-                P = b["P"]; mats = instrument.transforms(P, 0.0)
-                raw = [trimesh.load(io.BytesIO(b["blobs"][n]), file_type="stl") for n in b["names"]]
-                flat = trimesh.util.concatenate([r.copy().apply_transform(M) for r, M in zip(raw, mats)])
-                e = (b["measure"] or {}).get("e_max", 1.0) or 0.0
-                en = trimesh.util.concatenate([r.copy().apply_transform(M) for r, M in zip(raw, instrument.transforms(P, float(e)))])
-                blueprint.sheet(flat, P, dict(b["measure"] or {}, **instrument.print_validity(P)), png, enrolled=en)
+            if not os.path.exists(png): return self.send_json(dict(error="sheet not ready"), 404)
             data = open(png, "rb").read()
             self.send_response(200); self.send_header("Content-Type", "image/png"); self.send_header("Content-Length", str(len(data))); self.end_headers()
             return self.wfile.write(data)
-        if path.startswith("/api/mesh/"):                              # /api/mesh/<key>/<name>.stl from memory
+        if path.startswith("/api/download/"):                                # already-generated by _run_build
+            key = path.split("/")[-1].replace(".stl", "")
+            stl = os.path.join(OUT, key, "combined.stl")
+            if not os.path.exists(stl): return self.send_json(dict(error="download not ready"), 404)
+            data = open(stl, "rb").read()
+            self.send_response(200); self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Disposition", f'attachment; filename="trilobite_{key}.stl"')
+            self.send_header("Content-Length", str(len(data))); self.end_headers()
+            return self.wfile.write(data)
+        if path.startswith("/api/mesh/"):                              # /api/mesh/<key>/<name>.stl — lazy 3D view only
             _, _, _, key, fname = path.split("/", 4)
             entry = CACHE.get(key); name = fname[:-4] if fname.endswith(".stl") else fname
             if not entry or name not in entry["blobs"]:
@@ -199,14 +230,14 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_response(200); self.send_header("Content-Type", "application/octet-stream")
             self.send_header("Content-Length", str(len(data))); self.send_header("Cache-Control", "no-store")
             self.end_headers(); self.wfile.write(data); return
-        if path.startswith("/api/build/"):                                   # poll: parts stream in as they finish
+        if path.startswith("/api/status/"):                                  # poll
             key = path.split("/")[-1]
-            b = build_status(key)
-            if b["status"] in ("measuring", "done"): b = dict(b, derived=derived(b["P"]))
-            return self.send_json(b)
+            return self.send_json(build_status(key))
         if path == "/api/health":
-            building = [k for k, v in CACHE.items() if v["status"] in ("building", "measuring")]
-            return self.send_json(dict(ok=True, cached=list(CACHE), building=building, web_out=os.path.isdir(OUT), files=sum(len(f) for _, _, f in os.walk(OUT))))
+            with LOCK:
+                building = [k for k, v in CACHE.items() if v["status"] in ("building", "measuring")]
+                cached = list(CACHE)
+            return self.send_json(dict(ok=True, cached=cached, building=building, web_out=os.path.isdir(OUT), files=sum(len(f) for _, _, f in os.walk(OUT))))
         if path == "/api/config":
             return self.send_json(dict(knobs=KNOBS, presets=PRESETS, defaults=schema.defaults(), int_keys=INT_KEYS, ui=schema.UI,
                                        macros=schema.MACROS, schema=schema.SCHEMA_VERSION))
@@ -216,10 +247,7 @@ class Handler(SimpleHTTPRequestHandler):
         P = schema.coerce(body.get("P", {}))
         try:
             if self.path == "/api/derived": return self.send_json(derived(P))
-            if self.path == "/api/build":
-                b = build(P, body.get("mode", "animal"))
-                if b["status"] in ("measuring", "done"): b = dict(b, derived=derived(P))
-                return self.send_json(b)
+            if self.path == "/api/build": return self.send_json(build(P))
         except Exception as ex:
             return self.send_json(dict(error=str(ex)), 500)
         self.send_json(dict(error="unknown endpoint"), 404)

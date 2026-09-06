@@ -34,12 +34,14 @@
   button{background:var(--bg);color:var(--ink);border:1px solid var(--ink);border-radius:0;padding:8px 6px;font:inherit;cursor:pointer}
   button.primary{background:var(--ink);color:var(--bg)}
   button:hover{background:var(--soft)} button.primary:hover{opacity:.85} button:disabled{opacity:.35;cursor:default}
-  .stage{position:relative;min-width:0}
+  .stage{position:relative;min-width:0;background:#000}
   canvas{display:block}
-  .readout{position:absolute;left:16px;top:14px;line-height:1.6;pointer-events:none;font-variant-numeric:tabular-nums}
+  img.sheet{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+  .stage3d{position:absolute;inset:0}
+  .readout{position:absolute;left:16px;top:14px;line-height:1.6;pointer-events:none;font-variant-numeric:tabular-nums;text-shadow:0 0 6px #000, 0 0 6px #000}
   .readout b{font-weight:normal;border-bottom:1px solid var(--ink)}
   .readout .warn{text-decoration:underline}
-  .status{position:absolute;right:16px;top:14px;color:var(--mid)} .status.busy{color:var(--ink)}
+  .status{position:absolute;right:16px;top:14px;color:var(--mid);text-shadow:0 0 6px #000} .status.busy{color:var(--ink)}
   .look{position:absolute;right:16px;top:36px;color:var(--mid);font-size:11px;letter-spacing:.06em;text-transform:uppercase;user-select:none}
   .look span{cursor:pointer} .look span.on{color:var(--ink);border-bottom:1px solid var(--ink)}
   .rollbar{position:absolute;left:16px;right:16px;bottom:16px;display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center}
@@ -96,20 +98,23 @@
       </div>
     </div>
     <div class="actions">
-      <button class="primary" id="build">Build</button>
-      <button id="sheet" disabled>Sheet</button>
-      <button id="download" disabled>STL</button>
+      <button class="primary" id="build" disabled>Build</button>
+      <button id="view3d" disabled>View 3D</button>
+      <button id="download" disabled>Download STL</button>
     </div>
   </div>
   <div class="stage" id="stage">
+    <img class="sheet" id="sheetImg" alt="">
+    <div class="stage3d" id="stage3d" style="display:none">
+      <div class="rollbar">
+        <input type="range" id="enroll" min="0" max="1" step="0.005" value="0">
+        <div class="val" id="enrollval">0% · 0°</div>
+        <button id="play">Roll</button>
+      </div>
+    </div>
     <div class="readout" id="readout"></div>
     <div class="status" id="status"></div>
-    <div class="look" id="look"><span class="on" data-look="blueprint">blueprint</span> · <span data-look="model">model</span></div>
-    <div class="rollbar">
-      <input type="range" id="enroll" min="0" max="1" step="0.005" value="0">
-      <div class="val" id="enrollval">0% · 0°</div>
-      <button id="play">Roll</button>
-    </div>
+    <div class="look" id="look" style="display:none"><span class="on" data-look="blueprint">blueprint</span> · <span data-look="model">model</span></div>
   </div>
 </div>
 
@@ -120,33 +125,31 @@ import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 
 const $ = id => document.getElementById(id);
 let CFG, P = {}, INT = new Set(), KNOB = {};
-let built = null, groups = [], meshes = [];
-let enroll = 0, playing = false, flip = 1, tab = 'Head';
+let built = null;                                    // latest /api/status/<key> snapshot once a build has started
 const fmt = (k, v) => INT.has(k) ? String(Math.round(v)) : (+v).toFixed(3).replace(/\.?0+$/, '');
 
 // ---------------- controls
 async function init(){
-  let resp;
   try {
-    resp = await fetch('/api/config');
+    const resp = await fetch('/api/config');
     if (!resp.ok) throw new Error(`HTTP ${resp.status} from /api/config`);
     CFG = await resp.json();
+    INT = new Set(CFG.int_keys); P = {...CFG.defaults};
+    for (const k of CFG.knobs) KNOB[k[0]] = {key:k[0], label:k[1], lo:k[2], hi:k[3], step:k[4], group:k[5], kind:k[6], help:k[7]};
+    const sel = $('preset');
+    for (const name of Object.keys(CFG.presets)) { const o = document.createElement('option'); o.textContent = name; if (name === 'textured') o.selected = true; sel.appendChild(o); }
+    sel.onchange = () => { P = {...CFG.defaults, ...CFG.presets[sel.value]}; renderAll(); };
+    for (const [mk, label, def, maps] of CFG.macros.filter(m => CFG.ui.dials.includes(m[0]))) {
+      row('dials', mk, label, 0, 1, 0.01, def, v => { for (const [k, lo, hi] of maps) P[k] = INT.has(k) ? Math.round(lo + (hi - lo) * v) : lo + (hi - lo) * v; renderPart(); refreshDerived(); });
+    }
+    for (const name of Object.keys(CFG.ui.parts)) { const d = document.createElement('div'); d.textContent = name; d.dataset.name = name; d.onclick = () => selectTab(name); $('tabs').appendChild(d); }
+    for (const k of CFG.ui.ruler) knob('rulerknobs', k);
+    $('ruler').querySelector('.sect').onclick = () => { const r = $('ruler'); r.classList.toggle('locked'); $('lock').textContent = r.classList.contains('locked') ? 'locked' : 'unlocked'; };
+    selectTab('Head'); refreshDerived();
+    $('build').disabled = false;
   } catch (e) {
-    setStatus('config failed: ' + e.message + ' — the server may still be starting up; reload the page', false);
-    return;
+    setStatus('init failed: ' + e.message + ' — reload the page', false);
   }
-  INT = new Set(CFG.int_keys); P = {...CFG.defaults};
-  for (const k of CFG.knobs) KNOB[k[0]] = {key:k[0], label:k[1], lo:k[2], hi:k[3], step:k[4], group:k[5], kind:k[6], help:k[7]};
-  const sel = $('preset');
-  for (const name of Object.keys(CFG.presets)) { const o = document.createElement('option'); o.textContent = name; if (name === 'textured') o.selected = true; sel.appendChild(o); }
-  sel.onchange = () => { P = {...CFG.defaults, ...CFG.presets[sel.value]}; renderAll(); };
-  for (const [mk, label, def, maps] of CFG.macros.filter(m => CFG.ui.dials.includes(m[0]))) {
-    row('dials', mk, label, 0, 1, 0.01, def, v => { for (const [k, lo, hi] of maps) P[k] = INT.has(k) ? Math.round(lo + (hi - lo) * v) : lo + (hi - lo) * v; renderPart(); refreshDerived(); });
-  }
-  for (const name of Object.keys(CFG.ui.parts)) { const d = document.createElement('div'); d.textContent = name; d.dataset.name = name; d.onclick = () => selectTab(name); $('tabs').appendChild(d); }
-  for (const k of CFG.ui.ruler) knob('rulerknobs', k);
-  $('ruler').querySelector('.sect').onclick = () => { const r = $('ruler'); r.classList.toggle('locked'); $('lock').textContent = r.classList.contains('locked') ? 'locked' : 'unlocked'; };
-  selectTab('Head'); refreshDerived(); initScene();
 }
 function row(host, id, label, lo, hi, step, val, onv){
   const c = document.createElement('div'); c.className = 'ctrl';
@@ -172,6 +175,7 @@ function setP(key, v){
   refreshDerived();
 }
 function selectTab(name){ tab = name; for (const d of $('tabs').children) d.classList.toggle('on', d.dataset.name === name); renderPart(); }
+let tab = 'Head';
 function renderPart(){ const host = $('part'); host.innerHTML = ''; for (const k of CFG.ui.parts[tab]) knob('part', k); if (tab === 'Head') armEditor(host); }
 function renderAll(){ for (const k of Object.keys(KNOB)) { const s = $('s-'+k); if (s) { s.value = P[k]; $('v-'+k).textContent = fmt(k, P[k]); } } renderPart(); refreshDerived(); }
 
@@ -242,23 +246,29 @@ function renderReadout(d, m){
 }
 function setStatus(t, busy){ const s = $('status'); s.textContent = t; s.className = 'status' + (busy ? ' busy' : ''); }
 
-// ---------------- three.js
+// ---------------- three.js (lazy: only initialised the first time "View 3D" is clicked)
 let renderer, scene, camera, controls, root, grid, ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
-let look = 'blueprint';
+let look = 'blueprint', view = 'sheet', scene3DReady = false, groups = [], meshes = [], enroll = 0, playing = false, flip = 1, lastLoadedKey = null;
+function resize3D(){
+  if (!renderer) return;
+  const stage = $('stage3d'); const w = stage.clientWidth, h = stage.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
 function initScene(){
-  const stage = $('stage');
+  if (scene3DReady) return; scene3DReady = true;
+  const stage = $('stage3d');
   renderer = new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(devicePixelRatio);
   stage.prepend(renderer.domElement); renderer.domElement.style.touchAction = 'none';
   scene = new THREE.Scene(); scene.background = new THREE.Color(0x000000);
   camera = new THREE.PerspectiveCamera(40, 1, 1, 5000); camera.position.set(140, 110, 190);
   controls = new OrbitControls(camera, renderer.domElement); controls.target.set(0, 10, 0);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));
-  const key = new THREE.DirectionalLight(0xffffff, 1.2); key.position.set(80, 160, 120); scene.add(key);
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1.2); keyLight.position.set(80, 160, 120); scene.add(keyLight);
   grid = new THREE.GridHelper(400, 40, 0x2a2a2a, 0x161616); grid.position.y = -0.5; scene.add(grid);
   applyLook();
   root = new THREE.Group(); root.rotation.x = -Math.PI / 2; scene.add(root);
-  const resize = () => { const w = stage.clientWidth, h = stage.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); };
-  new ResizeObserver(resize).observe(stage); resize();
+  new ResizeObserver(resize3D).observe(stage);
   let down = null;
   renderer.domElement.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; });
   renderer.domElement.addEventListener('pointerup', e => {
@@ -268,7 +278,7 @@ function initScene(){
     ray.setFromCamera(mouse, camera); const hit = ray.intersectObjects(meshes, false)[0];
     if (hit) { const i = meshes.indexOf(hit.object); selectTab(i === 0 ? 'Head' : (i === meshes.length - 1 ? 'Tail' : 'Thorax')); }
   });
-  (function loop(t){ requestAnimationFrame(loop); if (playing){ const u = (t % 3200) / 3200; setEnroll(0.5 - 0.5 * Math.cos(u * 2 * Math.PI)); } controls.update(); renderer.render(scene, camera); })(0);
+  (function loop(t){ requestAnimationFrame(loop); if (playing){ const u = (t % 3200) / 3200; setEnroll(0.5 - 0.5 * Math.cos(u * 2 * Math.PI)); } if (view === '3d') { controls.update(); renderer.render(scene, camera); } })(0);
 }
 const fill = new THREE.MeshBasicMaterial({color: 0x000000, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1});
 const inkLine = new THREE.LineBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.9});
@@ -283,7 +293,6 @@ function blueprintPart(geo){
   return [g, m];
 }
 function applyLook(){
-  document.body.classList.toggle('model', look === 'model');
   for (const s of document.querySelectorAll('#look span')) s.classList.toggle('on', s.dataset.look === look);
   if (!scene) return;
   scene.background.set(look === 'blueprint' ? 0x000000 : 0xffffff);
@@ -294,20 +303,18 @@ function applyLook(){
 document.querySelectorAll('#look span').forEach(s => s.onclick = () => { look = s.dataset.look; applyLook(); });
 const loader = new STLLoader();
 const loadSTL = url => new Promise((res, rej) => loader.load(url + '?t=' + Date.now(), res, undefined, e => rej(new Error('mesh fetch failed: ' + url))));
-let placedHinge = false;
-// Add whatever parts have finished since the last poll, so the animal grows on screen part by
-// part instead of staying a black stage until the whole build (which can take minutes) is done.
-async function addNewParts(b){
-  if (!root) throw new Error('3D scene not initialised (config never loaded — reload the page)');
-  if (!placedHinge && b.hinge_z != null) { root.position.set(0, b.hinge_z, 0); placedHinge = true; }
-  for (let i = groups.length; i < b.names.length; i++){
-    const geo = await loadSTL(b.urls[i]);
-    const g = new THREE.Group(); g.position.set(0, i === 0 ? 0 : b.offsets[i - 1], 0);
-    const [part, mesh] = blueprintPart(geo); part.position.set(0, 0, -b.hinge_z); g.add(part); meshes.push(mesh);
+async function loadAllParts(){
+  root.clear(); groups = []; meshes = [];
+  root.position.set(0, built.hinge_z, 0);
+  const names = built.part_names;
+  for (let i = 0; i < names.length; i++){
+    const geo = await loadSTL(`/api/mesh/${built.key}/${names[i]}.stl`);
+    const g = new THREE.Group(); g.position.set(0, i === 0 ? 0 : built.offsets[i - 1], 0);
+    const [part, mesh] = blueprintPart(geo); part.position.set(0, 0, -built.hinge_z); g.add(part); meshes.push(mesh);
     (i === 0 ? root : groups[i - 1]).add(g); groups.push(g);
   }
   setEnroll(enroll);
-  if (groups.length) frame();                    // an empty box gives a NaN camera that never recovers
+  frame();
 }
 function setEnroll(e){
   enroll = e; $('enroll').value = e;
@@ -320,66 +327,63 @@ function frame(){
   const c = box.getCenter(new THREE.Vector3()); const s = box.getSize(new THREE.Vector3()).length(); if (!isFinite(s) || s === 0) return;
   controls.target.copy(c); camera.position.copy(c).add(new THREE.Vector3(0.6, 0.55, 0.95).multiplyScalar(s * 0.9)); camera.near = s / 100; camera.far = s * 10; camera.updateProjectionMatrix();
 }
-function exportSTL(){
-  root.updateMatrixWorld(true); const tris = [];
-  root.traverse(o => { if (!o.isMesh) return; const pos = o.geometry.attributes.position, idx = o.geometry.index, m = o.matrixWorld;
-    const get = i => new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(m); const n = idx ? idx.count : pos.count;
-    for (let i = 0; i < n; i += 3) { const [a, b, c] = idx ? [idx.getX(i), idx.getX(i + 1), idx.getX(i + 2)] : [i, i + 1, i + 2]; tris.push([get(a), get(b), get(c)]); } });
-  const buf = new ArrayBuffer(84 + tris.length * 50), dv = new DataView(buf); dv.setUint32(80, tris.length, true);
-  let off = 84; const nrm = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
-  for (const [p0, p1, p2] of tris) { e1.subVectors(p1, p0); e2.subVectors(p2, p0); nrm.crossVectors(e1, e2).normalize();
-    for (const q of [nrm, p0, p1, p2]) { dv.setFloat32(off, q.x, true); dv.setFloat32(off + 4, q.y, true); dv.setFloat32(off + 8, q.z, true); off += 12; } dv.setUint16(off, 0, true); off += 2; }
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf])); a.download = `trilobite_${built ? built.key : 'model'}_${Math.round(enroll * 100)}pct.stl`; a.click();
+function setView(v){
+  view = v;
+  $('sheetImg').style.display = v === 'sheet' ? 'block' : 'none';
+  $('stage3d').style.display = v === '3d' ? 'block' : 'none';
+  $('look').style.display = v === '3d' ? '' : 'none';
+  $('view3d').textContent = v === '3d' ? 'View Sheet' : 'View 3D';
+  document.body.classList.toggle('model', v === '3d' && look === 'model');
 }
+$('view3d').onclick = async () => {
+  if (!built || built.status !== 'done') return;
+  if (view === '3d') { setView('sheet'); return; }
+  setView('3d'); initScene(); resize3D();
+  if (built.key !== lastLoadedKey) {
+    setStatus('loading 3D…', true);
+    try { await loadAllParts(); lastLoadedKey = built.key; setStatus(`built in ${built.seconds}s`, false); }
+    catch (e) { setStatus('3D load error: ' + e.message, false); }
+  } else { frame(); }
+};
+$('enroll').addEventListener('input', e => { playing = false; $('play').textContent = 'Roll'; setEnroll(parseFloat(e.target.value)); });
+$('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Roll'; };
+$('download').onclick = () => { if (built && built.stl_url) window.location.href = built.stl_url; };
+document.addEventListener('keydown', e => { if (e.key === 'f') { flip = -flip; setEnroll(enroll); } });
 
-// ---------------- actions
-// The build runs in a background thread on the server (some shapes take minutes) and streams parts
-// in as they finish; poll instead of waiting on one HTTP request, so a slow build never looks like
-// a broken proxy/timeout, and the viewer fills in part by part instead of showing a black stage.
-//
-// Measuring (the enrollment/collision instrument) runs after the mesh is complete and can itself take
-// minutes on rare non-watertight geometry; it has nothing to do with viewing, rolling, or downloading
-// the model, so it must not keep the Build button locked. buildGen guards against a stale build's
-// still-polling loop (left over from before the user clicked Build again) touching shared viewer state
-// (root/groups/meshes/built/status) out from under the newer build.
+// ---------------- build: submit params, poll a single status endpoint, show the sheet when done
 let buildGen = 0;
 async function build(){
   const myGen = ++buildGen;
-  setStatus('building…', true); $('build').disabled = true; $('download').disabled = true; $('sheet').disabled = true;
-  if (root) root.clear(); groups = []; meshes = []; built = null; placedHinge = false;
-  const t0 = Date.now();
-  let meshReady = false;
+  built = null; lastLoadedKey = null;
+  setView('sheet'); $('sheetImg').removeAttribute('src');
+  $('download').disabled = true; $('view3d').disabled = true;
+  setStatus('building…', true); $('build').disabled = true;
   try {
-    let r = await (await fetch('/api/build', {method:'POST', body: JSON.stringify({P, mode:'animal'})})).json();
-    if (myGen !== buildGen) return;                 // a newer build started while this fetch was in flight
+    let r = await (await fetch('/api/build', {method:'POST', body: JSON.stringify({P})})).json();
+    if (myGen !== buildGen) return;
     if (r.error) throw new Error(r.error);
-    while (true) {
-      await addNewParts(r);
+    while (r.status !== 'done' && r.status !== 'error') {
+      if (r.status === 'building') setStatus(`building… ${r.done_parts} of ${r.total_parts} parts`, true);
+      else if (r.status === 'measuring') setStatus('measuring…', true);
+      await new Promise(res => setTimeout(res, 1200));
+      r = await (await fetch('/api/status/' + r.key)).json();
       if (myGen !== buildGen) return;
-      if (!meshReady && r.status !== 'building') {
-        meshReady = true; built = r; $('download').disabled = false;
-        setStatus(`mesh built in ${r.mesh_seconds}s — measuring…`, true);
-        $('build').disabled = false;                // the model is usable now; let measuring finish in the background
-      }
-      if (r.status === 'done' || r.status === 'error') break;
-      await new Promise(res => setTimeout(res, 1000));
-      if (myGen !== buildGen) return;
-      if (!meshReady) setStatus(`building… ${Math.round((Date.now() - t0) / 1000)}s (${r.names.length} of ${r.offsets.length ? r.offsets.length + 1 : '?'} parts)`, true);
-      r = await (await fetch('/api/build/' + r.key)).json();
-      if (myGen !== buildGen) return;
-      if (r.error) throw new Error(r.error);
     }
-    if (r.status === 'error') throw new Error(r.error);
-    built = r; renderReadout(r.derived, r.measure); $('sheet').disabled = false; setStatus(`built in ${r.seconds}s`, false);
-  } catch (e) { if (myGen === buildGen) setStatus('error: ' + e.message, false); }
+    if (r.status === 'error') throw new Error(r.error || 'build failed');
+    built = r;
+    renderReadout(r.derived, r.measure);
+    $('download').disabled = !r.stl_url;
+    $('view3d').disabled = false;
+    let msg = `built in ${r.seconds}s`;
+    if (r.sheet_url) $('sheetImg').src = r.sheet_url + '?t=' + Date.now();
+    else msg += ' — sheet unavailable' + (r.error ? ': ' + r.error : '');
+    setStatus(msg, false);
+  } catch (e) {
+    if (myGen === buildGen) setStatus('error: ' + e.message, false);
+  }
   if (myGen === buildGen) $('build').disabled = false;
 }
 $('build').onclick = build;
-$('enroll').addEventListener('input', e => { playing = false; $('play').textContent = 'Roll'; setEnroll(parseFloat(e.target.value)); });
-$('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Roll'; };
-$('download').onclick = exportSTL;
-$('sheet').onclick = () => { if (built) window.open(`/api/sheet/${built.key}.png`, '_blank'); };
-document.addEventListener('keydown', e => { if (e.key === 'f') { flip = -flip; setEnroll(enroll); } });
 init();
 </script>
 </body>
