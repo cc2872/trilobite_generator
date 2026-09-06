@@ -35,12 +35,13 @@ def derived(P):
     return v
 
 CACHE, LOCK = {}, threading.Lock()
+JOBS = {}                        # key -> 'pending' | 'error: ...' while a build is running / failed (not yet in CACHE)
 
-def build(P, mode):
-    k = schema.param_hash(P) + ("s" if mode == "segment" else "a")
-    with LOCK:
-        if k in CACHE: return CACHE[k]
-        t0 = time.time(); folder = os.path.join(OUT, k); os.makedirs(folder, exist_ok=True)
+def _run_build(k, P, mode, folder, t0):
+    """The actual (slow) build, run in a background thread so no HTTP request ever blocks on it —
+    some parameter combinations take minutes (retried CAD builds, non-watertight collision fallback),
+    which is well past any reverse-proxy's timeout (Render included)."""
+    try:
         if mode == "segment":
             parts = [T.build_segment(P, 2)]; names = ["segment"]; offs = []; meas = None
         else:
@@ -53,9 +54,33 @@ def build(P, mode):
             urls.append(f"/api/mesh/{k}/{n}.stl")
             try: m.export(os.path.join(folder, f"{n}.stl"))         # also on disk, for downloads while it lasts
             except Exception: pass
-        CACHE[k] = dict(key=k, P=P, names=names, urls=urls, offsets=offs, hinge_z=T.hinge_z(P), maxAngle=P["maxAngle"],
-                        seconds=round(time.time() - t0, 1), measure=meas, blobs=blobs)
-        return CACHE[k]
+        result = dict(key=k, P=P, names=names, urls=urls, offsets=offs, hinge_z=T.hinge_z(P), maxAngle=P["maxAngle"],
+                       seconds=round(time.time() - t0, 1), measure=meas, blobs=blobs)
+        with LOCK:
+            CACHE[k] = result; JOBS.pop(k, None)
+    except Exception as ex:
+        with LOCK:
+            JOBS[k] = f"error: {ex}"
+
+def build_status(k):
+    """Non-blocking: 'done' (with the result), 'pending', or 'error'."""
+    with LOCK:
+        if k in CACHE: return dict(status="done", **{kk: vv for kk, vv in CACHE[k].items() if kk != "blobs"})
+        job = JOBS.get(k)
+    if job == "pending": return dict(status="pending", key=k)
+    if isinstance(job, str) and job.startswith("error:"): return dict(status="error", error=job[len("error: "):], key=k)
+    return dict(status="unknown", key=k)
+
+def build(P, mode):
+    """Start a build if one for this exact P isn't already running or cached; always returns immediately."""
+    k = schema.param_hash(P) + ("s" if mode == "segment" else "a")
+    with LOCK:
+        if k in CACHE or JOBS.get(k) == "pending": return build_status(k)
+        if isinstance(JOBS.get(k), str): JOBS.pop(k, None)      # a previous error: let this call retry
+        JOBS[k] = "pending"
+    folder = os.path.join(OUT, k); os.makedirs(folder, exist_ok=True)
+    threading.Thread(target=_run_build, args=(k, P, mode, folder, time.time()), daemon=True).start()
+    return dict(status="pending", key=k)
 
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw): super().__init__(*a, directory=HERE, **kw)
@@ -92,8 +117,13 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_response(200); self.send_header("Content-Type", "application/octet-stream")
             self.send_header("Content-Length", str(len(data))); self.send_header("Cache-Control", "no-store")
             self.end_headers(); self.wfile.write(data); return
+        if path.startswith("/api/build/"):                                   # poll: has the background build finished?
+            key = path.split("/")[-1]
+            b = build_status(key)
+            if b["status"] == "done": b = dict(b, derived=derived(b["P"]))
+            return self.send_json(b)
         if path == "/api/health":
-            return self.send_json(dict(ok=True, cached=list(CACHE), web_out=os.path.isdir(OUT), files=sum(len(f) for _, _, f in os.walk(OUT))))
+            return self.send_json(dict(ok=True, cached=list(CACHE), pending=list(JOBS), web_out=os.path.isdir(OUT), files=sum(len(f) for _, _, f in os.walk(OUT))))
         if path == "/api/config":
             return self.send_json(dict(knobs=KNOBS, presets=PRESETS, defaults=schema.defaults(), int_keys=INT_KEYS, ui=schema.UI,
                                        macros=schema.MACROS, schema=schema.SCHEMA_VERSION))
@@ -105,7 +135,8 @@ class Handler(SimpleHTTPRequestHandler):
             if self.path == "/api/derived": return self.send_json(derived(P))
             if self.path == "/api/build":
                 b = build(P, body.get("mode", "animal"))
-                return self.send_json(dict({k: v for k, v in b.items() if k != "blobs"}, derived=derived(P)))
+                if b["status"] == "done": b = dict(b, derived=derived(P))
+                return self.send_json(b)
         except Exception as ex:
             return self.send_json(dict(error=str(ex)), 500)
         self.send_json(dict(error="unknown endpoint"), 404)
