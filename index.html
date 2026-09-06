@@ -126,7 +126,15 @@ const fmt = (k, v) => INT.has(k) ? String(Math.round(v)) : (+v).toFixed(3).repla
 
 // ---------------- controls
 async function init(){
-  const resp = await fetch('/api/config'); CFG = await resp.json();
+  let resp;
+  try {
+    resp = await fetch('/api/config');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} from /api/config`);
+    CFG = await resp.json();
+  } catch (e) {
+    setStatus('config failed: ' + e.message + ' — the server may still be starting up; reload the page', false);
+    return;
+  }
   INT = new Set(CFG.int_keys); P = {...CFG.defaults};
   for (const k of CFG.knobs) KNOB[k[0]] = {key:k[0], label:k[1], lo:k[2], hi:k[3], step:k[4], group:k[5], kind:k[6], help:k[7]};
   const sel = $('preset');
@@ -286,6 +294,7 @@ document.querySelectorAll('#look span').forEach(s => s.onclick = () => { look = 
 const loader = new STLLoader();
 const loadSTL = url => new Promise((res, rej) => loader.load(url + '?t=' + Date.now(), res, undefined, e => rej(new Error('mesh fetch failed: ' + url))));
 async function showBuild(b){
+  if (!root) throw new Error('3D scene not initialised (config never loaded — reload the page)');
   root.clear(); groups = []; meshes = [];
   const geos = await Promise.all(b.urls.map(loadSTL));
   let parent = root;
