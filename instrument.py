@@ -186,6 +186,29 @@ def measure(P, meshes=None, parts=None, budget_s=MEASURE_BUDGET_S):
     out.update(print_validity(P, parts))
     return out
 
+def measure_worker(P, mesh_paths, budget_s, result_path):
+    """Entry point for a measuring subprocess (see trilobite_web.py's _measure_hard_bounded()).
+    measure()'s own budget_s can only check the clock between pairwise checks - it can't interrupt a
+    single already-in-flight OpenCascade/trimesh C call, and in production that alone has hung the
+    whole single-process server for over an hour on a pathological mesh. Running this in a subprocess
+    lets the parent hard-kill it regardless of what it's stuck inside. Loads the STL files the caller
+    already tessellated and exported to disk, rather than rebuilding the CAD model a second time.
+    Must stay at module level (not a closure) so it can be pickled as a multiprocessing.Process target
+    on platforms using the 'spawn' start method (Windows)."""
+    import json
+    import trimesh
+    try:
+        meshes = [trimesh.load(p) for p in mesh_paths]
+        result = measure(P, meshes, parts=None, budget_s=budget_s)
+    except Exception as ex:
+        joints = P["segCount"] + 1
+        result = dict(instrument=INSTRUMENT_VERSION, params=schema.param_hash(P), measure_timed_out=True,
+                      e_max=None, free_curl_deg=None, total_curl_deg=round(joints * P["maxAngle"], 1),
+                      closure_gap_mm=None, enroll_class="unknown", stopped_by=[], touching_at_zero=None,
+                      seconds=None, error=f"measure worker failed: {ex}")
+    with open(result_path, "w") as f:
+        json.dump(result, f)
+
 if __name__ == "__main__":
     import sys, pickle, os
     P = schema.defaults()

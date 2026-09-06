@@ -3,7 +3,7 @@ trilobite_web.py — the generator as a website (v4: schema-driven, instrument-b
 
     python trilobite_web.py        →  http://localhost:8765     (Render/Railway set PORT)
 """
-import json, os, time, threading, io, contextlib, webbrowser
+import json, os, time, threading, multiprocessing, io, contextlib, webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
 import schema, fields, instrument
@@ -41,6 +41,49 @@ CACHE, LOCK = {}, threading.Lock()
 # OpenCascade-heavy build already saturates one core, there is nothing to gain from true concurrency here —
 # serialize the CPU-heavy portion of every build behind one lock so only one build ever runs it at a time.
 BUILD_CPU_LOCK = threading.Lock()
+
+# instrument.measure()'s own time budget (instrument.MEASURE_BUDGET_S) only checks the clock between
+# pairwise checks, so it cannot interrupt a single already-in-flight OpenCascade/trimesh call - and in
+# production that alone has hung the whole single-process server for over an hour on a pathological
+# mesh. MEASURE_HARD_TIMEOUT_S bounds that: it's the wall-clock ceiling _measure_hard_bounded() will
+# wait for the measuring subprocess before forcibly killing it. Set comfortably above
+# instrument.MEASURE_BUDGET_S to give a normal timeout its own soft budget a chance to return cleanly.
+MEASURE_HARD_TIMEOUT_S = instrument.MEASURE_BUDGET_S + 90
+
+def _measure_hard_bounded(P, folder, names_all, parts):
+    """Run instrument.measure() in a subprocess and hard-kill it if it's still running after
+    MEASURE_HARD_TIMEOUT_S, regardless of what C call it's stuck inside. Reloads the STL files
+    _run_build() already exported to `folder` rather than re-tessellating; the subprocess has no
+    build123d `parts` to run instrument.py's volume-sanity checks against (those need the live CAD
+    objects), so print_validity() is re-run here in the parent — cheap, and unaffected by mesh quality
+    — to fill that back in regardless of whether the subprocess finished or was killed."""
+    mesh_paths = [os.path.join(folder, f"{n}.stl") for n in names_all]
+    result_path = os.path.join(folder, "_measure_result.json")
+    if os.path.exists(result_path):
+        try: os.remove(result_path)
+        except Exception: pass
+    joints = P["segCount"] + 1
+    proc = multiprocessing.Process(target=instrument.measure_worker,
+                                    args=(P, mesh_paths, instrument.MEASURE_BUDGET_S, result_path))
+    proc.start()
+    proc.join(MEASURE_HARD_TIMEOUT_S)
+    if proc.is_alive():
+        proc.terminate(); proc.join(5)
+        if proc.is_alive(): proc.kill(); proc.join(5)
+        meas = dict(instrument=instrument.INSTRUMENT_VERSION, params=schema.param_hash(P), measure_timed_out=True,
+                    e_max=None, free_curl_deg=None, total_curl_deg=round(joints * P["maxAngle"], 1),
+                    closure_gap_mm=None, enroll_class="unknown", stopped_by=[], touching_at_zero=None,
+                    seconds=MEASURE_HARD_TIMEOUT_S)
+    else:
+        try:
+            with open(result_path) as f: meas = json.load(f)
+        except Exception as ex:
+            meas = dict(instrument=instrument.INSTRUMENT_VERSION, params=schema.param_hash(P), measure_timed_out=True,
+                        e_max=None, free_curl_deg=None, total_curl_deg=round(joints * P["maxAngle"], 1),
+                        closure_gap_mm=None, enroll_class="unknown", stopped_by=[], touching_at_zero=None,
+                        seconds=MEASURE_HARD_TIMEOUT_S, error=f"measure result unreadable: {ex}")
+    meas.update(instrument.print_validity(P, parts))
+    return meas
 
 def _run_build(k, P, mode, folder, t0):
     """Runs in a background thread so no HTTP request ever blocks on it (some parameter combinations
@@ -84,7 +127,7 @@ def _run_build(k, P, mode, folder, t0):
             e["status"] = "done" if mode == "segment" else "measuring"
             if mode == "segment": e["seconds"] = e["mesh_seconds"]
         if mode != "segment":
-            meas = instrument.measure(P, instrument.part_meshes(P, parts), parts)
+            meas = _measure_hard_bounded(P, folder, names_all, parts)
             with LOCK:
                 e = CACHE[k]; e["measure"] = meas; e["seconds"] = round(time.time() - t0, 1); e["status"] = "done"
     except Exception as ex:
