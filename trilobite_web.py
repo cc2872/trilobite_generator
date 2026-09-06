@@ -35,52 +35,62 @@ def derived(P):
     return v
 
 CACHE, LOCK = {}, threading.Lock()
-JOBS = {}                        # key -> 'pending' | 'error: ...' while a build is running / failed (not yet in CACHE)
 
 def _run_build(k, P, mode, folder, t0):
-    """The actual (slow) build, run in a background thread so no HTTP request ever blocks on it —
-    some parameter combinations take minutes (retried CAD builds, non-watertight collision fallback),
-    which is well past any reverse-proxy's timeout (Render included)."""
+    """Runs in a background thread so no HTTP request ever blocks on it (some parameter combinations
+    take minutes). Parts are appended to CACHE[k] one at a time as they finish, so the client can
+    stream them into the viewer instead of waiting on a black screen; status moves
+    building -> measuring -> done, and the enrollment instrument only runs once every part exists."""
     try:
         if mode == "segment":
-            parts = [T.build_segment(P, 2)]; names = ["segment"]; offs = []; meas = None
+            names_all, fns, offs = ["segment"], [lambda: T.build_segment(P, 2)], []
         else:
-            parts = T.parts_list(P); names = T.PART_NAMES(P); offs = T.joint_offsets(P)
-            meas = instrument.measure(P, instrument.part_meshes(P, parts))
-        urls, blobs = [], {}
-        for n, p in zip(names, parts):
+            names_all = T.PART_NAMES(P)
+            fns = ([lambda: T.build_cephalon(P)] + [(lambda i=i: T.build_segment(P, i)) for i in range(int(P["segCount"]))]
+                   + [lambda: T.build_pygidium(P)])
+            offs = T.joint_offsets(P)
+        with LOCK:
+            CACHE[k]["offsets"] = offs; CACHE[k]["hinge_z"] = T.hinge_z(P)
+        parts = []
+        for n, fn in zip(names_all, fns):
+            p = fn(); parts.append(p)
             m = T.to_trimesh(p, 0.12, 0.15)
-            blobs[n] = m.export(file_type="stl")                      # bytes, kept in memory
-            urls.append(f"/api/mesh/{k}/{n}.stl")
+            blob = m.export(file_type="stl")
             try: m.export(os.path.join(folder, f"{n}.stl"))         # also on disk, for downloads while it lasts
             except Exception: pass
-        result = dict(key=k, P=P, names=names, urls=urls, offsets=offs, hinge_z=T.hinge_z(P), maxAngle=P["maxAngle"],
-                       seconds=round(time.time() - t0, 1), measure=meas, blobs=blobs)
+            with LOCK:
+                e = CACHE[k]; e["names"].append(n); e["urls"].append(f"/api/mesh/{k}/{n}.stl"); e["blobs"][n] = blob
         with LOCK:
-            CACHE[k] = result; JOBS.pop(k, None)
+            e = CACHE[k]; e["mesh_seconds"] = round(time.time() - t0, 1)
+            e["status"] = "done" if mode == "segment" else "measuring"
+            if mode == "segment": e["seconds"] = e["mesh_seconds"]
+        if mode != "segment":
+            meas = instrument.measure(P, instrument.part_meshes(P, parts), parts)
+            with LOCK:
+                e = CACHE[k]; e["measure"] = meas; e["seconds"] = round(time.time() - t0, 1); e["status"] = "done"
     except Exception as ex:
         with LOCK:
-            JOBS[k] = f"error: {ex}"
+            CACHE[k]["status"] = "error"; CACHE[k]["error"] = str(ex)
 
 def build_status(k):
-    """Non-blocking: 'done' (with the result), 'pending', or 'error'."""
+    """Non-blocking snapshot of a build: building (mesh streaming in) / measuring (mesh done,
+    instrument running) / done / error. Never includes the raw STL bytes."""
     with LOCK:
-        if k in CACHE: return dict(status="done", **{kk: vv for kk, vv in CACHE[k].items() if kk != "blobs"})
-        job = JOBS.get(k)
-    if job == "pending": return dict(status="pending", key=k)
-    if isinstance(job, str) and job.startswith("error:"): return dict(status="error", error=job[len("error: "):], key=k)
-    return dict(status="unknown", key=k)
+        e = CACHE.get(k)
+        if e is None: return dict(status="unknown", key=k)
+        return {kk: vv for kk, vv in e.items() if kk != "blobs"}
 
 def build(P, mode):
     """Start a build if one for this exact P isn't already running or cached; always returns immediately."""
     k = schema.param_hash(P) + ("s" if mode == "segment" else "a")
     with LOCK:
-        if k in CACHE or JOBS.get(k) == "pending": return build_status(k)
-        if isinstance(JOBS.get(k), str): JOBS.pop(k, None)      # a previous error: let this call retry
-        JOBS[k] = "pending"
+        e = CACHE.get(k)
+        if e is not None and e["status"] != "error": return build_status(k)
+        CACHE[k] = dict(key=k, P=P, status="building", names=[], urls=[], offsets=[], hinge_z=None,
+                        maxAngle=P["maxAngle"], blobs={}, measure=None, seconds=None, mesh_seconds=None, error=None)
     folder = os.path.join(OUT, k); os.makedirs(folder, exist_ok=True)
     threading.Thread(target=_run_build, args=(k, P, mode, folder, time.time()), daemon=True).start()
-    return dict(status="pending", key=k)
+    return build_status(k)
 
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw): super().__init__(*a, directory=HERE, **kw)
@@ -117,13 +127,14 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_response(200); self.send_header("Content-Type", "application/octet-stream")
             self.send_header("Content-Length", str(len(data))); self.send_header("Cache-Control", "no-store")
             self.end_headers(); self.wfile.write(data); return
-        if path.startswith("/api/build/"):                                   # poll: has the background build finished?
+        if path.startswith("/api/build/"):                                   # poll: parts stream in as they finish
             key = path.split("/")[-1]
             b = build_status(key)
-            if b["status"] == "done": b = dict(b, derived=derived(b["P"]))
+            if b["status"] in ("measuring", "done"): b = dict(b, derived=derived(b["P"]))
             return self.send_json(b)
         if path == "/api/health":
-            return self.send_json(dict(ok=True, cached=list(CACHE), pending=list(JOBS), web_out=os.path.isdir(OUT), files=sum(len(f) for _, _, f in os.walk(OUT))))
+            building = [k for k, v in CACHE.items() if v["status"] in ("building", "measuring")]
+            return self.send_json(dict(ok=True, cached=list(CACHE), building=building, web_out=os.path.isdir(OUT), files=sum(len(f) for _, _, f in os.walk(OUT))))
         if path == "/api/config":
             return self.send_json(dict(knobs=KNOBS, presets=PRESETS, defaults=schema.defaults(), int_keys=INT_KEYS, ui=schema.UI,
                                        macros=schema.MACROS, schema=schema.SCHEMA_VERSION))
@@ -135,7 +146,7 @@ class Handler(SimpleHTTPRequestHandler):
             if self.path == "/api/derived": return self.send_json(derived(P))
             if self.path == "/api/build":
                 b = build(P, body.get("mode", "animal"))
-                if b["status"] == "done": b = dict(b, derived=derived(P))
+                if b["status"] in ("measuring", "done"): b = dict(b, derived=derived(P))
                 return self.send_json(b)
         except Exception as ex:
             return self.send_json(dict(error=str(ex)), 500)

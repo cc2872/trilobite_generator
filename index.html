@@ -293,17 +293,19 @@ function applyLook(){
 document.querySelectorAll('#look span').forEach(s => s.onclick = () => { look = s.dataset.look; applyLook(); });
 const loader = new STLLoader();
 const loadSTL = url => new Promise((res, rej) => loader.load(url + '?t=' + Date.now(), res, undefined, e => rej(new Error('mesh fetch failed: ' + url))));
-async function showBuild(b){
+let placedHinge = false;
+// Add whatever parts have finished since the last poll, so the animal grows on screen part by
+// part instead of staying a black stage until the whole build (which can take minutes) is done.
+async function addNewParts(b){
   if (!root) throw new Error('3D scene not initialised (config never loaded — reload the page)');
-  root.clear(); groups = []; meshes = [];
-  const geos = await Promise.all(b.urls.map(loadSTL));
-  let parent = root;
-  b.names.forEach((n, i) => {
+  if (!placedHinge && b.hinge_z != null) { root.position.set(0, b.hinge_z, 0); placedHinge = true; }
+  for (let i = groups.length; i < b.names.length; i++){
+    const geo = await loadSTL(b.urls[i]);
     const g = new THREE.Group(); g.position.set(0, i === 0 ? 0 : b.offsets[i - 1], 0);
-    const [part, mesh] = blueprintPart(geos[i]); part.position.set(0, 0, -b.hinge_z); g.add(part); meshes.push(mesh);
-    parent.add(g); parent = g; groups.push(g);
-  });
-  root.position.set(0, b.hinge_z, 0); setEnroll(enroll); frame();
+    const [part, mesh] = blueprintPart(geo); part.position.set(0, 0, -b.hinge_z); g.add(part); meshes.push(mesh);
+    (i === 0 ? root : groups[i - 1]).add(g); groups.push(g);
+  }
+  setEnroll(enroll); frame();
 }
 function setEnroll(e){
   enroll = e; $('enroll').value = e;
@@ -328,22 +330,31 @@ function exportSTL(){
 }
 
 // ---------------- actions
-// The build runs in a background thread on the server (some shapes take minutes); poll for it
-// instead of waiting on one HTTP request, so a slow build never looks like a broken proxy/timeout.
+// The build runs in a background thread on the server (some shapes take minutes) and streams parts
+// in as they finish; poll instead of waiting on one HTTP request, so a slow build never looks like
+// a broken proxy/timeout, and the viewer fills in part by part instead of showing a black stage.
 async function build(){
-  setStatus('building…', true); $('build').disabled = true;
+  setStatus('building…', true); $('build').disabled = true; $('download').disabled = true; $('sheet').disabled = true;
+  if (root) root.clear(); groups = []; meshes = []; built = null; placedHinge = false;
   const t0 = Date.now();
+  let meshReady = false;
   try {
     let r = await (await fetch('/api/build', {method:'POST', body: JSON.stringify({P, mode:'animal'})})).json();
     if (r.error) throw new Error(r.error);
-    while (r.status === 'pending') {
-      await new Promise(res => setTimeout(res, 1500));
-      setStatus(`building… ${Math.round((Date.now() - t0) / 1000)}s`, true);
+    while (true) {
+      await addNewParts(r);
+      if (!meshReady && r.status !== 'building') {
+        meshReady = true; built = r; $('download').disabled = false;
+        setStatus(`mesh built in ${r.mesh_seconds}s — measuring…`, true);
+      }
+      if (r.status === 'done' || r.status === 'error') break;
+      await new Promise(res => setTimeout(res, 1000));
+      if (!meshReady) setStatus(`building… ${Math.round((Date.now() - t0) / 1000)}s (${r.names.length} of ${r.offsets.length ? r.offsets.length + 1 : '?'} parts)`, true);
       r = await (await fetch('/api/build/' + r.key)).json();
       if (r.error) throw new Error(r.error);
     }
     if (r.status === 'error') throw new Error(r.error);
-    built = r; await showBuild(r); renderReadout(r.derived, r.measure); $('download').disabled = false; $('sheet').disabled = false; setStatus(`built in ${r.seconds}s`, false);
+    built = r; renderReadout(r.derived, r.measure); $('sheet').disabled = false; setStatus(`built in ${r.seconds}s`, false);
   } catch (e) { setStatus('error: ' + e.message, false); }
   $('build').disabled = false;
 }
