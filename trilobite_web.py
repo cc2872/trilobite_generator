@@ -35,39 +35,52 @@ def derived(P):
     return v
 
 CACHE, LOCK = {}, threading.Lock()
+# trilobite.py's retry-on-garbage machinery (_build_checked, GRID_JITTER, BUILD_NOTES) is module-global,
+# not thread-safe: two builds running their CAD/CPU work at once would race on that state (and could hand
+# a jittered grid to the wrong build mid-part, or corrupt the other's garbage-detection). Since a single
+# OpenCascade-heavy build already saturates one core, there is nothing to gain from true concurrency here —
+# serialize the CPU-heavy portion of every build behind one lock so only one build ever runs it at a time.
+BUILD_CPU_LOCK = threading.Lock()
 
 def _run_build(k, P, mode, folder, t0):
     """Runs in a background thread so no HTTP request ever blocks on it (some parameter combinations
     take minutes). Parts are appended to CACHE[k] one at a time as they finish, so the client can
     stream them into the viewer instead of waiting on a black screen; status moves
-    building -> measuring -> done, and the enrollment instrument only runs once every part exists."""
+    building -> measuring -> done, and the enrollment instrument only runs once every part exists.
+    Every part goes through trilobite._build_checked(), the same sanity-check-and-retry wrapper the
+    offline/console build already uses: OpenCascade occasionally hands back garbage (a failed fuse, or
+    a stray inside-out sliver alongside the real part) for no parameter-related reason, and retrying with
+    a slightly different surface grid reliably fixes it. Streaming the raw, unchecked part (as this used
+    to do) could hand the client — and the instrument's collision measurement — a badly broken mesh, which
+    is slow or pathological enough to make the whole single-process server look hung."""
     try:
-        if mode == "segment":
-            names_all, fns, offs = ["segment"], [lambda: T.build_segment(P, 2)], []
-        else:
-            names_all = T.PART_NAMES(P)
-            fns = ([lambda: T.build_cephalon(P)] + [(lambda i=i: T.build_segment(P, i)) for i in range(int(P["segCount"]))]
-                   + [lambda: T.build_pygidium(P)])
-            offs = T.joint_offsets(P)
-        with LOCK:
-            CACHE[k]["offsets"] = offs; CACHE[k]["hinge_z"] = T.hinge_z(P)
-        parts = []
-        for n, fn in zip(names_all, fns):
-            p = fn(); parts.append(p)
-            m = T.to_trimesh(p, 0.12, 0.15)
-            blob = m.export(file_type="stl")
-            try: m.export(os.path.join(folder, f"{n}.stl"))         # also on disk, for downloads while it lasts
-            except Exception: pass
+        with BUILD_CPU_LOCK:
+            if mode == "segment":
+                names_all, fns, offs = ["segment"], [lambda: T.build_segment(P, 2)], []
+            else:
+                names_all = T.PART_NAMES(P)
+                fns = ([lambda: T.build_cephalon(P)] + [(lambda i=i: T.build_segment(P, i)) for i in range(int(P["segCount"]))]
+                       + [lambda: T.build_pygidium(P)])
+                offs = T.joint_offsets(P)
             with LOCK:
-                e = CACHE[k]; e["names"].append(n); e["urls"].append(f"/api/mesh/{k}/{n}.stl"); e["blobs"][n] = blob
-        with LOCK:
-            e = CACHE[k]; e["mesh_seconds"] = round(time.time() - t0, 1)
-            e["status"] = "done" if mode == "segment" else "measuring"
-            if mode == "segment": e["seconds"] = e["mesh_seconds"]
-        if mode != "segment":
-            meas = instrument.measure(P, instrument.part_meshes(P, parts), parts)
+                CACHE[k]["offsets"] = offs; CACHE[k]["hinge_z"] = T.hinge_z(P)
+            parts = []
+            for n, fn in zip(names_all, fns):
+                p = T._build_checked(fn, n); parts.append(p)
+                m = T.to_trimesh(p, 0.12, 0.15)
+                blob = m.export(file_type="stl")
+                try: m.export(os.path.join(folder, f"{n}.stl"))         # also on disk, for downloads while it lasts
+                except Exception: pass
+                with LOCK:
+                    e = CACHE[k]; e["names"].append(n); e["urls"].append(f"/api/mesh/{k}/{n}.stl"); e["blobs"][n] = blob
             with LOCK:
-                e = CACHE[k]; e["measure"] = meas; e["seconds"] = round(time.time() - t0, 1); e["status"] = "done"
+                e = CACHE[k]; e["mesh_seconds"] = round(time.time() - t0, 1)
+                e["status"] = "done" if mode == "segment" else "measuring"
+                if mode == "segment": e["seconds"] = e["mesh_seconds"]
+            if mode != "segment":
+                meas = instrument.measure(P, instrument.part_meshes(P, parts), parts)
+                with LOCK:
+                    e = CACHE[k]; e["measure"] = meas; e["seconds"] = round(time.time() - t0, 1); e["status"] = "done"
     except Exception as ex:
         with LOCK:
             CACHE[k]["status"] = "error"; CACHE[k]["error"] = str(ex)

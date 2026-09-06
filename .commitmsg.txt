@@ -1,0 +1,45 @@
+Fix build hanging forever by routing the web build through _build_checked()
+
+Root cause of "black stage forever" (confirmed against the live server, not a
+client/rendering issue - the frame()/isFinite fix from the previous commit is
+deployed and working correctly): trilobite_web.py's _run_build() called each
+part's build function directly, bypassing trilobite._build_checked(), the
+sanity-check-and-retry wrapper that the offline/console build already uses.
+
+OpenCascade occasionally hands back garbage for a part - a failed fuse, or a
+stray self-intersecting/inside-out sliver alongside the real solid - for
+reasons unrelated to the model's parameters. Reproduced locally on the
+current default ("textured", 9 segments): seg3 and seg4 both came back at
+~277 mm^3 (vs ~1500-1700 mm^3 for their neighbors) plus a dropped ~-356,000
+mm^3 phantom solid, on both this trilobite.py and the one from before
+yesterday's hinge-bevel commit, so this is pre-existing and unrelated to
+that fix. Streaming that broken geometry to the client - and, worse, into
+the instrument's pairwise collision measurement - is almost certainly what
+was making the whole single-process server look permanently hung: a single
+OpenCascade call can hold the GIL for a long time, so one pathological part
+freezes every request the server is trying to serve, including the client's
+status poll, which just hangs with no error and no new parts, i.e. the
+"stays black forever" symptom.
+
+_build_checked() already exists for exactly this: it retries a part with a
+jittered surface grid (up to 4 attempts) and only gives up after that.
+Verified locally that wrapping build_segment(P, 3) and (P, 4) in it fixes
+both (back to 1642/1595 mm^3, matching their neighbors). Wired _run_build()
+to use it for every part.
+
+Also added a BUILD_CPU_LOCK serializing the CPU-heavy portion of each build:
+_build_checked()'s retry state (GRID_JITTER, BUILD_NOTES) is a plain module
+global in trilobite.py, not thread-safe, and _run_build() runs on its own
+thread per build. Two builds running their CAD work at the same time could
+race on that state. A single build already saturates one core, so there is
+nothing to lose by serializing; CACHE bookkeeping (and so build() returning
+immediately) is unaffected.
+
+Verified end-to-end against a local server: the exact stuck build key from
+the live site (default "textured" preset) now completes - status done,
+e_max 1.0, no collisions, print_valid - after ~114s mesh build (was
+silently producing broken seg3/seg4 before) + ~244s measuring. Total build
+time is long but finite, which is what the async/polling architecture is
+for; it no longer hangs indefinitely.
+
+Co-Authored-By: Warp <agent@warp.dev>
