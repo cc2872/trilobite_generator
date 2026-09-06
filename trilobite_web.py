@@ -34,7 +34,14 @@ def derived(P):
              last_width=round(2 * fields.seg_halfwidth(P, P["segCount"] - 1)), warnings=v["violations"])
     return v
 
-CACHE, LOCK = {}, threading.Lock()
+# RLock, not Lock: build() calls build_status() (which itself does `with LOCK:`) from inside its own
+# `with LOCK:` block on the already-cached-and-done fast path. With a plain Lock that is a guaranteed
+# self-deadlock the moment a client re-POSTs /api/build for params that already finished successfully
+# (status "done", not "error") - i.e. the very next time anyone reloads the page after the first build.
+# Once that thread wedges on re-acquiring its own lock, every other request that touches CACHE via LOCK
+# (build_status polls, new builds) hangs forever too, while endpoints that don't touch LOCK (/api/health,
+# /api/mesh/) keep responding fine - which is exactly the pattern this bug produced in production.
+CACHE, LOCK = {}, threading.RLock()
 # trilobite.py's retry-on-garbage machinery (_build_checked, GRID_JITTER, BUILD_NOTES) is module-global,
 # not thread-safe: two builds running their CAD/CPU work at once would race on that state (and could hand
 # a jittered grid to the wrong build mid-part, or corrupt the other's garbage-detection). Since a single
