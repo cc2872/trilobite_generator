@@ -589,7 +589,7 @@ def build_pygidium(P):
 # =====================================================================
 PART_NAMES = lambda P: ["head"] + [f"seg{i}" for i in range(int(P["segCount"]))] + ["tail"]
 
-SANE_MESH_TOL = 0.12, 0.15         # matches trilobite_web.py's STL-export tessellation (see _sane())
+SANE_MESH_TOL = 0.15, 0.3          # trilobite_web.py's STL export/measure tessellation also uses this (see _sane())
 
 def _sane(part):
     """A part is sane if it is one solid of positive volume that fits in its own bounding box, AND its
@@ -600,10 +600,14 @@ def _sane(part):
 
     Tessellates at SANE_MESH_TOL, the exact tolerance trilobite_web.py exports/measures at (previously
     this checked a *different* tessellation tolerance than the one that got exported and fed to the
-    instrument - to_trimesh() tries several tolerance variants and returns whichever one happens to
-    come out watertight, so passing this check at one tolerance did not guarantee the mesh actually used
-    for measuring was watertight too). The validated mesh is cached on the part as `_checked_mesh` so
-    callers can reuse it instead of tessellating the same part a second time."""
+    instrument, so passing this check did not guarantee the mesh actually used for measuring was
+    watertight too). SANE_MESH_TOL was briefly (0.12, 0.15) - finer - but that tolerance turned out to
+    be both slower AND more prone to landing on a non-watertight tessellation of an otherwise perfectly
+    fine part (measured directly: a normal segment tessellated 10x slower and non-watertight at 0.12
+    where it was fast and watertight at 0.15), which made this always-runs, in-process check itself a
+    new way to freeze the whole server during building. Coarser-but-reliable wins here. The validated
+    mesh is cached on the part as `_checked_mesh` so callers can reuse it instead of tessellating the
+    same part a second time."""
     try:
         bb = part.bounding_box().size
         floor = 0.25 * bb.X * bb.Y * 2.0                     # at least a 2 mm plate over a quarter of the footprint
