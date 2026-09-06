@@ -41,8 +41,8 @@
   /* #view3d lives inside the sheet's own blank title-block space by default (positioned by JS, which
      knows the sheet's fixed layout); positionView3DButton()/setView() move it into a small corner
      toggle (.corner) once the 3D view is active, since there's no sheet showing to overlay then. */
-  #view3d{position:absolute;z-index:5;display:none;align-items:center;justify-content:center;background:rgba(255,255,255,.06);color:var(--ink);border:2px solid var(--ink);font:inherit;letter-spacing:.14em;text-transform:uppercase;font-size:12px;cursor:pointer;transition:background .15s}
-  #view3d:hover{background:var(--ink);color:var(--bg)}
+  #view3d{position:absolute;z-index:5;display:none;align-items:center;justify-content:center;background:rgba(255,255,255,.05);color:var(--ink);border:1px solid rgba(255,255,255,.5);font:inherit;letter-spacing:.1em;text-transform:uppercase;font-size:10px;cursor:pointer;transition:background .15s,border-color .15s}
+  #view3d:hover{background:var(--ink);color:var(--bg);border-color:var(--ink)}
   #view3d.corner{background:var(--bg);border:1px solid var(--ink);font-size:11px;letter-spacing:.06em;padding:8px 14px;right:16px;top:16px;left:auto!important;bottom:auto!important;width:auto!important;height:auto!important}
   .readout{position:absolute;left:16px;top:14px;line-height:1.6;pointer-events:none;font-variant-numeric:tabular-nums;text-shadow:0 0 6px #000, 0 0 6px #000}
   .readout b{font-weight:normal;border-bottom:1px solid var(--ink)}
@@ -341,9 +341,9 @@ function frame(){
 // object-fit:contain can add) rather than with a CSS percentage, since the stage's aspect ratio rarely
 // matches the sheet's.
 const SHEET_W = 1815, SHEET_H = 1287;
-// Half the area of the original blank-space fill, centered on the same point (cx=0.8825, cy=0.675),
-// so it reads as a smaller, less distracting button without moving the label.
-const TITLE_BLANK = {x: 0.828, y: 0.509, w: 0.110, h: 0.332};
+// A small, landscape (wider-than-tall) button reads more like an actual button and less like a shape
+// pasted into the sheet. Centered on the same point as before (cx=0.883, cy=0.675).
+const TITLE_BLANK = {x: 0.808, y: 0.6375, w: 0.15, h: 0.075};
 function positionView3DButton(){
   const btn = $('view3d'); if (btn.classList.contains('corner')) return;
   const stage = $('stage'); const cw = stage.clientWidth, ch = stage.clientHeight;
