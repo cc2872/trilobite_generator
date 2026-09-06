@@ -77,30 +77,37 @@ def overlap_volume(a, b):
         depth = max((d.depth for d in data), default=0.0)
         return OVERLAP_TOL + 1.0 if depth > 0.5 else 0.0
 
-def collisions(P, meshes, enroll, joint_angles=None):
+class MeasureTimeout(Exception):
+    """Raised when a measurement pass can't finish within its time budget (see measure())."""
+
+def collisions(P, meshes, enroll, joint_angles=None, deadline=None):
     """List of (i, j, mm^3) for every pair of parts sharing more than OVERLAP_TOL of volume."""
     posed = _posed(meshes, transforms(P, enroll, joint_angles))
     out = []
     for i in range(len(posed)):
         for j in range(i + 1, len(posed)):
+            if deadline is not None and time.time() > deadline:
+                raise MeasureTimeout(f"collisions() exceeded its time budget ({len(out)} pairs found so far)")
             if not _aabb_hit(posed[i], posed[j]): continue
             v = overlap_volume(posed[i], posed[j])
             if v > OVERLAP_TOL: out.append((i, j, v))
     return out
 
-def e_max(P, meshes, tol=0.004):
+def e_max(P, meshes, tol=0.004, deadline=None):
     """Largest collision-free uniform enrollment in [0, 1] by bisection (checks e=1 first)."""
-    if not collisions(P, meshes, 1.0): return 1.0
-    if collisions(P, meshes, 0.0): return 0.0
+    if not collisions(P, meshes, 1.0, deadline=deadline): return 1.0
+    if collisions(P, meshes, 0.0, deadline=deadline): return 0.0
     lo, hi = 0.0, 1.0
     while hi - lo > tol:
         mid = 0.5 * (lo + hi)
-        if collisions(P, meshes, mid): hi = mid
+        if collisions(P, meshes, mid, deadline=deadline): hi = mid
         else: lo = mid
     return lo
 
-def closure_gap(P, meshes, enroll):
+def closure_gap(P, meshes, enroll, deadline=None):
     """Minimum distance between head and tail at this pose (0 if they overlap)."""
+    if deadline is not None and time.time() > deadline:
+        raise MeasureTimeout("closure_gap() exceeded its time budget")
     posed = _posed(meshes, transforms(P, enroll))
     if _aabb_hit(posed[0], posed[-1]) and overlap_volume(posed[0], posed[-1]) > OVERLAP_TOL: return 0.0
     cm = CollisionManager(); cm.add_object("head", posed[0])
@@ -143,21 +150,39 @@ def print_validity(P, parts=None):
     return dict(print_valid=len(v) == 0, violations=v, pitch=round(d, 2), hinge_z=round(zh, 2),
                 hinge_width=round(Wh, 2), knuckle=round(knuckle, 2), pin_wall=round(pin_wall, 2))
 
-def measure(P, meshes=None, parts=None):
-    """The full ruler. Returns a flat dict suitable as one row of a morphospace dataset."""
+MEASURE_BUDGET_S = 60     # wall-clock ceiling for the whole measuring pass (see measure())
+
+def measure(P, meshes=None, parts=None, budget_s=MEASURE_BUDGET_S):
+    """The full ruler. Returns a flat dict suitable as one row of a morphospace dataset.
+
+    Bounded by budget_s: a part that tessellates non-watertight (rare, but not fully eliminated by
+    trilobite.py's build-time retry) forces overlap_volume()'s Monte-Carlo/FCL fallback, which can be
+    ~50x slower per pair than the normal exact-boolean path. A bisection search plus several full
+    collision passes can then compound that into minutes, and on a slow/shared host, worse. Rather than
+    let one pathological build hang the whole single-process server indefinitely, give up cleanly within
+    budget_s and report the measurement as incomplete instead of presenting a number that was never
+    actually verified."""
     P = schema.coerce(P)
     t0 = time.time()
+    deadline = t0 + budget_s
     meshes = meshes or part_meshes(P, parts)
     joints = P["segCount"] + 1
-    em = e_max(P, meshes)
-    gap = closure_gap(P, meshes, em)
-    first = collisions(P, meshes, min(1.0, em + 0.01))
-    cls = "none" if em < 0.05 else ("complete" if gap < 3.0 else "partial")
-    out = dict(instrument=INSTRUMENT_VERSION, params=schema.param_hash(P),
-               e_max=round(em, 3), free_curl_deg=round(em * joints * P["maxAngle"], 1),
-               total_curl_deg=round(joints * P["maxAngle"], 1), closure_gap_mm=round(gap, 2),
-               enroll_class=cls, stopped_by=[(a, b, round(v, 1)) for a, b, v in first][:6],
-               touching_at_zero=len(collisions(P, meshes, 0.0)) > 0, seconds=round(time.time() - t0, 1))
+    try:
+        em = e_max(P, meshes, deadline=deadline)
+        gap = closure_gap(P, meshes, em, deadline=deadline)
+        first = collisions(P, meshes, min(1.0, em + 0.01), deadline=deadline)
+        touching = len(collisions(P, meshes, 0.0, deadline=deadline)) > 0
+        cls = "none" if em < 0.05 else ("complete" if gap < 3.0 else "partial")
+        out = dict(instrument=INSTRUMENT_VERSION, params=schema.param_hash(P), measure_timed_out=False,
+                   e_max=round(em, 3), free_curl_deg=round(em * joints * P["maxAngle"], 1),
+                   total_curl_deg=round(joints * P["maxAngle"], 1), closure_gap_mm=round(gap, 2),
+                   enroll_class=cls, stopped_by=[(a, b, round(v, 1)) for a, b, v in first][:6],
+                   touching_at_zero=touching, seconds=round(time.time() - t0, 1))
+    except MeasureTimeout:
+        out = dict(instrument=INSTRUMENT_VERSION, params=schema.param_hash(P), measure_timed_out=True,
+                   e_max=None, free_curl_deg=None, total_curl_deg=round(joints * P["maxAngle"], 1),
+                   closure_gap_mm=None, enroll_class="unknown", stopped_by=[], touching_at_zero=None,
+                   seconds=round(time.time() - t0, 1))
     out.update(print_validity(P, parts))
     return out
 

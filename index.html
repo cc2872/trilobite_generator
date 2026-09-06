@@ -235,7 +235,8 @@ function refreshDerived(){
 }
 function renderReadout(d, m){
   let h = `${d.head_mm} · ${d.thorax_mm} · ${d.tail_mm} mm &nbsp; ${d.joints} joints × ${P.maxAngle}° = ${d.total_curl}°`;
-  if (m) h += `<br><b>e_max ${m.e_max}</b> &nbsp; closure gap ${m.closure_gap_mm} mm &nbsp; ${m.enroll_class}` + (m.stopped_by && m.stopped_by.length ? ` &nbsp; stopped by ${m.stopped_by.map(s => s.slice(0,2).join('–')).join(', ')}` : '');
+  if (m && m.measure_timed_out) h += `<br><span class="warn">enrollment check timed out — not verified this build</span>`;
+  else if (m) h += `<br><b>e_max ${m.e_max}</b> &nbsp; closure gap ${m.closure_gap_mm} mm &nbsp; ${m.enroll_class}` + (m.stopped_by && m.stopped_by.length ? ` &nbsp; stopped by ${m.stopped_by.map(s => s.slice(0,2).join('–')).join(', ')}` : '');
   h += `<br>` + (d.warnings.length ? d.warnings.map(w => `<span class="warn">${w}</span>`).join(' · ') : (m ? (m.print_valid ? 'print-valid' : 'not print-valid') : 'not built yet'));
   $('readout').innerHTML = h;
 }
