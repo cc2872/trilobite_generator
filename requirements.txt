@@ -4,3 +4,4 @@ manifold3d
 python-fcl
 numpy
 rtree
+matplotlib

@@ -57,11 +57,25 @@ def trough(dist, sigma):
     return np.exp(-(dist / sigma) ** 2)
 
 def vault(u, P):
-    """Cross-section height factor vs normalized lateral position u ∈ [-1, 1], with a fulcrum."""
+    """Cross-section height factor vs normalized lateral position u ∈ [-1, 1].
+    tent=0: the v4 fulcrum vault.  tent=1: axial Gaussian dome + straight pleural slope, soft-max blended —
+    the form fitted from the reference sculpt (5 parameters, 0.12 mm rms on seg2)."""
     u = np.abs(u); f = P["fulcrum"]
     inner = 1 - 0.35 * (u / f) ** 2
     outer = 0.65 * (1 - (np.maximum(u - f, 0) / (1 - f)) ** 1.6)
-    return np.where(u <= f, inner, outer)
+    v4 = np.where(u <= f, inner, outer)
+    k = P["tent"]
+    if k <= 0.001: return v4
+    m = P["marginHeight"]; k1 = P["pleuralSlope"]
+    zb = 1.0 - 0.04                                      # pleural line starts just under the crest
+    k2 = zb - k1 - m                                     # quadratic term fixed so the slope lands on the margin at the tip
+    def raw(uu):
+        dome = np.exp(-(uu / P["axisSigma"]) ** 2)
+        pleural = zb - k1 * uu - k2 * uu ** 2
+        return np.log(np.exp(4 * dome) + np.exp(4 * pleural)) / 4      # soft max of the two
+    t0, t1 = raw(np.float64(0.0)), raw(np.float64(1.0))
+    tent = (raw(u) - t1) / max(t0 - t1, 1e-6)             # normalise so vault(0)=1, vault(1)=0 like v4
+    return (1 - k) * v4 + k * tent
 
 # =====================================================================
 #  plate builder: grid → spline surface → shell solid, plus an "under" envelope
@@ -90,7 +104,22 @@ def _surface(rows):
     sculpture out; pure interpolation overshoots on sharp features.)"""
     return Face.make_surface_from_array_of_points(rows, tol=0.08, max_deg=3)
 
+def safe_expr(expr, s):
+    """Evaluate a user formula in s with numpy math only. Bad input → 's**2' and a BUILD_NOTES entry."""
+    ns = {k: getattr(np, k) for k in ("sin", "cos", "tan", "exp", "log", "sqrt", "abs", "tanh", "arctan", "minimum", "maximum", "clip", "where")}
+    ns.update(pi=np.pi, e=np.e, s=s)
+    try:
+        v = eval(compile(str(expr), "<genalPath>", "eval"), {"__builtins__": {}}, ns)
+        v = np.broadcast_to(np.asarray(v, float), s.shape).copy()
+        if not np.all(np.isfinite(v)): raise ValueError("non-finite")
+        return v
+    except Exception as ex:
+        BUILD_NOTES.append(("head", "genalPath rejected", f"{expr!r}: {str(ex)[:40]}")); return s ** 2
+
+GRID_JITTER = 0          # added to nu/nv by plate()/under() when a build is retried (see parts_list)
+
 def plate(outline, zfun, t, nu=45, nv=27):
+    nu += GRID_JITTER; nv += GRID_JITTER
     """Shell of thickness t under the surface z = zfun(x, y), on the plan given by outline(u, v)."""
     top = _surface(_grid(outline, zfun, nu, nv))
     bot = _surface(_grid(outline, zfun, nu, nv, dz=-t))
@@ -102,6 +131,7 @@ def plate(outline, zfun, t, nu=45, nv=27):
     return Solid(Shell([top, bot] + sides))
 
 def under(outline, zfun, nu=45, nv=27):
+    nu += GRID_JITTER; nv += GRID_JITTER
     """Solid filling everything under the surface down to z = -1 (envelope for clipping)."""
     top = _surface(_grid(outline, zfun, nu, nv))
     bot = _surface(_grid(outline, zfun, nu, nv, floor=-1.0))
@@ -150,8 +180,9 @@ def add_hinge(part, envelope, P, y_axis, rear):
         if (i % 2 == 0) != rear: continue
         xc = x0 + (i + 0.5) * kw
         part += barrel(xc, kw - c, rB)
-        web = Box(kw - c, rB + c + 1.0, 2 * rB + c + 3,
-                  align=(Align.CENTER, Align.MAX if rear else Align.MIN, Align.CENTER)).moved(Location((xc, y_axis, zh)))
+        z_lo = zh - rB - 0.5 * c - 1.5
+        web = Box(kw - c, rB + c + 1.0, ring_top(P) + 1.0 - z_lo,               # web reaches the shell whatever the top does
+                  align=(Align.CENTER, Align.MAX if rear else Align.MIN, Align.MIN)).moved(Location((xc, y_axis, z_lo)))
         webs = web if webs is None else webs + web
     part += webs & envelope
     part -= barrel(0, Wh + 10, P["boreDia"] / 2)
@@ -159,7 +190,10 @@ def add_hinge(part, envelope, P, y_axis, rear):
               align=(Align.CENTER, Align.MAX if rear else Align.MIN, Align.MIN)).moved(Location((0, y_axis, 0)))
     part += blk
     phi, L = P["maxAngle"] / 2, 80
-    band = 2 * (P["axisFrac"] * (W / 2)) + 0.45 * W          # bevel only the axis and inner pleurae; blades sweep freely
+    if P["bladeChord"] < 1.0:                                   # separate ribs: only the ring and the rib roots overlap
+        band = 2 * (P["axisFrac"] * (W / 2)) + 0.12 * W
+    else:                                                        # v4 plates tile: bevel the inner pleurae too
+        band = 2 * (P["axisFrac"] * (W / 2)) + 0.45 * W
     if rear:
         wedge = Box(band, L, L, align=(Align.CENTER, Align.MIN, Align.MAX)).rotate(Axis.X, -phi)
     else:
@@ -170,6 +204,23 @@ def add_hinge(part, envelope, P, y_axis, rear):
 # =====================================================================
 #  THORACIC SEGMENT i
 # =====================================================================
+
+BUILD_NOTES = []          # (part label, n fragments dropped, total mm^3) — read by the instrument's readout
+
+def prune_slivers(part, min_vol=1.0, frac=0.02, label=""):
+    """Drop degenerate zero-volume solids left behind by tangent booleans, and detached fragments smaller than
+    `frac` of the main solid (a blade tip severed by the ventral bevel would fall off the print anyway).
+    Anything larger is kept so the single-solid test still catches a genuinely unfused spine. Dropped
+    fragments are recorded in BUILD_NOTES — weakness-first, never silent."""
+    sols = part.solids()
+    if len(sols) <= 1: return part
+    vmax = max(x.volume for x in sols)
+    keep = [x for x in sols if x.volume >= max(min_vol, frac * vmax)]
+    dropped = [x for x in sols if x not in keep]
+    if dropped:
+        BUILD_NOTES.append((label, len(dropped), round(sum(x.volume for x in dropped), 1)))
+    return part if len(keep) == len(sols) else Part(children=keep)
+
 def build_segment(P, i=0):
     t, c, h = P["wall"], P["clearance"], P["relief"]
     d = pitch(P); ovl = P["overlap"] * d; flap = max(ovl - 2.0, 1.0)
@@ -181,18 +232,29 @@ def build_segment(P, i=0):
     sweep = P["tipSweep"] * d
 
     L0 = d + flap
+    Ls = pleural_spine_field(P)[i] * w                                   # spine length: the rib's arc simply continues
+    X_tip = w + Ls * math.cos(math.radians(P["spineSweep"]))            # lateral reach of the whole arc
+    S_sp = Ls * math.sin(math.radians(P["spineSweep"]))                  # how far back the spine trails
+    R_TIP = 0.7                                                          # half-chord at the point (≥ nozzle)
     def q_of(x):
         return np.clip((np.abs(x) - a) / (w - a), 0, 1)
+    def p_of(x):
+        return np.clip((np.abs(x) - w) / max(X_tip - w, 1e-6), 0, 1) if Ls > 0.5 else np.zeros_like(np.asarray(x, float))
     def edges(x):
-        """Front and rear edge of the pleural blade at lateral position x: a sickle that sweeps back
-        and narrows toward its tip."""
-        q = q_of(x)
-        yc = 0.5 * L0 + sweep * q ** 1.6
-        hb = 0.5 * L0 * (1 - P["tipTaper"] * q ** 2.5)
+        """Front and rear edge of the pleura at lateral position x. One arc: the blade sweeps back and narrows,
+        and — if this segment carries a spine — the same arc keeps going, its curvature increasing and its
+        chord closing to a point. There is no separate spine object."""
+        q = q_of(x); p = p_of(x)
+        # spine arc constants measured on Olenoides serratus (8 spines, 6 Sep 2026): sweep ∝ q^1.52 ± 0.39,
+        # chord ∝ (1−q)^0.47 ± 0.30 — spines stay wide and close fast at the tip, blunter than a needle
+        yc = 0.5 * L0 + sweep * q ** 1.6 + S_sp * p ** 1.5
+        root = smoothstep(0.0, 0.3, q)
+        half = 0.5 * L0 * (1 - root) + 0.5 * min(P["bladeChord"] * d, L0) * root
+        hb = half * (1 - P["tipTaper"] * q ** 2.5)
+        hb = hb * (1 - p) ** 0.5 + R_TIP * p                             # spine: chord closes to the point
         return yc - hb, yc + hb
     def outline(u, v):
-        q = np.clip((abs(u) * w - a) / (w - a), 0, 1)
-        x = u * w * (1 + 0.06 * q ** 2)                                  # tips reach slightly outward
+        x = u * X_tip
         yf, yr = edges(np.array([abs(x)]))
         return x, float(yf[0] + v * (yr[0] - yf[0]))
 
@@ -206,8 +268,26 @@ def build_segment(P, i=0):
         z -= 0.8 * F * trough(y - ly, 0.9) * (ax > a + 1.0)                  # pleural furrow, following the blade
         z += tubercles(x, y, P, dict(box=(-w + 2, w - 2, ovl + 1, d - 1), ok=lambda xk, yk: abs(xk) > a + 1.5 or abs(xk) < a - 1.5),
                        seed=i, count_scale=0.9 * w)
+        # convexity along the body (reference sculpt: ring arch R≈1.9 mm on a 9 mm chord, blade R≈2.5 mm on a
+        # 5.3 mm chord at 35 mm scale). Both are additive humps that vanish at the two hinge lines (y=0, y=d),
+        # so ring_top, hinge_z and the flap are untouched — the fixed ruler stays fixed.
+        # The chord of each hump runs from the end of the stepped front band (which sits under the previous
+        # segment's flap) to the rear hinge line, so the hump never rises into the flap above it.
+        y0r = ovl - 1.0
+        yc_r = 0.5 * (y0r + d); hr = max(0.5 * (d - y0r), 0.5)
+        ring_hump = P["ringArch"] * h * np.clip(1 - ((y - yc_r) / hr) ** 2, 0, 1)
+        yf_b, yr_b = edges(x); y0b = yf_b + ovl - 1.0
+        yc_b = 0.5 * (y0b + yr_b); hb_b = np.maximum(0.5 * (yr_b - y0b), 0.5)
+        blade_hump = P["bladeCamber"] * h * np.clip(1 - ((y - yc_b) / hb_b) ** 2, 0, 1)
+        ax_w = plateau(x, a + 1.0, 1.5)
+        window = smoothstep(ovl - 1.5, ovl + 0.5, y - yf_b)                  # belt and braces: nothing under the flap
+        z += window * (ax_w * ring_hump + (1 - ax_w) * blade_hump)
+        if Ls > 0.5:                                                          # the spine droops toward its point
+            p = p_of(x)
+            z = np.where(p > 0, np.maximum(margin * (1 - 0.55 * p), t + 0.6), z)
         yf, _ = edges(x)
-        drop = np.minimum(t + c + 0.7 * F + 0.3, np.maximum(z - (t + 0.6), 0))    # never thinner than the wall
+        t_prev = t * (P["headWall"] if i == 0 else 1.0)                            # the part shingled over this front
+        drop = np.minimum(t_prev + c + 0.7 * F + 0.3, np.maximum(z - (t + 0.6), 0))    # never thinner than the wall
         z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y - yf))                          # stepped front band, following the blade
         return z
 
@@ -222,17 +302,11 @@ def build_segment(P, i=0):
             seg += Box(0.06 * P["width"], rim_len, t, align=(Align.MAX if s > 0 else Align.MIN, Align.MIN, Align.MIN)).moved(Location((s * w, yf_m + 0.5, 0)))
     seg = add_hinge(seg, env, P, d, rear=True)
     seg = add_hinge(seg, env, P, 0, rear=False)
-    # pleural spines from the field — added AFTER the hinge so the stop bevel never trims them;
-    # whether they clear the next segment when curling is the instrument's job to find out
-    Ls = pleural_spine_field(P)[i] * w
+    # pleural spines are part of the plate (edges() above): body, not ornament — the bevel and the instrument see them
     r = 0.45 * margin
-    if Ls > 0.5:
-        _, yr_tip = edges(np.array([w]))
-        for s in (1, -1):   # needle spine continuing the blade tip
-            seg += spine(r, 0.5, Ls, (s * (w - 0.3 * r), float(yr_tip[0]) - 1.2 * r, r), s * P["spineSweep"])
     if P["axialSpine"] > 0.02:
         seg += spine(0.6 * r + 0.6, 0.5, P["axialSpine"] * h, (0, ovl + 0.45 * (d - ovl), h + rise - 1.0), 0, pitch_deg=60)
-    return seg
+    return prune_slivers(seg, label=f"seg{i}")
 
 # =====================================================================
 #  CEPHALON
@@ -259,7 +333,7 @@ def head_skin_zfun(P, Lc, wh):
     return zfun_skin
 
 def build_cephalon(P):
-    t, c, h = P["wall"], P["clearance"], P["relief"]
+    t, c, h = P["wall"] * P["headWall"], P["clearance"], P["relief"] * P["headRelief"]
     Lc = P["cephFrac"] * P["length"]
     ovl = P["overlap"] * pitch(P); flap = max(ovl - 2.0, 1.0)
     wh = head_halfwidth(P)
@@ -271,19 +345,49 @@ def build_cephalon(P):
     Le = Lc - par                                                       # elliptical front length
     skin_zfun = head_skin_zfun(P, Lc, wh) if P["headSkin"] > 0.001 else None
 
+    nO = P["headOutlineExp"]
     def xmax(y):
         yy = np.asarray(y, float)
         front = np.clip((-yy - par) / Le, 0, 1)
-        return np.maximum(wh * np.sqrt(np.clip(1 - front ** 2, 0, 1)), 1.5)
+        return np.maximum(wh * np.clip(1 - front ** nO, 0, 1) ** (1 / nO), 1.5)     # superellipse front (reference n=2.15)
 
     gs = P["genalSweep"] * pitch(P)
+    Lg = P["genalSpine"] * Lc                                            # genal horn length (0 = plain genal angle)
+    gc = math.radians(P["genalCurve"])
+    H0 = 0.72                                                            # the crescent's horn begins at 0.72 of half-width
+    arc = P["headRearArc"] * Lc; nR = P["headRearExp"]
     def cheek(u):
-        q = np.clip((abs(u) * wh - a) / (wh - a), 0, 1)
-        return flap + gs * q ** 2.2                              # rear edge sweeps back toward the genal angle
+        q = np.clip((np.abs(u) * wh - a) / (wh - a), 0, 1)
+        # rear edge: the genal sweep (v4, ≤ 0.6 pitch) plus the crescent's concave rear arc — the head's
+        # top-down band thins from the axis to the genal angles as the rear edge bows back by headRearArc·Lc
+        return flap + gs * q ** 2.2 + arc * q ** nR
+    Y_tip = float(cheek(H0)) + (Lg * math.cos(gc) if Lg > 0.5 else 0.0)  # ... measured from the rear edge where they start
+    def y_front(ax):
+        """front edge of the head at |x| ≤ wh (inverse of the superellipse xmax)."""
+        r = np.clip(ax / wh, 0, 1)
+        return -par - Le * np.clip(1 - r ** nO, 0, 1) ** (1 / nO)
+    W_arm = P["genalWidthMM"] if P["genalWidthMM"] > 0.05 else P["genalWidth"] * wh
+    W_arm = max(W_arm, 1.5)                                               # crescent arm thickness across, mm
+    kT = P["genalTaper"]                                                  # arm end: 0.5 blunt/rounded … 3 pointed
+    x_in = wh - W_arm
+    S_ = np.linspace(0, 1, 241)
+    path = safe_expr(P["genalPath"], S_)                                  # user formula f(s): sideways offset shape
+    path = path - path[0]
+    if np.max(np.abs(path)) > 1e-9: path = path / np.max(np.abs(path))    # normalised so genalCurve sets the amount
+    x_off = math.tan(gc) * Lg * path                                      # sideways (mm) along the arm
+    xc_s = (wh - 0.5 * W_arm) + x_off                                     # centreline x(s); y(s) = yr_root + Lg·s
+    W_s = W_arm * np.clip(1 - S_ ** (2.0 / max(kT, 0.2)), 0, 1) ** (0.5 * kT) + 0.7   # width along the arm: end taper
+    X_tip = float(np.max(xc_s + 0.5 * W_s))
+    def head_edges(x):
+        """Front and rear edge of the head BODY at lateral |x|: superellipse front + concave rear.
+        The crescent's arms are separate swept bands (build_arm) fused on afterwards, so a path that turns
+        inward leaves open water between the arm and the thorax instead of filling it."""
+        ax = np.abs(np.asarray(x, float))
+        return y_front(np.minimum(ax, wh)), cheek(np.minimum(ax, wh) / wh)
     def outline(u, v):
-        yr = cheek(u)
-        y = yr - v * (Lc + yr)
-        return u * float(xmax(y)), y
+        x = u * X_tip
+        yf, yr = head_edges(np.array([abs(x)]))
+        return x, float(yr[0] - v * (yr[0] - yf[0]))
 
     def glab_half(y):
         yy = np.asarray(y, float)
@@ -295,7 +399,15 @@ def build_cephalon(P):
         xm = xmax(y)
         front = np.clip((-y - par) / Le, 0, 1)
         tz = np.sqrt(np.clip(1 - front ** 2, 0, 1)) * 0.9 + 0.1
-        z = margin * 0.6 + (h - margin * 0.6) * vault(x / xm, P) * tz
+        z_v4 = margin * 0.6 + (h - margin * 0.6) * vault(x / xm, P) * tz
+        # superellipsoid dome (reference head: m=1.49, semi-axes 0.82 wh × 0.72 Lc, centred 0.19 Lc in from the rear,
+        # flat border outside it). Blended with the v4 separable vault by `tent`.
+        mD, fill = P["headDomeExp"], P["headDomeFill"]
+        rim = margin * 0.6
+        yc = -0.19 * Lc; aD = fill * wh; bD = 0.88 * fill * Lc
+        rD = (ax / aD) ** mD + (np.abs(y - yc) / bD) ** mD
+        z_dome = rim + (h - rim) * np.clip(1 - rD, 0, 1) ** (1 / mD)
+        z = (1 - P["tent"]) * z_v4 + P["tent"] * z_dome
         g = glab_half(y)
         gl = plateau(x, g) * (1 - smoothstep(0.80 * Lc, 0.92 * Lc, -y))    # glabella, fading at the front
         z += (rise + P["glabRise"] * h * np.clip(-y / Lc, 0, 1)) * gl
@@ -323,24 +435,66 @@ def build_cephalon(P):
             z += 0.35 * F * plateau(dist, 0.45 * bw, 0.4 * bw)
         if skin_zfun is not None:                                           # blend toward the real registered skin(s)
             z = (1 - P["headSkin"]) * z + P["headSkin"] * skin_zfun(x, y)
-        return z
+        w0_ = seg_halfwidth(P, 0)
+        def z_th_arm(axx):
+            return margin + (h - margin) * vault(np.clip(axx / w0_, 0, 1), P) + P["bladeCamber"] * h + t + c + 0.3
+        # rear band: the head's shingle over segment 0 must follow the thoracic vault, whatever the dome does,
+        # so the stepped front of segment 0 slides under it exactly as it does under another segment
+        w0 = seg_halfwidth(P, 0)
+        z_th = margin + (h - margin) * vault(np.clip(ax / w0, 0, 1), P)
+        rear_band = 1 - smoothstep(flap + 1.0, flap + 4.0, -y)
+        z = np.maximum(z, z_th * rear_band)
+        if arc > 0.5:                                                          # crescent arms behind the hinge line: a hood
+            hood = smoothstep(flap - 0.5, flap + 2.0, y)                       # over the ribs, never into them
+            z = np.maximum(z, hood * (z_th + P["bladeCamber"] * h + t + c + 0.3))
+        # occipital ring: the axis must stand at ring_top over the head hinge whatever the dome does
+        occ = ring_top(P) * plateau(x, a, 1.0) * (1 - smoothstep(0.10 * Lc, 0.16 * Lc, -y))
+        return np.maximum(z, occ)
 
-    head = plate(outline, zfun, t, nu=45, nv=33)
+    head = plate(outline, zfun, t, nu=45, nv=33)                          # t = wall·headWall
     env = under(outline, zfun, nu=45, nv=33)
     head = add_hinge(head, env, P, 0, rear=True)
-    if P["genalSpine"] > 0.02:                      # after the hinge: the bevel must not trim them
-        Lg = P["genalSpine"] * Lc
-        for s in (1, -1):
-            head += spine(0.55 * margin, 0.6, Lg, (s * (wh + 0.3 * margin), -0.14 * Lc, 0.5 * margin), s * (18 + 0.5 * P["genalCurve"]))
+    # the crescent's arms: swept bands of width W_s along the user's path, starting inside the head so the fuse is solid
+    if Lg > 0.5:
+        yr_root = float(cheek(np.array([1.0]))[0])
+        S0 = -0.12                                                        # start 12 % of the arm inside the head
+        def arm_outline(side):
+            def outline(u, v):
+                s = S0 + (1 - S0) * 0.5 * (u + 1)
+                sc = np.clip(s, 0, 1)
+                xc = float(np.interp(sc, S_, xc_s)); w = float(np.interp(sc, S_, W_s))
+                # tangent of the centreline for the across direction
+                ds = 1e-3; xa = float(np.interp(np.clip(sc + ds, 0, 1), S_, xc_s)); xb = float(np.interp(np.clip(sc - ds, 0, 1), S_, xc_s))
+                tx, ty = (xa - xb), Lg * 2 * ds; nrm = math.hypot(tx, ty); tx, ty = tx / nrm, ty / nrm
+                nx, ny = ty, -tx                                          # normal (across the arm)
+                off = (v - 0.5) * w
+                return side * (xc + nx * off), yr_root + Lg * s + ny * off
+            return outline
+        def arm_z(x, y):
+            ax = np.abs(x)
+            z_h = max(P["marginHeight"] * h, 0.0) + t + 0.6 + c
+            z_in = margin + (h - margin) * vault(np.clip(ax / seg_halfwidth(P, 0), 0, 1), P) + P["bladeCamber"] * h + t + c + 0.3
+            inboard = ax < seg_halfwidth(P, 0) + 1.0
+            z = np.where(inboard & (y > yr_root - 0.5), np.maximum(z_h, z_in), z_h)
+            body = y < yr_root + 0.5                                     # inside the head: follow the head's own surface
+            zb = zfun(np.asarray(x, float), np.asarray(y, float)) - 0.3      # (slightly inside it, so the fuse is solid)
+            blend = smoothstep(yr_root - 0.5, yr_root + 2.5, y)
+            return np.where(body, zb, (1 - blend) * zb + blend * z)
+        for side in (1, -1):
+            arm = plate(arm_outline(side), arm_z, t, nu=41, nv=7)
+            if arm is not None and len(arm.solids()) == 1 and arm.volume > 0:
+                head += arm
+            else:
+                BUILD_NOTES.append(("head", "arm failed", f"side {side}"))
     if P["occipitalSpine"] > 0.02:
         head += spine(0.6 * margin, 0.5, P["occipitalSpine"] * Lc, (0, -0.07 * Lc, ring_top(P) - 1.0), 0, pitch_deg=55)
-    return head
+    return prune_slivers(head, label="head")
 
 # =====================================================================
 #  PYGIDIUM
 # =====================================================================
 def build_pygidium(P):
-    t, c, h = P["wall"], P["clearance"], P["relief"]
+    t, c, h = P["wall"] * P["tailWall"], P["clearance"], P["relief"] * P["tailRelief"]
     Lp = P["pygFrac"] * P["length"]
     ovl = P["overlap"] * pitch(P)
     wp = tail_halfwidth(P)
@@ -353,14 +507,43 @@ def build_pygidium(P):
     def xmax(y):
         yy = np.clip(np.asarray(y, float) / Lp, 0, 1)
         return np.maximum(wp * np.sqrt(np.clip(1 - yy ** 2, 0, 1)), 1.5)
-
+    # ---- the shield plan is parametrised by angle round the margin, so anything the margin grows —
+    #      the two forks, the marginal spines — is a radial continuation of it. No cones anywhere.
+    Lf = P["pygSpine"] * Lp
+    n_m = int(P["pygMarginal"]); Lm = P["pygMarginalLen"] * Lp
+    sp = math.radians(P["pygSplay"])
+    phi_f = math.atan(wp / Lp * math.tan(math.pi / 2 - sp)) if Lf > 0.5 else None    # fork leaves the margin at this angle
+    hphi_f = math.radians(13)
+    phi_m = [math.radians(50 + 80 * (k + 0.5) / n_m) for k in range(n_m)]          # marginal spines round the rear arc (clear of the last ribs)
+    hphi_m = math.radians(80 / max(n_m, 1)) * 0.5 * 1.3      # roots overlap a little: a scalloped margin tessellates, needle roots do not
+    def bump(phi, phi_k, h, e):
+        return np.clip(1 - np.abs(phi - phi_k) / h, 0, 1) ** e
+    def radial_extra(phi):
+        """Extra radial length of the margin at angle phi: forks + marginal spines, each a smooth point."""
+        ex = np.zeros_like(phi)
+        if Lf > 0.5:
+            for pf in (phi_f, math.pi - phi_f): ex = np.maximum(ex, Lf * bump(phi, pf, hphi_f, 1.5))
+        for pk in phi_m:
+            for pm in (pk, math.pi - pk): ex = np.maximum(ex, Lm * bump(phi, pm, hphi_m, 1.2))
+        return ex
+    def margin_pt(phi):
+        x0, y0 = wp * np.cos(phi), Lp * np.sin(phi)
+        r0 = np.hypot(x0, y0); f = 1 + radial_extra(phi) / np.maximum(r0, 1e-6)
+        return x0 * f, y0 * f
     def outline(u, v):
-        y = v * Lp
-        return u * float(xmax(y)), y
+        phi = 0.5 * math.pi * (1 - u)
+        mx, my = margin_pt(np.array([phi])); fx = u * (wp - 1.0)             # front hinge line, slightly inset at the corners
+        return float((1 - v) * fx + v * mx[0]), float(v * my[0])
+    def outside(x, y):
+        """How far outside the basic ellipse a point is, as a fraction of the longest growth (0 inside)."""
+        r = np.sqrt((x / wp) ** 2 + (y / Lp) ** 2)
+        Lmax = max(Lf if Lf > 0.5 else 0.0, Lm if n_m else 0.0, 1e-6)
+        return np.clip((r - 1) * np.hypot(x, y) / np.maximum(r, 1e-6) / Lmax, 0, 1)
 
     def zfun(x, y):
         ax = np.abs(x); xm = xmax(y); yy = np.clip(y / Lp, 0, 1)
-        tz = np.sqrt(np.clip(1 - yy ** 2, 0, 1)) * 0.9 + 0.1
+        nT = P["tailDomeExp"]                                                   # 2 = elliptical fall-off (v4); higher = flatter, then a steeper rear
+        tz = np.clip(1 - yy ** nT, 0, 1) ** (1 / nT) * 0.9 + 0.1
         z = margin * 0.6 + (h - margin * 0.6) * vault(x / xm, P) * tz
         ay = a * (1 - 0.85 * yy)                                            # tapering pygidial axis
         z += rise * plateau(x, ay) * (1 - smoothstep(0.75 * Lp, 0.95 * Lp, y))
@@ -378,40 +561,63 @@ def build_pygidium(P):
             z += 0.35 * F * plateau(dist, 0.45 * bw, 0.4 * bw)
         z += tubercles(x, y, P, dict(box=(-wp + 3, wp - 3, ovl + 1, Lp - 3), ok=lambda xk, yk: abs(xk) < wp * math.sqrt(max(0.0, 1 - (yk / Lp) ** 2)) - 2.5),
                        seed=77, count_scale=1.6 * wp)
+        ov = outside(ax, y)                                                            # forks and marginal spines droop
+        z = np.where(ov > 0, np.maximum(margin * 0.6 * (1 - 0.5 * ov), t + 0.6), z)     # toward their points
+        if P["tailRelief"] < 0.999:                                                    # only when the tail is lowered: axis holds
+            z = np.maximum(z, ring_top(P) * plateau(x, a, 1.0) * (1 - smoothstep(0.5 * ovl, ovl + 1.0, y)))   # ring_top over the hinge
         drop = np.minimum(t + c + 0.7 * F + 0.3, np.maximum(z - (t + 0.6), 0))
-        z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y))                               # stepped front under the last flap
+        z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y))                               # stepped front under the last flap (last word)
         return z
 
-    tail = plate(outline, zfun, t, nu=45, nv=27)
-    env = under(outline, zfun, nu=45, nv=27)
+    nu_t = 53 if (n_m or Lf > 0.5) else 45                                     # points need columns (73 stalls the fit)
+    tail = plate(outline, zfun, t, nu=nu_t, nv=27)
+    env = under(outline, zfun, nu=nu_t, nv=27)
     tail = add_hinge(tail, env, P, 0, rear=False)
-    if P["pygSpine"] > 0.02:
-        Ls = P["pygSpine"] * Lp
-        for s in (1, -1):
-            tail += spine(0.5 * margin, 0.6, Ls, (s * 0.5 * wp, 0.6 * Lp, 0.5 * margin), s * P["pygSplay"])
+    # the paired tail spines are the forks in tail_edges() above — the margin running on, not cones
     if P["termSpine"] > 0.02:
         tail += spine(0.5 * margin, 0.6, P["termSpine"] * Lp, (0, 0.85 * Lp, 0.5 * margin), 0)
-    n_m = int(P["pygMarginal"])
-    if n_m > 0:
-        Lm = P["pygMarginalLen"] * Lp; r = 0.4 * margin
-        for k in range(n_m):
-            phi = math.radians(15 + (150 * (k + 0.5) / n_m))            # around the elliptical margin, one side
-            for s in (1, -1):
-                bx, by = s * 0.92 * wp * math.cos(phi), 0.92 * Lp * math.sin(phi)
-                nx, ny = s * math.cos(phi) / wp, math.sin(phi) / Lp        # outward normal of the ellipse
-                dx, dy = nx, ny + 0.6 / Lp                                  # swept back
-                yaw = math.degrees(math.atan2(dx, dy))
-                tail += spine(r, 0.5, Lm, (bx, by, 0.5 * margin), yaw)
-    return tail
+    # marginal spines are scallops of the margin (tail_edges above) — the last cone family is gone
+    return prune_slivers(tail, label="tail")
 
 # =====================================================================
 #  ASSEMBLY, CHECK, ANIMATION, EXPORT
 # =====================================================================
 PART_NAMES = lambda P: ["head"] + [f"seg{i}" for i in range(int(P["segCount"]))] + ["tail"]
 
+def _sane(part):
+    """A part is sane if it is one solid of positive volume that fits in its own bounding box."""
+    try:
+        bb = part.bounding_box().size
+        floor = 0.25 * bb.X * bb.Y * 2.0                     # at least a 2 mm plate over a quarter of the footprint
+        return len(part.solids()) == 1 and floor < part.volume <= bb.X * bb.Y * bb.Z * 1.05
+    except Exception:
+        return False
+
+def _build_checked(fn, label):
+    """Build a part; if OpenCascade hands back garbage (failed fuse → tool only, or an inside-out body),
+    retry with a slightly different surface grid. Every retry is recorded in BUILD_NOTES."""
+    global GRID_JITTER
+    for k, jit in enumerate((0, 2, -2, 4)):
+        GRID_JITTER = jit
+        n0 = len(BUILD_NOTES)
+        try:
+            part = fn()
+        except Exception as e:
+            BUILD_NOTES.append((label, "build error", str(e)[:60])); part = None
+        # a pruned negative-volume solid means the boolean failed even if what is left looks sane
+        garbage = any(isinstance(n[2], (int, float)) and n[2] < 0 for n in BUILD_NOTES[n0:])
+        if part is not None and _sane(part) and not garbage:
+            if k: BUILD_NOTES.append((label, "rebuilt", f"grid jitter {jit:+d}"))
+            GRID_JITTER = 0; return part
+    GRID_JITTER = 0
+    BUILD_NOTES.append((label, "UNSANE after retries", ""))
+    return part
+
 def parts_list(P):
     P = schema.coerce(P)
-    return [build_cephalon(P)] + [build_segment(P, i) for i in range(int(P["segCount"]))] + [build_pygidium(P)]
+    return ([_build_checked(lambda: build_cephalon(P), "head")]
+            + [_build_checked(lambda i=i: build_segment(P, i), f"seg{i}") for i in range(int(P["segCount"]))]
+            + [_build_checked(lambda: build_pygidium(P), "tail")])
 
 def chain_transforms(P, enroll):
     """Location of each part for a uniform enrollment (0..1)."""

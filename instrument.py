@@ -63,10 +63,19 @@ def overlap_volume(a, b):
     if a.is_volume and b.is_volume:
         r = trimesh.boolean.intersection([a, b], engine="manifold")
         return float(abs(r.volume)) if r is not None and len(r.faces) else 0.0
-    cm = CollisionManager(); cm.add_object("a", a)
-    hit, data = cm.in_collision_single(b, return_data=True)
-    depth = max((d.depth for d in data), default=0.0)
-    return OVERLAP_TOL + 1.0 if depth > 0.5 else 0.0
+    # Monte-Carlo estimate: volume samples of the smaller part tested against the other. Approximate
+    # (±~10% at this sample count) but a real mm^3 number, not a binary guess from FCL contact depth.
+    small, big = (a, b) if abs(a.volume) <= abs(b.volume) else (b, a)
+    try:
+        pts = trimesh.sample.volume_mesh(small, 6000)
+        if len(pts) == 0: return 0.0
+        inside = np.concatenate([big.contains(pts[k:k + 1000]) for k in range(0, len(pts), 1000)])   # chunked: no embree here
+        return float(np.mean(inside)) * abs(small.volume)
+    except Exception:
+        cm = CollisionManager(); cm.add_object("a", a)
+        hit, data = cm.in_collision_single(b, return_data=True)
+        depth = max((d.depth for d in data), default=0.0)
+        return OVERLAP_TOL + 1.0 if depth > 0.5 else 0.0
 
 def collisions(P, meshes, enroll, joint_angles=None):
     """List of (i, j, mm^3) for every pair of parts sharing more than OVERLAP_TOL of volume."""
@@ -98,7 +107,25 @@ def closure_gap(P, meshes, enroll):
     return float(cm.min_distance_single(posed[-1]))
 
 # ---------------------------------------------------------------- verdicts
-def print_validity(P):
+def volume_sanity(P, parts):
+    """A failed OpenCascade fuse returns the tool, not an error — the shield 'vanished' this way once, and a
+    segment once came back inside-out. Compare each part's volume with a crude expectation from its bounding
+    box: a plate that lost its shell is well under 40 % of a shell-thick slab over its footprint; a bad body is
+    negative or absurdly large. Returns a list of violation strings (empty = sane)."""
+    import trilobite as T
+    v = []
+    for name, part in zip(T.PART_NAMES(P), parts):
+        vol = float(part.volume); bb = part.bounding_box().size
+        footprint = float(bb.X * bb.Y)
+        expect = footprint * P["wall"] * 0.625           # a plate over ~62 % of the box; 40 % of that = 25 % footprint
+        if vol <= 0: v.append(f"{name}: non-positive volume {vol:.0f} mm3 (failed boolean)")
+        elif vol < 0.4 * expect: v.append(f"{name}: volume {vol:.0f} mm3 < 40 % of expected ~{expect:.0f} (part lost in a boolean?)")
+        elif vol > footprint * bb.Z * 1.05: v.append(f"{name}: volume {vol:.0f} mm3 exceeds its bounding box (inside-out body)")
+        n = len(part.solids())
+        if n != 1: v.append(f"{name}: {n} solids")
+    return v
+
+def print_validity(P, parts=None):
     P = schema.coerce(P)
     import trilobite as T
     d = T.pitch(P); zh, Wh = T.hinge_z(P), T.hinge_width(P)
@@ -111,8 +138,8 @@ def print_validity(P):
     if zh < P["barrelR"] + 3: v.append(f"hinge axis {zh:.1f} mm too low")
     if d < 8: v.append(f"pitch {d:.1f} mm < 8")
     if Wh < 6: v.append(f"hinge width {Wh:.1f} mm < 6")
-    if 0.5 * margin < 1.5 and (max(fields.pleural_spine_field(P)) > 0 or P["genalSpine"] > 0 or P["pygSpine"] > 0):
-        v.append(f"spine base {0.5*margin:.1f} mm < 1.5")
+    # spines are in-plane continuations of the plates (chord ≥ 1.4 mm, wall thickness): no separate base rule
+    if parts is not None: v += volume_sanity(P, parts)
     return dict(print_valid=len(v) == 0, violations=v, pitch=round(d, 2), hinge_z=round(zh, 2),
                 hinge_width=round(Wh, 2), knuckle=round(knuckle, 2), pin_wall=round(pin_wall, 2))
 
@@ -131,7 +158,7 @@ def measure(P, meshes=None, parts=None):
                total_curl_deg=round(joints * P["maxAngle"], 1), closure_gap_mm=round(gap, 2),
                enroll_class=cls, stopped_by=[(a, b, round(v, 1)) for a, b, v in first][:6],
                touching_at_zero=len(collisions(P, meshes, 0.0)) > 0, seconds=round(time.time() - t0, 1))
-    out.update(print_validity(P))
+    out.update(print_validity(P, parts))
     return out
 
 if __name__ == "__main__":

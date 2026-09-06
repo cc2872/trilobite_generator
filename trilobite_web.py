@@ -13,18 +13,16 @@ PORT = int(os.environ.get("PORT", 8765))
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "web_out"); os.makedirs(OUT, exist_ok=True)
 
-PRESETS = {
-    "Reference": {},
-    "Smooth (effaced)": dict(effacement=0.85, spineBase=0.0, genalSpine=0.0, pygSpine=0.0, tubercles=0.0),
-    "Spiny": dict(spineBase=0.9, spineSweep=25, axialSpine=0.8, pygMarginal=6, genalSpine=0.8, tubercles=0.5),
-    "Phacopid": dict(eyeSize=0.2, eyePos=0.55, glabInflate=1.6, glabRise=0.3, pleuralSpine=0.0, spineBase=0.0,
-                     pygSpine=0.0, segCount=11, maxAngle=30, taper=0.96, tubercles=0.7),
-    "Olenellid": dict(segCount=14, taper=0.95, genalSpine=1.2, macroIndex=2, macroAmp=1.2, termSpine=1.8, pygFrac=0.06, maxAngle=8),
-    "Many segments, tight roll": dict(segCount=12, maxAngle=12, taper=0.97, overlap=0.4),
-    "Sculpted head (Olenoides skin)": dict(headSkin=1.0, skinOlenoides=1.0),
-    "Sculpted head (Olenoides x Harpetida)": dict(headSkin=1.0, skinOlenoides=0.5, skinHarpetida=0.5),
-}
-KNOBS = [(p.key, p.label, p.lo, p.hi, p.step, p.group) for p in schema.PARAMS]
+PRESETS = dict(schema.PRESETS)                                    # the four fitted presets first…
+_pdir = os.path.join(HERE, "presets")
+if os.path.isdir(_pdir):                                          # …then the measured species in presets/*.json
+    for f in sorted(os.listdir(_pdir)):
+        if f.endswith(".json"):
+            try:
+                d = json.load(open(os.path.join(_pdir, f)))
+                PRESETS.setdefault(f[:-5], d.get("params", d))
+            except Exception: pass
+KNOBS = [(p.key, p.label, p.lo, p.hi, p.step, p.group, p.kind, p.doc) for p in schema.PARAMS]
 INT_KEYS = [p.key for p in schema.PARAMS if p.kind in ("int", "odd_int")]
 
 def derived(P):
@@ -55,7 +53,7 @@ def build(P, mode):
             urls.append(f"/api/mesh/{k}/{n}.stl")
             try: m.export(os.path.join(folder, f"{n}.stl"))         # also on disk, for downloads while it lasts
             except Exception: pass
-        CACHE[k] = dict(key=k, names=names, urls=urls, offsets=offs, hinge_z=T.hinge_z(P), maxAngle=P["maxAngle"],
+        CACHE[k] = dict(key=k, P=P, names=names, urls=urls, offsets=offs, hinge_z=T.hinge_z(P), maxAngle=P["maxAngle"],
                         seconds=round(time.time() - t0, 1), measure=meas, blobs=blobs)
         return CACHE[k]
 
@@ -69,6 +67,22 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/": self.path = "/index.html"
+        if path.startswith("/api/sheet/"):                                  # the blueprint sheet of a built animal
+            key = path.split("/")[-1].replace(".png", "")
+            b = CACHE.get(key)
+            if b is None: return self.send_json(dict(error="not built"), 404)
+            png = os.path.join(OUT, key, "sheet.png")
+            if not os.path.exists(png):
+                import trimesh, blueprint
+                P = b["P"]; mats = instrument.transforms(P, 0.0)
+                raw = [trimesh.load(io.BytesIO(b["blobs"][n]), file_type="stl") for n in b["names"]]
+                flat = trimesh.util.concatenate([r.copy().apply_transform(M) for r, M in zip(raw, mats)])
+                e = (b["measure"] or {}).get("e_max", 1.0) or 0.0
+                en = trimesh.util.concatenate([r.copy().apply_transform(M) for r, M in zip(raw, instrument.transforms(P, float(e)))])
+                blueprint.sheet(flat, P, dict(b["measure"] or {}, **instrument.print_validity(P)), png, enrolled=en)
+            data = open(png, "rb").read()
+            self.send_response(200); self.send_header("Content-Type", "image/png"); self.send_header("Content-Length", str(len(data))); self.end_headers()
+            return self.wfile.write(data)
         if path.startswith("/api/mesh/"):                              # /api/mesh/<key>/<name>.stl from memory
             _, _, _, key, fname = path.split("/", 4)
             entry = CACHE.get(key); name = fname[:-4] if fname.endswith(".stl") else fname
@@ -81,7 +95,7 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/health":
             return self.send_json(dict(ok=True, cached=list(CACHE), web_out=os.path.isdir(OUT), files=sum(len(f) for _, _, f in os.walk(OUT))))
         if path == "/api/config":
-            return self.send_json(dict(knobs=KNOBS, presets=PRESETS, defaults=schema.defaults(), int_keys=INT_KEYS,
+            return self.send_json(dict(knobs=KNOBS, presets=PRESETS, defaults=schema.defaults(), int_keys=INT_KEYS, ui=schema.UI,
                                        macros=schema.MACROS, schema=schema.SCHEMA_VERSION))
         return super().do_GET()
     def do_POST(self):
@@ -92,14 +106,6 @@ class Handler(SimpleHTTPRequestHandler):
             if self.path == "/api/build":
                 b = build(P, body.get("mode", "animal"))
                 return self.send_json(dict({k: v for k, v in b.items() if k != "blobs"}, derived=derived(P)))
-            if self.path == "/api/check":
-                b = build(P, "animal"); m = b["measure"]
-                txt = (f"instrument {m['instrument']}  params {m['params']}\\n"
-                       f"e_max = {m['e_max']}   free curl = {m['free_curl_deg']} deg of {m['total_curl_deg']}\\n"
-                       f"closure gap = {m['closure_gap_mm']} mm   class = {m['enroll_class']}\\n"
-                       f"stopped by = {m['stopped_by']}   touching at zero = {m['touching_at_zero']}\\n"
-                       f"print valid = {m['print_valid']}  {m['violations']}")
-                return self.send_json(dict(text=txt, measure=m))
         except Exception as ex:
             return self.send_json(dict(error=str(ex)), 500)
         self.send_json(dict(error="unknown endpoint"), 404)

@@ -8,7 +8,7 @@ artifact — derives from this table. Add a parameter here and it exists everywh
 from dataclasses import dataclass, asdict
 import json, hashlib
 
-SCHEMA_VERSION = "4.0"
+SCHEMA_VERSION = "5.0"
 
 @dataclass(frozen=True)
 class Param:
@@ -20,7 +20,7 @@ class Param:
     step: float
     group: str
     doc: str = ""
-    kind: str = "float"          # "float" | "int" | "odd_int"
+    kind: str = "float"          # "float" | "int" | "odd_int" | "expr" (a text formula in s ∈ [0,1])
     unit: str = ""
 
 PARAMS = [
@@ -46,6 +46,21 @@ PARAMS = [
     Param("axisRise", "Axial ring rise", 0.15, 0.0, 0.40, 0.01, "Axis & furrows", "Ring stands this fraction of relief above the vault"),
     Param("furrowDepth", "Furrow depth", 1.2, 0.0, 3.0, 0.1, "Axis & furrows", "Depth of the furrows at full expression", unit="mm"),
     Param("effacement", "Effacement", 0.0, 0.0, 1.0, 0.01, "Axis & furrows", "0 = fully sculpted, 1 = smooth (Nileus)"),
+    # ---- surface form (fitted from the reference sculpt, 2026-09-05: seg2 crest rms 0.12 mm, head dome rms 0.33 mm)
+    Param("tent", "Tent vault", 1.0, 0.0, 1.0, 0.01, "Form", "0 = fulcrum vault (v4), 1 = axial dome + straight pleural slope (reference sculpt)"),
+    Param("axisSigma", "Axial dome width", 0.55, 0.25, 1.0, 0.01, "Form", "Gaussian half-width of the axial dome / half-width (tent vault)"),
+    Param("pleuralSlope", "Pleural slope", 0.74, 0.2, 1.2, 0.01, "Form", "Linear drop of the pleural slope over the half-width / relief (tent vault)"),
+    Param("ringArch", "Ring arch", 0.22, 0.0, 0.5, 0.01, "Form", "Convexity of each axial ring between its two hinges / relief"),
+    Param("bladeCamber", "Blade camber", 0.14, 0.0, 0.4, 0.01, "Form", "Convexity of each pleural blade along its chord / relief"),
+    Param("headOutlineExp", "Head outline exponent", 2.15, 1.2, 5.0, 0.05, "Form", "Superellipse exponent of the head front (2 = ellipse, higher = squarer)"),
+    Param("headDomeExp", "Head dome exponent", 1.5, 1.2, 4.0, 0.05, "Form", "Superellipsoid exponent of the head vault (1.5 = tent-like, 2 = ellipsoid, higher = flatter top)"),
+    Param("headDomeFill", "Head dome fill", 0.82, 0.5, 1.0, 0.01, "Form", "Dome semi-axes / head half-width and length (the rest is flat border)"),
+    # ---- head / tail shell: thickness and curve, independent of the thorax
+    Param("headWall", "Head thickness", 1.0, 0.6, 2.5, 0.05, "Form", "Head shell thickness / wall (segment 0's stepped front follows it)"),
+    Param("tailWall", "Tail thickness", 1.0, 0.6, 2.5, 0.05, "Form", "Tail shell thickness / wall"),
+    Param("headRelief", "Head height", 1.0, 0.6, 1.6, 0.02, "Form", "Head apex height / relief (the occipital ring always holds the hinge height)"),
+    Param("tailRelief", "Tail height", 1.0, 0.5, 1.4, 0.02, "Form", "Tail apex height / relief (the axis always holds the hinge height over the front joint)"),
+    Param("tailDomeExp", "Tail curve", 2.0, 1.2, 5.0, 0.05, "Form", "Fall-off of the tail along the body: 2 = elliptical, higher = flat top with a steep rear"),
     # ---- head
     Param("cephParallel", "Head parallel rear", 0.45, 0.0, 0.8, 0.01, "Head", "Fraction of head length that is parallel-sided"),
     Param("glabInflate", "Glabella expansion", 1.25, 0.6, 2.0, 0.01, "Head", "Glabella front width / rear width (club shape)"),
@@ -58,7 +73,15 @@ PARAMS = [
     Param("genalSweep", "Cheek sweep", 0.8, 0.0, 2.5, 0.05, "Head", "How far the cheeks sweep back along the shoulder / segment pitch"),
     Param("borderWidth", "Border width", 0.10, 0.0, 0.30, 0.01, "Head", "Raised border / head half-width (0 = none)"),
     Param("genalSpine", "Genal spine length", 0.35, 0.0, 1.5, 0.01, "Head", "Genal spine length / head length (0 = none)"),
-    Param("genalCurve", "Genal spine curve", 20, 0, 60, 1, "Head", "Inward curl of the genal spines", unit="deg"),
+    Param("headRearArc", "Head rear arc", 0.0, 0.0, 0.7, 0.01, "Head", "Crescent: the rear edge bows back from the axis to the genal angles by this fraction of head length (0 = straight rear, v4)"),
+    Param("headRearExp", "Head rear arc shape", 2.2, 1.0, 5.0, 0.05, "Head", "1 = the rear edge leaves the axis at once (thin band); higher = it stays straight and bows late (thick band, short horns)"),
+    Param("genalWidth", "Genal arm thickness", 0.12, 0.03, 0.5, 0.01, "Head", "Thickness of the crescent's arm across, / head half-width (harpetid 0.3)"),
+    Param("genalTaper", "Genal arm end", 2.0, 0.5, 3.0, 0.05, "Head", "End of the arm: 0.5 = blunt/rounded, 3 = drawn to a point"),
+    Param("genalPath", "Genal arm path", "s**2", 0, 0, 0, "Head",
+          "Sideways offset of the arm's centreline as a formula in s (0 = root, 1 = tip), scaled by genalCurve. "
+          "e.g. 's**2' flares late, 's' straight, 'sin(pi*s/2)' flares early, '-0.5*s+s**2' hugs the thorax then flares", kind="expr"),
+    Param("genalWidthMM", "Genal arm thickness (mm)", 0.0, 0.0, 30.0, 0.5, "Head", "Absolute arm thickness in mm; 0 = use genalWidth (fraction of half-width)"),
+    Param("genalCurve", "Genal spine curve", 20, -60, 60, 1, "Head", "Inward curl of the genal spines", unit="deg"),
     # ---- head skin (blend of registered real-specimen skins from skins.py, laid over the parametric head)
     Param("headSkin", "Head skin blend", 1.0, 0.0, 1.0, 0.01, "Skin", "0 = pure parametric head, 1 = fully the blended real skin (outline stays yours)"),
     Param("skinOlenoides", "Skin: Olenoides", 1.0, 0.0, 1.0, 0.01, "Skin", "Blend weight for the registered Olenoides skin"),
@@ -67,12 +90,13 @@ PARAMS = [
     Param("skinProetida", "Skin: Proetida", 0.0, 0.0, 1.0, 0.01, "Skin", "Blend weight for the registered Proetida skin"),
     # ---- thorax pleurae and spines (fields along the thorax)
     Param("tipSweep", "Pleural tip sweep", 0.5, 0.0, 2.0, 0.01, "Thorax", "How far the pleural blades sweep back / pitch"),
+    Param("bladeChord", "Blade chord", 1.3, 0.5, 1.3, 0.01, "Thorax", "Fore-aft width of the pleural blade beyond its root / segment pitch (1.3 = the v4 full plate, 0.9 = separate ribs)"),
     Param("tipTaper", "Pleural tip taper", 0.55, 0.0, 0.95, 0.01, "Thorax", "How much the blade narrows toward its tip (0 = square, 0.95 = needle)"),
     Param("spineBase", "Pleural spine base", 0.0, 0.0, 1.2, 0.01, "Thorax", "Extra needle spine beyond the blade tip, segment 0 / half-width"),
     Param("spineGrad", "Pleural spine gradient", 0.0, -1.0, 1.0, 0.01, "Thorax", "Change in spine length from first to last segment"),
     Param("macroIndex", "Macropleural segment", -1, -1, 15, 1, "Thorax", "Index of a segment with extra-long spines (-1 = none)", kind="int"),
     Param("macroAmp", "Macropleural extra", 0.8, 0.0, 2.0, 0.05, "Thorax", "Extra spine length on that segment / half-width"),
-    Param("spineSweep", "Spine sweep", 45, 0, 80, 1, "Thorax", "Pleural spines sweep back by this angle", unit="deg"),
+    Param("spineSweep", "Spine sweep", 50, 0, 80, 1, "Thorax", "Pleural spines sweep back by this angle", unit="deg"),
     # ---- tail
     Param("pygWidth", "Tail width", 0.90, 0.5, 1.1, 0.01, "Tail", "Tail shield width / last segment width"),
     Param("pygRings", "Tail axial rings", 4, 0, 12, 1, "Tail", "Axial rings on the pygidium", kind="int"),
@@ -96,14 +120,28 @@ PARAMS = [
 ]
 # ---- macro knobs: one slider drives several parameters linearly between (value at 0, value at 1)
 MACROS = [
-    ("spikiness", "Spikiness", 0.25, [("spineBase", 0.0, 1.0), ("genalSpine", 0.0, 1.4), ("pygSpine", 0.0, 1.8), ("axialSpine", 0.0, 1.5),
-                                       ("pygMarginal", 0, 8), ("tipTaper", 0.35, 0.9), ("tipSweep", 0.3, 1.4), ("occipitalSpine", 0.0, 0.8)]),
-    ("headSize", "Head size", 0.5, [("cephFrac", 0.20, 0.45), ("widthMaxPos", 0.20, 0.40), ("cephParallel", 0.2, 0.6)]),
-    ("tailSize", "Tail size", 0.3, [("pygFrac", 0.05, 0.40), ("pygWidth", 0.7, 1.05), ("pygRings", 1, 10)]),
-    ("elongation", "Elongation", 0.4, [("width", 100, 38), ("segCount", 4, 14), ("taper", 0.90, 0.97)]),
-    ("sculpture", "Sculpture", 0.6, [("effacement", 1.0, 0.0), ("furrowDepth", 0.3, 2.0), ("tubercles", 0.0, 0.8), ("glabRise", 0.05, 0.35)]),
-    ("eyes", "Eyes", 0.4, [("eyeSize", 0.0, 0.40), ("eyeHeight", 0.3, 1.5)]),
+    # the six morphospace dials (Raup-style: few semantic axes). Each maps 0..1 linearly onto its parameters.
+    ("sculpt", "Sculpt", 1.0, [("furrowDepth", 0.3, 1.2), ("effacement", 0.85, 0.0), ("glabRise", 0.05, 0.18), ("glabLobes", 0, 3),
+                               ("eyeSize", 0.0, 0.16), ("borderWidth", 0.0, 0.10), ("pygRings", 0, 4)]),
+    ("headSize", "Head", 0.45, [("cephFrac", 0.22, 0.42), ("widthMaxPos", 0.12, 0.35), ("headRearArc", 0.0, 0.25)]),
+    ("tailSize", "Tail", 0.5, [("pygFrac", 0.05, 0.38), ("pygWidth", 0.7, 1.05), ("widthTail", 0.30, 0.80)]),
+    ("elongation", "Elongation", 0.5, [("segCount", 4, 14), ("width", 95, 48), ("length", 120, 220), ("widthThoraxRear", 0.75, 0.45)]),
+    ("spikiness", "Spines", 0.15, [("spineBase", 0.0, 0.9), ("spineGrad", 0.0, 0.5), ("genalSpine", 0.0, 0.9), ("pygSpine", 0.0, 1.6),
+                                   ("axialSpine", 0.0, 0.9), ("pygMarginal", 0, 8), ("tipTaper", 0.5, 0.9)]),
+    ("eyes", "Eyes", 0.4, [("eyeSize", 0.04, 0.30), ("eyeHeight", 0.6, 1.2), ("glabInflate", 1.1, 1.7)]),
 ]
+# ---- the website's three layers (everything else stays in the schema as a fixed or macro-driven value)
+UI = {
+    "dials": ["sculpt", "headSize", "tailSize", "elongation", "spikiness", "eyes"],
+    "parts": {
+        "Body":   ["length", "width", "relief", "wall"],
+        "Head":   ["headOutlineExp", "headDomeExp", "headDomeFill", "headRearArc", "genalSpine", "genalWidthMM", "eyeSize", "eyePos"],
+        "Thorax": ["segCount", "bladeChord", "tipSweep", "tipTaper", "spineBase", "spineGrad", "spineSweep"],
+        "Tail":   ["pygFrac", "pygWidth", "pygSpine", "pygSplay", "pygRings", "pygMarginal"],
+    },
+    "ruler": ["maxAngle", "clearance", "boreDia", "barrelR", "nKnuckles"],
+    "arm": {"path": "genalPath", "curve": "genalCurve", "taper": "genalTaper"},
+}
 
 def apply_macro(P, key, value):
     """Set every parameter a macro drives; value in [0, 1]."""
@@ -118,15 +156,71 @@ GROUPS = []
 for _p in PARAMS:
     if _p.group not in GROUPS: GROUPS.append(_p.group)
 
-def defaults():
+
+# ---- named presets. "reference" reproduces the 2026-09-05 reference sculpt (smooth, effaced) on our pin-hinge
+# mechanism; "textured" is our model: the same body form with the sculpt (furrows, glabella, eyes, border) switched on.
+# Every form parameter (tent vault, ring arch, blade camber, head dome/outline, blade chord) is shared.
+_FORM = dict(length=130, width=69.5, relief=17.1, segCount=6, cephFrac=0.335, pygFrac=0.20,
+             marginHeight=0.14, overlap=0.45,
+             widthMaxPos=0.20, widthHeadFront=0.75, widthThoraxFront=0.93, widthThoraxRear=0.62, widthTail=0.50,
+             axisFrac=0.28, axisRise=0.0, cephParallel=0.05, genalSweep=0.3, genalSpine=0.12, genalCurve=10,
+             headSkin=0.0, headOutlineExp=2.15, headDomeExp=1.5, headDomeFill=0.82,
+             tent=1.0, axisSigma=0.55, pleuralSlope=0.74, ringArch=0.22, bladeCamber=0.14,
+             tipSweep=0.75, tipTaper=0.85, bladeChord=0.9, spineBase=0.0, spineSweep=45,
+             pygWidth=0.82, pygSpine=1.0, pygSplay=14, termSpine=0.0)
+def _sculpt(level):
+    """Parameter values the 'sculpt' macro sets at `level` in [0, 1]."""
+    out = {}
+    for k, label, default, maps in MACROS:
+        if k == "sculpt":
+            for pk, lo, hi in maps: out[pk] = lo + (hi - lo) * level
+    return out
+PRESETS = {
+    "reference": dict(_FORM, tubercles=0.0, **_sculpt(0.0)),
+    # the default animal (6 Sep 2026 evening): the reference form with our sculpt, re-proportioned to read as a classic
+    # trilobite — 9 segments at 150 mm (pitch 8.5 ≥ 8), short forks, small formula genal spines, slight crescent rear.
+    "textured":  dict(dict(_FORM, **_sculpt(1.0)), tubercles=0.0, eyeArc=150,
+                      length=150, width=72, segCount=9, cephFrac=0.30, pygFrac=0.22, pygSpine=0.35, pygSplay=16, pygRings=4,
+                      genalSpine=0.32, genalCurve=12, genalPath="s**2", genalWidthMM=5, genalTaper=2.2, headRearArc=0.12, headRearExp=2.0,
+                      eyeSize=0.16, eyeHeight=0.85, eyePos=0.62, glabInflate=1.35, widthThoraxRear=0.62, widthTail=0.55, tipTaper=0.8),
+}
+# ---- species presets fitted from scans (6 Sep 2026). Each is the sculpted default plus measured form; nothing here
+#      changes _FORM or "textured".
+PRESETS["harpetid"] = dict(PRESETS["textured"],
+    # Harpetid STL (98 × 144 × 23 mm): dome m 1.42, semi-axes 0.61 × 0.62 of the head, rim 0.2 relief (0.98 mm rms);
+    # front outline n 1.89; W/L 1.61; prolongations 1.2 Lc past the occipital ring, 0.3 wh wide, rounded.
+    cephFrac=0.42, pygFrac=0.10, segCount=9, width=72, headDomeExp=1.42, headDomeFill=0.61, headOutlineExp=1.89,
+    marginHeight=0.33, genalSpine=1.2, genalCurve=2, genalWidth=0.30, genalTaper=0.6, genalSweep=0.05, cephParallel=0.02,
+    widthThoraxFront=0.58,          # harpid thorax is narrow inside the horseshoe: 55 / 96 mm on the scan
+    eyeSize=0.05, eyeHeight=1.0, eyePos=0.45, glabRise=0.12, borderWidth=0.0, pygSpine=0.0, pygRings=2,
+    spineBase=0.0, widthMaxPos=0.12, widthThoraxRear=0.42, widthTail=0.30, tipTaper=0.7)
+PRESETS["phacopid"] = dict(PRESETS["textured"],
+    # Phacops sp. scan (25 × 15 mm, matrix masked): eyes at 0.55 ± 0.1 of half-width, 0.75 Lc from the front,
+    # 0.84–0.96 of glabella height; glabella ~0.55 of head width in plan, only 8 % above the rings in z; 11 rings.
+    length=205, width=95, segCount=11, cephFrac=0.34, pygFrac=0.22, eyeSize=0.22, eyeHeight=0.9, eyePos=0.75, glabInflate=1.7,   # 205 mm: 11 segments need pitch ≥ 8 mm for this hinge
+    glabRise=0.12, genalSpine=0.0, pygSpine=0.0, pygRings=7, spineBase=0.0, headDomeExp=1.9, widthTail=0.6,
+    tipTaper=0.6, bladeChord=1.0)
+DEFAULT_PRESET = "textured"
+
+def table_defaults():
+    """The raw per-parameter defaults from the table (no preset applied)."""
     return {p.key: p.default for p in PARAMS}
 
-def coerce(P):
+def preset(name):
+    """Full parameter dict for a named preset (missing keys filled from the table, then coerced)."""
+    P = table_defaults(); P.update(PRESETS[name]); return coerce(P, base=P)
+
+def defaults():
+    return preset(DEFAULT_PRESET)
+
+def coerce(P, base=None):
     """Fill missing keys with defaults, clamp to range, enforce int/odd-int kinds. Unknown keys are dropped."""
-    Q = defaults()
+    Q = dict(base) if base is not None else defaults()
     for k, v in (P or {}).items():
         if k in BY_KEY:
             p = BY_KEY[k]
+            if p.kind == "expr":
+                Q[k] = str(v)[:120]; continue
             v = float(v)
             v = min(max(v, p.lo), p.hi)
             if p.kind in ("int", "odd_int"):
