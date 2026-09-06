@@ -165,7 +165,7 @@ def spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0):
 # =====================================================================
 #  hinge (unchanged mechanism: interleaving knuckles, pin bore, stop block, ventral bevel)
 # =====================================================================
-def add_hinge(part, envelope, P, y_axis, rear):
+def add_hinge(part, envelope, P, y_axis, rear, wide=False):
     rB, c, nK = P["barrelR"], P["clearance"], int(P["nKnuckles"])
     zh, Wh = hinge_z(P), hinge_width(P)
     kw, x0 = Wh / nK, -Wh / 2
@@ -190,10 +190,10 @@ def add_hinge(part, envelope, P, y_axis, rear):
               align=(Align.CENTER, Align.MAX if rear else Align.MIN, Align.MIN)).moved(Location((0, y_axis, 0)))
     part += blk
     phi, L = P["maxAngle"] / 2, 80
-    if P["bladeChord"] < 1.0:                                   # separate ribs: only the ring and the rib roots overlap
+    if P["bladeChord"] < 1.0 and not wide:                      # separate ribs: only the ring and the rib roots overlap
         band = 2 * (P["axisFrac"] * (W / 2)) + 0.12 * W
-    else:                                                        # v4 plates tile: bevel the inner pleurae too
-        band = 2 * (P["axisFrac"] * (W / 2)) + 0.45 * W
+    else:                                                        # tiled plates, and ALWAYS the head's rear and the tail's front:
+        band = 2 * (P["axisFrac"] * (W / 2)) + 0.45 * W          # those are full-width plates whose whole edge swings past a rib
     if rear:
         wedge = Box(band, L, L, align=(Align.CENTER, Align.MIN, Align.MAX)).rotate(Axis.X, -phi)
     else:
@@ -300,8 +300,9 @@ def build_segment(P, i=0):
         for s in (1, -1):
             seg += Box(t, rim_len, max(margin - t, 1.0), align=(Align.MAX if s > 0 else Align.MIN, Align.MIN, Align.MIN)).moved(Location((s * w, yf_m + 0.5, 0)))
             seg += Box(0.06 * P["width"], rim_len, t, align=(Align.MAX if s > 0 else Align.MIN, Align.MIN, Align.MIN)).moved(Location((s * w, yf_m + 0.5, 0)))
-    seg = add_hinge(seg, env, P, d, rear=True)
-    seg = add_hinge(seg, env, P, 0, rear=False)
+    last = (i == int(P["segCount"]) - 1)
+    seg = add_hinge(seg, env, P, d, rear=True, wide=last)           # the last rear edge swings over the full-width tail
+    seg = add_hinge(seg, env, P, 0, rear=False, wide=(i == 0))      # the first front edge swings under the full-width head
     # pleural spines are part of the plate (edges() above): body, not ornament — the bevel and the instrument see them
     r = 0.45 * margin
     if P["axialSpine"] > 0.02:
@@ -453,7 +454,7 @@ def build_cephalon(P):
 
     head = plate(outline, zfun, t, nu=45, nv=33)                          # t = wall·headWall
     env = under(outline, zfun, nu=45, nv=33)
-    head = add_hinge(head, env, P, 0, rear=True)
+    head = add_hinge(head, env, P, 0, rear=True, wide=True)
     # the crescent's arms: swept bands of width W_s along the user's path, starting inside the head so the fuse is solid
     if Lg > 0.5:
         yr_root = float(cheek(np.array([1.0]))[0])
@@ -561,18 +562,22 @@ def build_pygidium(P):
             z += 0.35 * F * plateau(dist, 0.45 * bw, 0.4 * bw)
         z += tubercles(x, y, P, dict(box=(-wp + 3, wp - 3, ovl + 1, Lp - 3), ok=lambda xk, yk: abs(xk) < wp * math.sqrt(max(0.0, 1 - (yk / Lp) ** 2)) - 2.5),
                        seed=77, count_scale=1.6 * wp)
-        ov = outside(ax, y)                                                            # forks and marginal spines droop
+        ov = np.where(y > 0.35 * Lp, outside(ax, y), 0.0)                              # forks and marginal spines droop
         z = np.where(ov > 0, np.maximum(margin * 0.6 * (1 - 0.5 * ov), t + 0.6), z)     # toward their points
+        # (the front corners are NOT lifted: they sit under the last segment's rib tips and must keep the stepped front)
         if P["tailRelief"] < 0.999:                                                    # only when the tail is lowered: axis holds
             z = np.maximum(z, ring_top(P) * plateau(x, a, 1.0) * (1 - smoothstep(0.5 * ovl, ovl + 1.0, y)))   # ring_top over the hinge
-        drop = np.minimum(t + c + 0.7 * F + 0.3, np.maximum(z - (t + 0.6), 0))
-        z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y))                               # stepped front under the last flap (last word)
+        # stepped front under the last segment: the tail is narrower than the segment above it, so its front strip sits
+        # under the low outer part of that segment's ribs; the wall-thickness floor the segments use (t + 0.6) leaves
+        # 0.5 mm³ of interference there, so the tail's lip is allowed down to 1.2 mm (a flat-on-the-bed margin)
+        drop = np.minimum(t + c + 0.7 * F + 0.3, np.maximum(z - 1.2, 0))
+        z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y))                               # (last word)
         return z
 
     nu_t = 53 if (n_m or Lf > 0.5) else 45                                     # points need columns (73 stalls the fit)
     tail = plate(outline, zfun, t, nu=nu_t, nv=27)
     env = under(outline, zfun, nu=nu_t, nv=27)
-    tail = add_hinge(tail, env, P, 0, rear=False)
+    tail = add_hinge(tail, env, P, 0, rear=False, wide=True)
     # the paired tail spines are the forks in tail_edges() above — the margin running on, not cones
     if P["termSpine"] > 0.02:
         tail += spine(0.5 * margin, 0.6, P["termSpine"] * Lp, (0, 0.85 * Lp, 0.5 * margin), 0)

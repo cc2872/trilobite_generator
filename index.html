@@ -305,7 +305,8 @@ async function addNewParts(b){
     const [part, mesh] = blueprintPart(geo); part.position.set(0, 0, -b.hinge_z); g.add(part); meshes.push(mesh);
     (i === 0 ? root : groups[i - 1]).add(g); groups.push(g);
   }
-  setEnroll(enroll); frame();
+  setEnroll(enroll);
+  if (groups.length) frame();                    // an empty box gives a NaN camera that never recovers
 }
 function setEnroll(e){
   enroll = e; $('enroll').value = e;
@@ -314,7 +315,8 @@ function setEnroll(e){
   groups.forEach((g, i) => { if (i > 0) g.rotation.x = -flip * THREE.MathUtils.degToRad(th); });
 }
 function frame(){
-  const box = new THREE.Box3().setFromObject(root); const c = box.getCenter(new THREE.Vector3()); const s = box.getSize(new THREE.Vector3()).length();
+  const box = new THREE.Box3().setFromObject(root); if (box.isEmpty()) return;
+  const c = box.getCenter(new THREE.Vector3()); const s = box.getSize(new THREE.Vector3()).length(); if (!isFinite(s) || s === 0) return;
   controls.target.copy(c); camera.position.copy(c).add(new THREE.Vector3(0.6, 0.55, 0.95).multiplyScalar(s * 0.9)); camera.near = s / 100; camera.far = s * 10; camera.updateProjectionMatrix();
 }
 function exportSTL(){
