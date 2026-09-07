@@ -1,14 +1,3 @@
-"""
-instrument.py — the enrollment ruler.
-
-Given a built animal (as meshes), measure — deterministically, on meshes, in milliseconds per pose:
-  e_max            largest uniform enrollment in [0, 1] with no collision ANYWHERE (all pairs)
-  free_curl_deg    e_max × joints × stop angle
-  closure_gap_mm   tail-to-head distance at e_max
-  enroll_class     "none" | "partial" | "complete"
-  print_valid      printability verdict, kept separate from enrollability
-Versioned. Shared volume below OVERLAP_TOL is touching, not collision (mating faces touch at e=0).
-"""
 import math, json, time
 import numpy as np
 import trimesh
