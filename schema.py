@@ -144,7 +144,9 @@ UI = {
     "dials": ["sculpt", "headSize", "tailSize", "elongation", "spikiness", "eyes"],
     "parts": {
         "Body":   ["length", "width", "relief", "wall"],
-        "Head":   ["headOutlineExp", "headDomeExp", "headDomeFill", "headRearArc", "genalSpine", "genalWidthMM", "eyeSize", "eyePos", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade", "lensD", "lensGap"],
+        "Head":   ["headOutlineExp", "headDomeExp", "headDomeFill", "headRearArc", "genalSpine", "genalWidthMM",
+                   "eyeSize", "eyeArc", "eyeHeight", "eyePos", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade",
+                   "lensD", "lensGap", "lensRise"],
         "Thorax": ["segCount", "bladeChord", "tipSweep", "tipTaper", "spineBase", "spineGrad", "spineSweep"],
         "Tail":   ["pygFrac", "pygWidth", "pygSpine", "pygSplay", "pygRings", "pygMarginal"],
     },
