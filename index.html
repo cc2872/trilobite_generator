@@ -59,6 +59,11 @@
   svg.arm .path{fill:none;stroke:var(--ink);stroke-width:1.5}
   svg.arm .h{fill:var(--bg);stroke:var(--ink);stroke-width:1.2;cursor:grab}
   svg.arm .h.fixed{fill:var(--ink);cursor:default}
+  svg.arm .eye{fill:none;stroke:var(--line);stroke-width:1;stroke-dasharray:2,2}
+  svg.arm .eyearc{fill:none;stroke:var(--ink);stroke-width:2}
+  svg.arm .axis{stroke:var(--line);stroke-dasharray:2,2}
+  svg.arm .gauge{stroke:var(--line);stroke-width:3}
+  svg.arm .gauge-fill{stroke:var(--ink);stroke-width:3}
   /* ---- phones and narrow windows: viewer on top, controls as a scrolling sheet underneath ---- */
   @media (max-width: 720px), (pointer: coarse) and (max-width: 1024px) {
     html,body{overflow:auto;font-size:14px}
@@ -178,12 +183,89 @@ function setP(key, v){
   if (INT.has(key)) { v = Math.round(v); if (key === 'nKnuckles' && v % 2 === 0) v += 1; }
   P[key] = v; const e = $('v-'+key); if (e) e.textContent = fmt(key, v);
   if (['genalSpine','genalWidthMM','genalCurve','genalTaper','cephFrac','headRearArc','headOutlineExp'].includes(key)) drawArm();
+  if (['eyeSize','eyeArc','eyeHeight','eyePos','eyeLat','axisFrac','glabInflate','width','cephFrac','headOutlineExp'].includes(key)) drawEye();
   refreshDerived();
 }
 function selectTab(name){ tab = name; for (const d of $('tabs').children) d.classList.toggle('on', d.dataset.name === name); renderPart(); }
 let tab = 'Head';
-function renderPart(){ const host = $('part'); host.innerHTML = ''; for (const k of CFG.ui.parts[tab]) knob('part', k); if (tab === 'Head') armEditor(host); }
+function renderPart(){ const host = $('part'); host.innerHTML = ''; for (const k of CFG.ui.parts[tab]) knob('part', k); if (tab === 'Head') { eyeEditor(host); armEditor(host); } }
 function renderAll(){ for (const k of Object.keys(KNOB)) { const s = $('s-'+k); if (s) { s.value = P[k]; $('v-'+k).textContent = fmt(k, P[k]); } } renderPart(); refreshDerived(); }
+
+// ---------------- eye shape: a circle you place, resize, and set the visual arc of, plus a height gauge —
+// same direct-manipulation idea as the genal arm below, so both parts of the head that are otherwise just
+// numbers get a picture. Approximates eyes.eye_geometry() in JS (wh here is width/2, like the arm diagram
+// already assumes, not the exact head_halfwidth()) — a drawing aid, not a substitute for the built sheet.
+function syncKnob(key){ const s = $('s-'+key); if (s) s.value = P[key]; const v = $('v-'+key); if (v) v.textContent = fmt(key, P[key]); }
+function eyeGeom(){
+  const Lc = P.cephFrac * P.length, wh = P.width / 2, a = P.axisFrac * wh;
+  const f = Math.min(Math.max(P.eyePos, 0), 1), glab = a * (1 + (P.glabInflate - 1) * f);
+  const eR = P.eyeSize * wh, ye = -P.eyePos * Lc;
+  const xe = P.eyeLat > 0.01 ? P.eyeLat * wh : glab + eR + 1.0;
+  return {Lc, wh, a, eR, ye, xe};
+}
+function eyeEditor(host){
+  const wrap = document.createElement('div'); wrap.className = 'ctrl';
+  wrap.innerHTML = `<div class="lab"><span>Eye shape</span><span id="eyelab"></span></div>
+    <svg class="arm" id="eyesvg" viewBox="0 0 300 150"></svg>
+    <div class="hint">Drag the eye to place it, its outer handle to resize, the two edge handles to set how much of the circle is visual surface (the arc), and the H bar on the right for eye height.</div>`;
+  host.appendChild(wrap);
+  drawEye();
+}
+function drawEye(){
+  const svg = $('eyesvg'); if (!svg) return;
+  const {Lc, wh, a, eR, ye, xe} = eyeGeom();
+  const S = Math.min(125 / Math.max(Lc, 1), 95 / Math.max(wh * 1.35, 1));
+  const ox = 108, oy = 8 + Lc * S; const X = x => ox + x * S, Y = y => oy + y * S;
+  const n = 30; let d = '';
+  for (let i = 0; i <= n; i++) { const t = i / n, y = -Lc * Math.pow(Math.max(0, 1 - Math.pow(t, P.headOutlineExp)), 1 / P.headOutlineExp); d += (i ? 'L' : 'M') + X(wh * t) + ',' + Y(y); }
+  d += ' L' + X(wh) + ',' + Y(0) + ' L' + X(0) + ',' + Y(0);
+  const rDraw = Math.max(eR, 0.035 * wh);                              // stays grabbable even when eyeSize is 0 (blind)
+  const half = P.eyeArc / 2 * Math.PI / 180, nA = 20; let ad = '';
+  for (let i = 0; i <= nA; i++) { const ang = -half + (2 * half) * i / nA; ad += (i ? 'L' : 'M') + X(xe + rDraw * Math.cos(ang)) + ',' + Y(ye + rDraw * Math.sin(ang)); }
+  const a1 = [xe + rDraw * Math.cos(-half), ye + rDraw * Math.sin(-half)], a2 = [xe + rDraw * Math.cos(half), ye + rDraw * Math.sin(half)];
+  const gx = 268, gy0 = 10, gy1 = 10 + Lc * S;                         // height gauge, alongside the plan
+  const hFrac = (P.eyeHeight - KNOB.eyeHeight.lo) / (KNOB.eyeHeight.hi - KNOB.eyeHeight.lo), ghy = gy1 - hFrac * (gy1 - gy0);
+  svg.innerHTML = `<path class="body" d="${d}"/><line class="axis" x1="${X(a)}" y1="${Y(-Lc)}" x2="${X(a)}" y2="${Y(0)}"/>
+    <circle class="eye" cx="${X(xe)}" cy="${Y(ye)}" r="${rDraw * S}"/><path class="eyearc" d="${ad}"/>
+    <line class="gauge" x1="${gx}" y1="${gy0}" x2="${gx}" y2="${gy1}"/><line class="gauge-fill" x1="${gx}" y1="${ghy}" x2="${gx}" y2="${gy1}"/>
+    <text x="${gx}" y="${gy0 - 3}" fill="var(--mid)" font-size="9" text-anchor="middle" font-family="monospace">H</text>
+    <circle class="h" id="eyeCenter" cx="${X(xe)}" cy="${Y(ye)}" r="6"/><circle class="h" id="eyeResize" cx="${X(xe + rDraw)}" cy="${Y(ye)}" r="5"/>
+    <circle class="h" id="eyeArc1" cx="${X(a1[0])}" cy="${Y(a1[1])}" r="5"/><circle class="h" id="eyeArc2" cx="${X(a2[0])}" cy="${Y(a2[1])}" r="5"/>
+    <circle class="h" id="eyeH" cx="${gx}" cy="${ghy}" r="6"/>`;
+  $('eyelab').textContent = P.eyeSize <= 0.005 ? 'blind' : `arc ${Math.round(P.eyeArc)}° · H ${P.eyeHeight.toFixed(2)} R`;
+  const drag = (id, onmove) => {
+    const h = svg.querySelector('#' + id); let on = false;
+    h.onpointerdown = e => { on = true; h.setPointerCapture(e.pointerId); };
+    h.onpointerup = () => { on = false; };
+    h.onpointermove = e => {
+      if (!on) return;
+      const r = svg.getBoundingClientRect();
+      onmove((e.clientX - r.left) * 300 / r.width, (e.clientY - r.top) * 150 / r.height);
+      drawEye();
+      const h2 = svg.querySelector('#' + id); if (h2) { h2.setPointerCapture(e.pointerId); h2.onpointermove = h.onpointermove; h2.onpointerup = h.onpointerup; }
+    };
+  };
+  const clamp = (key, v) => Math.max(KNOB[key].lo, Math.min(KNOB[key].hi, v));
+  drag('eyeCenter', (px, py) => {
+    P.eyeLat = clamp('eyeLat', ((px - ox) / S) / wh);
+    P.eyePos = clamp('eyePos', -((py - oy) / S) / Lc);
+    syncKnob('eyeLat'); syncKnob('eyePos'); refreshDerived();
+  });
+  drag('eyeResize', (px, py) => {
+    const r = Math.hypot((px - ox) / S - xe, (py - oy) / S - ye);
+    P.eyeSize = clamp('eyeSize', r / wh); syncKnob('eyeSize'); refreshDerived();
+  });
+  const arcDrag = (px, py) => {
+    const ang = Math.abs(Math.atan2((py - oy) / S - ye, (px - ox) / S - xe)) * 180 / Math.PI;
+    P.eyeArc = clamp('eyeArc', 2 * ang); syncKnob('eyeArc'); refreshDerived();
+  };
+  drag('eyeArc1', arcDrag); drag('eyeArc2', arcDrag);
+  drag('eyeH', (px, py) => {
+    const frac = Math.max(0, Math.min(1, (gy1 - py) / (gy1 - gy0)));
+    P.eyeHeight = clamp('eyeHeight', KNOB.eyeHeight.lo + frac * (KNOB.eyeHeight.hi - KNOB.eyeHeight.lo));
+    syncKnob('eyeHeight'); refreshDerived();
+  });
+}
 
 // ---------------- genal arm: two draggable handles → a quadratic path formula (or type any formula)
 let H = {mid: 0.25, tip: 1.0};                      // sideways offset at s = 0.5 and s = 1, in [-1, 1], + = outward
