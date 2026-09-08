@@ -116,6 +116,7 @@ def _eye_panels(fig, gs, m, P):
         F = fov(P)
         ax.text(-arcl / 2, -1.2, "\n".join([f"arc {arcl:.1f} mm across · band {H:.1f} mm up",
                                              f"pitch {pitch:.2f} = D(1+{EP['lensGap']:.1f}) · rows {rows}",
+                                             f"packing {D / pitch:.2f} = D/pitch (1 = holochroal)",
                                              f"files per row = arc·r / pitch",
                                              f"arc {EP['arc_deg']:.0f}° · lean {EP['slope_deg']:.0f}° · brim {EP['shade']:.2f} R",
                                              f"rise {EP['lensRise']:.2f} D/2 · axis = normal (v1)",

@@ -183,7 +183,7 @@ function setP(key, v){
   if (INT.has(key)) { v = Math.round(v); if (key === 'nKnuckles' && v % 2 === 0) v += 1; }
   P[key] = v; const e = $('v-'+key); if (e) e.textContent = fmt(key, v);
   if (['genalSpine','genalWidthMM','genalCurve','genalTaper','cephFrac','headRearArc','headOutlineExp'].includes(key)) drawArm();
-  if (['eyeSize','eyeArc','eyeHeight','eyePos','eyeLat','axisFrac','glabInflate','width','cephFrac','headOutlineExp'].includes(key)) drawEye();
+  if (['eyeSize','eyeArc','eyeHeight','eyePos','eyeLat','axisFrac','glabInflate','width','cephFrac','headOutlineExp','lensD'].includes(key)) drawEye();
   refreshDerived();
 }
 function selectTab(name){ tab = name; for (const d of $('tabs').children) d.classList.toggle('on', d.dataset.name === name); renderPart(); }
@@ -210,6 +210,27 @@ function eyeEditor(host){
     <div class="hint">Drag the eye to place it, its outer handle to resize, the two edge handles to set how much of the circle is visual surface (the arc), and the H bar on the right for eye height.</div>`;
   host.appendChild(wrap);
   drawEye();
+  // packing factor = D/pitch (1 = lenses touching/holochroal, the blueprint's own eye panels show this same
+  // pitch = D(1+gap) relationship), presented the intuitive way round from the raw lensGap parameter it drives.
+  const glo = KNOB.lensGap.lo, ghi = KNOB.lensGap.hi, pLo = 1 / (1 + ghi), pHi = 1 / (1 + glo);
+  const packWrap = document.createElement('div'); packWrap.className = 'ctrl';
+  const initPacking = 1 / (1 + P.lensGap);
+  packWrap.innerHTML = `<div class="lab"><span>Lens packing</span><span id="v-lensPacking">${initPacking.toFixed(3)}</span></div>
+    <input type="range" id="s-lensPacking" min="${pLo}" max="${pHi}" step="0.005" value="${initPacking}">
+    <div class="hint" id="packhint"></div>`;
+  host.appendChild(packWrap);
+  packWrap.querySelector('input').addEventListener('input', e => {
+    const v = parseFloat(e.target.value);
+    P.lensGap = Math.max(glo, Math.min(ghi, 1 / v - 1));
+    $('v-lensPacking').textContent = v.toFixed(3);
+    updatePackHint(); refreshDerived();
+  });
+  updatePackHint();
+}
+function updatePackHint(){
+  const el = $('packhint'); if (!el) return;
+  const {eR} = eyeGeom(), D = P.lensD * eR, pitch = D * (1 + P.lensGap);
+  el.textContent = `pitch ${pitch.toFixed(2)} mm = Ø${D.toFixed(2)} mm lens × (1 + gap ${P.lensGap.toFixed(2)})`;
 }
 function drawEye(){
   const svg = $('eyesvg'); if (!svg) return;
@@ -229,10 +250,11 @@ function drawEye(){
     <circle class="eye" cx="${X(xe)}" cy="${Y(ye)}" r="${rDraw * S}"/><path class="eyearc" d="${ad}"/>
     <line class="gauge" x1="${gx}" y1="${gy0}" x2="${gx}" y2="${gy1}"/><line class="gauge-fill" x1="${gx}" y1="${ghy}" x2="${gx}" y2="${gy1}"/>
     <text x="${gx}" y="${gy0 - 3}" fill="var(--mid)" font-size="9" text-anchor="middle" font-family="monospace">H</text>
-    <circle class="h" id="eyeCenter" cx="${X(xe)}" cy="${Y(ye)}" r="6"/><circle class="h" id="eyeResize" cx="${X(xe + rDraw)}" cy="${Y(ye)}" r="5"/>
-    <circle class="h" id="eyeArc1" cx="${X(a1[0])}" cy="${Y(a1[1])}" r="5"/><circle class="h" id="eyeArc2" cx="${X(a2[0])}" cy="${Y(a2[1])}" r="5"/>
-    <circle class="h" id="eyeH" cx="${gx}" cy="${ghy}" r="6"/>`;
+    <circle class="h" id="eyeCenter" cx="${X(xe)}" cy="${Y(ye)}" r="4"/><circle class="h" id="eyeResize" cx="${X(xe + rDraw)}" cy="${Y(ye)}" r="3.5"/>
+    <circle class="h" id="eyeArc1" cx="${X(a1[0])}" cy="${Y(a1[1])}" r="3.5"/><circle class="h" id="eyeArc2" cx="${X(a2[0])}" cy="${Y(a2[1])}" r="3.5"/>
+    <circle class="h" id="eyeH" cx="${gx}" cy="${ghy}" r="4"/>`;
   $('eyelab').textContent = P.eyeSize <= 0.005 ? 'blind' : `arc ${Math.round(P.eyeArc)}° · H ${P.eyeHeight.toFixed(2)} R`;
+  updatePackHint();
   const drag = (id, onmove) => {
     const h = svg.querySelector('#' + id); let on = false;
     h.onpointerdown = e => { on = true; h.setPointerCapture(e.pointerId); };

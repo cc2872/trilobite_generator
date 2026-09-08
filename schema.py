@@ -146,7 +146,7 @@ UI = {
         "Body":   ["length", "width", "relief", "wall"],
         "Head":   ["headOutlineExp", "headDomeExp", "headDomeFill", "headRearArc", "genalSpine", "genalWidthMM",
                    "eyeSize", "eyeArc", "eyeHeight", "eyePos", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade",
-                   "lensD", "lensGap", "lensRise"],
+                   "lensD", "lensRise"],   # lensGap is driven by the "Lens packing" slider in the eye editor instead
         "Thorax": ["segCount", "bladeChord", "tipSweep", "tipTaper", "spineBase", "spineGrad", "spineSweep"],
         "Tail":   ["pygFrac", "pygWidth", "pygSpine", "pygSplay", "pygRings", "pygMarginal"],
     },
