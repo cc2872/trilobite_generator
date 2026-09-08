@@ -658,8 +658,16 @@ def _sane(part):
 
 def _build_checked(fn, label):
     """Build a part; if OpenCascade hands back garbage (failed fuse → tool only, or an inside-out body),
-    retry with a slightly different surface grid. Every retry is recorded in BUILD_NOTES."""
+    retry with a slightly different surface grid. Every retry is recorded in BUILD_NOTES.
+
+    Never returns None: if every attempt raises (rather than just producing bad geometry), that used to
+    fall through silently and hand the caller `None`, which several calls later surfaced as a confusing
+    'NoneType' object has no attribute 'faces'/'tessellate' deep inside to_trimesh() instead of a clear
+    error naming the actual part that failed. Now it raises here instead, and returns the best (even if
+    unsane) non-None attempt if at least one exists, matching the prior 'return something, log a note'
+    intent for the merely-unsane case."""
     global GRID_JITTER
+    last_part = None
     for k, jit in enumerate((0, 2, -2, 4)):
         GRID_JITTER = jit
         n0 = len(BUILD_NOTES)
@@ -667,6 +675,7 @@ def _build_checked(fn, label):
             part = fn()
         except Exception as e:
             BUILD_NOTES.append((label, "build error", str(e)[:60])); part = None
+        if part is not None: last_part = part
         # a pruned negative-volume solid means the boolean failed even if what is left looks sane
         garbage = any(isinstance(n[2], (int, float)) and n[2] < 0 for n in BUILD_NOTES[n0:])
         if part is not None and _sane(part) and not garbage:
@@ -674,7 +683,9 @@ def _build_checked(fn, label):
             GRID_JITTER = 0; return part
     GRID_JITTER = 0
     BUILD_NOTES.append((label, "UNSANE after retries", ""))
-    return part
+    if last_part is None:
+        raise RuntimeError(f"{label}: every build attempt raised an exception (no geometry at all after 4 tries) - see BUILD_NOTES for the errors")
+    return last_part
 
 def parts_list(P):
     P = schema.coerce(P)
@@ -732,6 +743,8 @@ def animate_enrollment(P, parts=None, seconds=2.5):
 def to_trimesh(part, tol=0.15, ang=0.3):
     """Robust tessellation: OpenCascade occasionally skips a face at a given tolerance, so retry with
     nearby tolerances, then fall back to meshing face by face and stitching."""
+    if part is None:
+        raise ValueError("to_trimesh() called with part=None - an upstream build failed silently; check BUILD_NOTES")
     import trimesh
     best = None
     for k in (1.0, 0.8, 1.25, 0.6, 1.6):
