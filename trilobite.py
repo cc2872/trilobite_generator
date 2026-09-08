@@ -172,6 +172,14 @@ def spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0):
 def add_hinge(part, envelope, P, y_axis, rear, wide=False):
     rB, c, nK = P["barrelR"], P["clearance"], int(P["nKnuckles"])
     zh, Wh = hinge_z(P), hinge_width(P)
+    # 9 Sep 2026: a thin axis (low axisFrac/width, high segCount) or a bulky knuckle set (many nKnuckles,
+    # large clearance) can drive Wh below what nK knuckles of width kw-c > 0 need, which used to hand a
+    # negative length/width straight to Cylinder()/Box() below and crash the whole build with an opaque
+    # OpenCascade error (Standard_DomainError) instead of a bad-but-buildable hinge. Floor it and say why.
+    Wh_min = nK * c + 1.0
+    if Wh < Wh_min:
+        BUILD_NOTES.append(("hinge", "hinge too narrow for knuckle count/clearance (widen axis or reduce nKnuckles)", round(Wh, 2)))
+        Wh = Wh_min
     kw, x0 = Wh / nK, -Wh / 2
     W = P["width"]
 
@@ -190,7 +198,15 @@ def add_hinge(part, envelope, P, y_axis, rear, wide=False):
         webs = web if webs is None else webs + web
     part += webs & envelope
     part -= barrel(0, Wh + 10, P["boreDia"] / 2)
-    blk = Box(Wh + 2, 2 * P["wall"], zh - rB - c - 0.5,
+    # 9 Sep 2026: low relief combined with a thick wall and/or a large knuckle radius can leave no vertical
+    # room for the stop block below the knuckle (this is what triggered "every build attempt raised an
+    # exception" - it's deterministic, so all 4 GRID_JITTER retries failed identically). Floor the height so
+    # the hinge still builds (undersized/interfering, but visible and fixable) instead of crashing outright.
+    blk_h = zh - rB - c - 0.5
+    if blk_h < 0.3:
+        BUILD_NOTES.append(("hinge", "stop block too thin for this relief/wall/barrelR (increase relief or reduce wall/barrelR)", round(blk_h, 2)))
+        blk_h = 0.3
+    blk = Box(Wh + 2, 2 * P["wall"], blk_h,
               align=(Align.CENTER, Align.MAX if rear else Align.MIN, Align.MIN)).moved(Location((0, y_axis, 0)))
     part += blk
     phi, L = P["maxAngle"] / 2, 80
