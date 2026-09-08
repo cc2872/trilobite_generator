@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 RUN pip install --no-cache-dir build123d trimesh manifold3d python-fcl numpy rtree matplotlib
-COPY schema.py fields.py trilobite.py instrument.py trilobite_web.py index.html skins.py blueprint.py ./
+COPY schema.py fields.py trilobite.py instrument.py trilobite_web.py index.html skins.py blueprint.py eyes.py eye_solid.py ./
 COPY skins/ ./skins/
 COPY presets/ ./presets/
 ENV PORT=8080
