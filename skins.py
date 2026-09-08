@@ -1,14 +1,3 @@
-"""
-skins.py — reference skins as shape keys.
-
-A skin is a reference mesh (e.g. an extracted cephalon) registered to the generator's canonical frame
-and resampled onto the generator's (u, v) grid:
-    v ∈ [0, 1]  rear (hinge line, y = 0) → front tip;    u ∈ [-1, 1]  left margin → right margin
-    silhouette  w(v)  half-width at row v, as a fraction of the maximum half-width
-    field       z(v, u) height above the ground, as a fraction of the skin's length
-Every skin on the same grid → blending is a weighted sum. Undercuts are dropped by construction
-(top surface only); anything a ray from above cannot see is an appendage, not a skin.
-"""
 import json, os, hashlib
 import numpy as np
 import trimesh
