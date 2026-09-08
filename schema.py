@@ -70,6 +70,15 @@ PARAMS = [
     Param("eyePos", "Eye position", 0.45, 0.10, 0.90, 0.01, "Head", "Along the head, 0 rear → 1 front"),
     Param("eyeArc", "Eye arc", 150, 60, 300, 5, "Head", "Angular extent of the visual surface", unit="deg"),
     Param("eyeHeight", "Eye height", 0.8, 0.2, 1.6, 0.05, "Head", "Dome height of the eye / eye radius"),
+    Param("eyeLat", "Eye lateral position", 0.0, 0.0, 0.9, 0.01, "Head", "Eye centre / head half-width (0 = hug the glabella, the v4 rule). Phacops scan: 0.55"),
+    Param("eyeProfile", "Eye profile", 4.0, 2.0, 8.0, 0.1, "Head", "Super-Gaussian exponent of the eye dome: 2 = round, 8 = flat-topped drum (schizochroal)"),
+    Param("eyeSolid", "Eye as solid", 0, 0, 1, 1, "Head", "1 = revolved eye primitive with lens lattice (eye_solid.py); 0 = the v4 heightfield bump", kind="int"),
+    Param("eyeSlope", "Eye band lean", 15.0, 0.0, 50.0, 1.0, "Head", "Visual band from vertical: Erbenochile 0, Phacops 15, Isotelus ~45", unit="deg"),
+    Param("eyeShade", "Eye brim", 0.0, 0.0, 0.3, 0.01, "Head", "Palpebral brim past the band top / R (Erbenochile ~0.15)"),
+    Param("eyeElong", "Eye elongation", 1.3, 1.0, 2.5, 0.05, "Head", "Cap ellipse along the body / across (Isotelus ~2.2). Not applied to the solid in v1"),
+    Param("lensD", "Lens diameter", 0.16, 0.02, 0.4, 0.01, "Head", "Lens diameter / R (holochroal ~0.05, schizochroal 0.1–0.2)"),
+    Param("lensGap", "Lens gap", 0.3, 0.0, 0.6, 0.05, "Head", "Sclera between lenses / lens diameter (0 = holochroal)"),
+    Param("lensRise", "Lens rise", 0.35, 0.0, 1.0, 0.05, "Head", "Lens cap height / lens radius"),
     Param("genalSweep", "Cheek sweep", 0.8, 0.0, 2.5, 0.05, "Head", "How far the cheeks sweep back along the shoulder / segment pitch"),
     Param("borderWidth", "Border width", 0.10, 0.0, 0.30, 0.01, "Head", "Raised border / head half-width (0 = none)"),
     Param("genalSpine", "Genal spine length", 0.35, 0.0, 1.5, 0.01, "Head", "Genal spine length / head length (0 = none)"),
@@ -122,7 +131,7 @@ PARAMS = [
 MACROS = [
     # the six morphospace dials (Raup-style: few semantic axes). Each maps 0..1 linearly onto its parameters.
     ("sculpt", "Sculpt", 1.0, [("furrowDepth", 0.3, 1.2), ("effacement", 0.85, 0.0), ("glabRise", 0.05, 0.18), ("glabLobes", 0, 3),
-                               ("eyeSize", 0.0, 0.16), ("borderWidth", 0.0, 0.10), ("pygRings", 0, 4)]),
+                               ("borderWidth", 0.0, 0.10), ("pygRings", 0, 4)]),   # eyeSize removed 8 Sep 2026: eyes dial owns it (null-axis pre-registration)
     ("headSize", "Head", 0.45, [("cephFrac", 0.22, 0.42), ("widthMaxPos", 0.12, 0.35), ("headRearArc", 0.0, 0.25)]),
     ("tailSize", "Tail", 0.5, [("pygFrac", 0.05, 0.38), ("pygWidth", 0.7, 1.05), ("widthTail", 0.30, 0.80)]),
     ("elongation", "Elongation", 0.5, [("segCount", 4, 14), ("width", 95, 48), ("length", 120, 220), ("widthThoraxRear", 0.75, 0.45)]),
@@ -135,7 +144,7 @@ UI = {
     "dials": ["sculpt", "headSize", "tailSize", "elongation", "spikiness", "eyes"],
     "parts": {
         "Body":   ["length", "width", "relief", "wall"],
-        "Head":   ["headOutlineExp", "headDomeExp", "headDomeFill", "headRearArc", "genalSpine", "genalWidthMM", "eyeSize", "eyePos"],
+        "Head":   ["headOutlineExp", "headDomeExp", "headDomeFill", "headRearArc", "genalSpine", "genalWidthMM", "eyeSize", "eyePos", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade", "lensD", "lensGap"],
         "Thorax": ["segCount", "bladeChord", "tipSweep", "tipTaper", "spineBase", "spineGrad", "spineSweep"],
         "Tail":   ["pygFrac", "pygWidth", "pygSpine", "pygSplay", "pygRings", "pygMarginal"],
     },
@@ -150,6 +159,16 @@ def apply_macro(P, key, value):
         for pk, lo, hi in maps:
             P[pk] = lo + (hi - lo) * float(value)
     return coerce(P)
+
+def macro_value(P, key):
+    """Inverse of apply_macro on the macro's FIRST parameter (its primary), clamped to [0, 1].
+    Shared by the sidebar and the sheet so both read the same dial position from a loaded preset."""
+    for k, label, default, maps in MACROS:
+        if k != key: continue
+        pk, lo, hi = maps[0]
+        if hi == lo: return default
+        return float(min(1.0, max(0.0, (float(P.get(pk, lo)) - lo) / (hi - lo))))
+    raise KeyError(key)
 
 BY_KEY = {p.key: p for p in PARAMS}
 GROUPS = []
@@ -197,7 +216,7 @@ PRESETS["harpetid"] = dict(PRESETS["textured"],
 PRESETS["phacopid"] = dict(PRESETS["textured"],
     # Phacops sp. scan (25 × 15 mm, matrix masked): eyes at 0.55 ± 0.1 of half-width, 0.75 Lc from the front,
     # 0.84–0.96 of glabella height; glabella ~0.55 of head width in plan, only 8 % above the rings in z; 11 rings.
-    length=205, width=95, segCount=11, cephFrac=0.34, pygFrac=0.22, eyeSize=0.22, eyeHeight=0.9, eyePos=0.75, glabInflate=1.7,   # 205 mm: 11 segments need pitch ≥ 8 mm for this hinge
+    length=205, width=95, segCount=11, cephFrac=0.34, pygFrac=0.22, eyePos=0.75, glabInflate=1.7, eyeLat=0.55, eyeProfile=6.0, eyeSolid=1, eyeSize=0.13, eyeHeight=1.7, eyeSlope=15, eyeArc=110,   # 205 mm: 11 segments need pitch ≥ 8 mm for this hinge
     glabRise=0.12, genalSpine=0.0, pygSpine=0.0, pygRings=7, spineBase=0.0, headDomeExp=1.9, widthTail=0.6,
     tipTaper=0.6, bladeChord=1.0)
 DEFAULT_PRESET = "textured"
@@ -215,7 +234,7 @@ def defaults():
 
 def coerce(P, base=None):
     """Fill missing keys with defaults, clamp to range, enforce int/odd-int kinds. Unknown keys are dropped."""
-    Q = dict(base) if base is not None else defaults()
+    Q = dict(base) if base is not None else table_defaults()   # 8 Sep 2026: was defaults() (= textured), which leaked its crescent into every JSON preset
     for k, v in (P or {}).items():
         if k in BY_KEY:
             p = BY_KEY[k]

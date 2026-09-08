@@ -1,0 +1,38 @@
+{
+ "instrument": "2.0",
+ "params": "9ef2d53067",
+ "bound_deg": 45.0,
+ "joints": 12,
+ "printed_stop_deg": 18.0,
+ "collision_rule": "overlap - overlap_at_rest > 0.5 mm3",
+ "measure_timed_out": true,
+ "theta_joint_deg": null,
+ "total_deg": null,
+ "closure_gap_mm": null,
+ "gap_over_L": null,
+ "limited_by": "unknown",
+ "stopped_by": [],
+ "stop_recommended_deg": null,
+ "v1_equivalent_e_max": null,
+ "seconds": 204.3,
+ "print_valid": true,
+ "violations": [],
+ "pitch": 8.2,
+ "hinge_z": 10.96,
+ "hinge_width": 14.73,
+ "knuckle": 4.61,
+ "pin_wall": 1.62,
+ "preset": "phacopida",
+ "order": "phacopida",
+ "blurb": "Phacopida (Phacops, fitted 6 Sep) \u2014 Gon p. __. Schizochroal eyes, 11 segments, no genal spines.",
+ "unsane_parts": [
+  "seg0",
+  "seg7"
+ ],
+ "closure_ref": "head",
+ "wedge": {
+  "reach": 0.15,
+  "reach_wide": 0.5
+ },
+ "gap_curve": null
+}

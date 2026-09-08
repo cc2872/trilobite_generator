@@ -1,0 +1,104 @@
+{
+ "instrument": "2.0",
+ "params": "36d3177cb1",
+ "bound_deg": 35.0,
+ "joints": 10,
+ "printed_stop_deg": 18.0,
+ "measure_timed_out": false,
+ "theta_joint_deg": 30.35,
+ "total_deg": 303.5,
+ "closure_gap_mm": 0.0,
+ "gap_over_L": 0.0,
+ "limited_by": "closed",
+ "stopped_by": [
+  [
+   0,
+   10,
+   1.5
+  ]
+ ],
+ "stop_recommended_deg": 30.4,
+ "v1_equivalent_e_max": 1.0,
+ "seconds": 6.2,
+ "print_valid": false,
+ "violations": [
+  "knuckle 2.0 mm < 3.0",
+  "seg5: 3 solids",
+  "seg6: 3 solids",
+  "seg7: 3 solids"
+ ],
+ "pitch": 8.05,
+ "hinge_z": 10.96,
+ "hinge_width": 6.86,
+ "knuckle": 1.99,
+ "pin_wall": 1.62,
+ "preset": "harpetida",
+ "order": "harpetida",
+ "blurb": "Harpetida (fitted 6 Sep) \u2014 Gon p. __. Horseshoe brim, prolongations to the tail, narrow thorax. Brim pits not modelled.",
+ "bevel_probe": {
+  "45.0": 3,
+  "35.0": 1
+ },
+ "unsane_parts": [
+  "seg5",
+  "seg6",
+  "seg7"
+ ],
+ "build_notes": [
+  [
+   "seg5",
+   "UNSANE after retries",
+   ""
+  ],
+  [
+   "seg6",
+   "UNSANE after retries",
+   ""
+  ],
+  [
+   "seg7",
+   "UNSANE after retries",
+   ""
+  ]
+ ],
+ "build_seconds": 132,
+ "closure_ref": "head body",
+ "gap_curve": [
+  [
+   0.0,
+   64.22
+  ],
+  [
+   5.0,
+   61.77
+  ],
+  [
+   10.0,
+   52.99
+  ],
+  [
+   15.0,
+   37.62
+  ],
+  [
+   18.0,
+   28.93
+  ],
+  [
+   20.0,
+   23.4
+  ],
+  [
+   25.0,
+   7.86
+  ],
+  [
+   30.0,
+   0.08
+  ],
+  [
+   35.0,
+   0.0
+  ]
+ ]
+}

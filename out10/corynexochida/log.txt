@@ -1,0 +1,3 @@
+corynexochida: bound 45.0 probe {45.0: 1} build 76s unsane [] | theta 22.59 total 203.3 gap 0.0 closed by [(0, 9, 20.5)] print True []
+corynexochida: bound 45.0 probe {45.0: 1} build 192s unsane [] | theta 0.79 total 7.1 gap 59.17 anatomy by [(8, 9, 0.6)] print True []
+corynexochida: bound 45.0 probe {45.0: 1} build 85s unsane [] | theta 22.59 total 203.3 gap 0.0 closed by [(0, 9, 20.6)] print True []

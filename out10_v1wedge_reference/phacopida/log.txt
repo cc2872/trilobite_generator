@@ -1,0 +1,1 @@
+phacopida: bound 45.0 probe {45.0: 1} build 201s unsane ['seg0', 'seg1', 'seg2', 'seg3', 'seg7'] | theta None total None gap None unknown by [] print False ['seg0: 3 solids', 'seg1: 3 solids', 'seg2: 3 solids', 'seg3: 3 solids']

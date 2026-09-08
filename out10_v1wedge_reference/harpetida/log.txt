@@ -1,0 +1,1 @@
+harpetida: bound 35.0 probe {45.0: 3, 35.0: 1} build 132s unsane ['seg5', 'seg6', 'seg7'] | theta 30.35 total 303.5 gap 0.0 closed by [(0, 10, 1.5)] print False ['knuckle 2.0 mm < 3.0', 'seg5: 3 solids', 'seg6: 3 solids', 'seg7: 3 solids']

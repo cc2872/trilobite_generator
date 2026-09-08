@@ -1,0 +1,146 @@
+{
+ "instrument": "2.0",
+ "params": "31face0477",
+ "bound_deg": 45.0,
+ "joints": 10,
+ "printed_stop_deg": 18.0,
+ "measure_timed_out": false,
+ "theta_joint_deg": 0.0,
+ "total_deg": 0.0,
+ "closure_gap_mm": 63.77,
+ "gap_over_L": 0.4588,
+ "limited_by": "anatomy",
+ "stopped_by": [
+  [
+   5,
+   6,
+   31.4
+  ]
+ ],
+ "stop_recommended_deg": 0.0,
+ "v1_equivalent_e_max": 0.0,
+ "seconds": 123.4,
+ "print_valid": false,
+ "violations": [
+  "seg1: volume 1530 mm3 < 40 % of expected ~3960 (part lost in a boolean?)",
+  "seg2: volume 1468 mm3 < 40 % of expected ~3889 (part lost in a boolean?)",
+  "seg3: volume 1403 mm3 < 40 % of expected ~3797 (part lost in a boolean?)",
+  "seg4: volume 1377 mm3 < 40 % of expected ~3685 (part lost in a boolean?)",
+  "seg5: volume 1343 mm3 < 40 % of expected ~3554 (part lost in a boolean?)",
+  "seg6: volume 1271 mm3 < 40 % of expected ~3405 (part lost in a boolean?)",
+  "seg7: volume 1225 mm3 < 40 % of expected ~3239 (part lost in a boolean?)",
+  "seg8: volume 1036 mm3 < 40 % of expected ~3059 (part lost in a boolean?)",
+  "seg8: 3 solids"
+ ],
+ "pitch": 8.03,
+ "hinge_z": 10.96,
+ "hinge_width": 10.45,
+ "knuckle": 3.18,
+ "pin_wall": 1.62,
+ "preset": "odontopleurida",
+ "order": "odontopleurida",
+ "blurb": "Odontopleurida \u2014 Gon p. __. Spines everywhere: pleural, marginal, occipital, axial; 9 segments.",
+ "bevel_probe": {
+  "45.0": 1
+ },
+ "unsane_parts": [
+  "seg1",
+  "seg2",
+  "seg3",
+  "seg4",
+  "seg5",
+  "seg6",
+  "seg7",
+  "seg8"
+ ],
+ "build_notes": [
+  [
+   "seg1",
+   "UNSANE after retries",
+   ""
+  ],
+  [
+   "seg2",
+   "UNSANE after retries",
+   ""
+  ],
+  [
+   "seg3",
+   "UNSANE after retries",
+   ""
+  ],
+  [
+   "seg4",
+   "UNSANE after retries",
+   ""
+  ],
+  [
+   "seg5",
+   "UNSANE after retries",
+   ""
+  ],
+  [
+   "seg6",
+   "UNSANE after retries",
+   ""
+  ],
+  [
+   "seg7",
+   "UNSANE after retries",
+   ""
+  ],
+  [
+   "seg8",
+   "UNSANE after retries",
+   ""
+  ]
+ ],
+ "build_seconds": 311,
+ "closure_ref": "head body",
+ "gap_curve": [
+  [
+   0.0,
+   63.77
+  ],
+  [
+   5.0,
+   63.48
+  ],
+  [
+   10.0,
+   51.55
+  ],
+  [
+   15.0,
+   37.74
+  ],
+  [
+   18.0,
+   28.36
+  ],
+  [
+   20.0,
+   9.16
+  ],
+  [
+   25.0,
+   0.0
+  ],
+  [
+   30.0,
+   0.0
+  ],
+  [
+   35.0,
+   0.0
+  ],
+  [
+   40.0,
+   0.0
+  ],
+  [
+   45.0,
+   0.0
+  ]
+ ]
+}

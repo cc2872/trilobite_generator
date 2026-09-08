@@ -1,0 +1,1 @@
+asaphida: bound 25.0 probe {45.0: 3, 35.0: 3, 25.0: 3} build 116s unsane ['seg4', 'seg5', 'seg6'] | theta 19.53 total 175.8 gap 22.58 anatomy by [(7, 9, 0.6)] print False ['seg4: 3 solids', 'seg5: 3 solids', 'seg6: 3 solids']

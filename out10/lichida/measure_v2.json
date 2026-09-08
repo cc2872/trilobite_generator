@@ -1,0 +1,112 @@
+{
+ "instrument": "2.0",
+ "params": "f17abd8278",
+ "bound_deg": 45.0,
+ "joints": 11,
+ "printed_stop_deg": 18.0,
+ "measure_timed_out": false,
+ "theta_joint_deg": 19.07,
+ "total_deg": 209.8,
+ "closure_gap_mm": 0.0,
+ "gap_over_L": 0.0,
+ "limited_by": "closed",
+ "stopped_by": [
+  [
+   0,
+   11,
+   63.3
+  ]
+ ],
+ "stop_recommended_deg": 19.1,
+ "v1_equivalent_e_max": 1.0,
+ "seconds": 19.0,
+ "print_valid": true,
+ "violations": [],
+ "pitch": 8.05,
+ "hinge_z": 10.96,
+ "hinge_width": 10.74,
+ "knuckle": 3.28,
+ "pin_wall": 1.62,
+ "preset": "lichida",
+ "order": "lichida",
+ "blurb": "Lichida \u2014 Gon p. __. Tuberculate, wide spinose tail, inflated glabella, 10 segments.",
+ "bevel_probe": {
+  "45.0": 1
+ },
+ "unsane_parts": [],
+ "build_notes": [
+  [
+   "seg8",
+   "rebuilt",
+   "grid jitter +4"
+  ],
+  [
+   "seg9",
+   2,
+   8.9
+  ],
+  [
+   "seg9",
+   3,
+   14.6
+  ],
+  [
+   "seg9",
+   2,
+   9.2
+  ],
+  [
+   "seg9",
+   "rebuilt",
+   "grid jitter -2"
+  ]
+ ],
+ "build_seconds": 124,
+ "closure_ref": "head body",
+ "gap_curve": [
+  [
+   0.0,
+   74.44
+  ],
+  [
+   5.0,
+   66.65
+  ],
+  [
+   10.0,
+   55.9
+  ],
+  [
+   15.0,
+   38.9
+  ],
+  [
+   18.0,
+   12.85
+  ],
+  [
+   20.0,
+   0.0
+  ],
+  [
+   25.0,
+   0.0
+  ],
+  [
+   30.0,
+   0.0
+  ],
+  [
+   35.0,
+   0.0
+  ],
+  [
+   40.0,
+   0.07
+  ],
+  [
+   45.0,
+   0.0
+  ]
+ ]
+}

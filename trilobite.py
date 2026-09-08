@@ -117,6 +117,10 @@ def safe_expr(expr, s):
         BUILD_NOTES.append(("head", "genalPath rejected", f"{expr!r}: {str(ex)[:40]}")); return s ** 2
 
 GRID_JITTER = 0          # added to nu/nv by plate()/under() when a build is retried (see parts_list)
+WEDGE_REACH = 0.15       # seg-seg joints: fraction of the pitch
+WEDGE_REACH_WIDE = 0.5   # head-seg0 and last-seg-tail joints (full-width plates, no tips to sever)
+_WEDGE_REACH_DOC = 0.5   # fraction of the pitch the full-band bevel reaches past the hinge line (0 = the 8 Sep clipped wedge, which
+                         # left 0.5-0.6 mm^3 contacts at 1-4 deg; the original unclipped wedge severed pleural tips above ~12 deg)
 
 def plate(outline, zfun, t, nu=45, nv=27):
     nu += GRID_JITTER; nv += GRID_JITTER
@@ -194,11 +198,27 @@ def add_hinge(part, envelope, P, y_axis, rear, wide=False):
         band = 2 * (P["axisFrac"] * (W / 2)) + 0.12 * W
     else:                                                        # tiled plates, and ALWAYS the head's rear and the tail's front:
         band = 2 * (P["axisFrac"] * (W / 2)) + 0.45 * W          # those are full-width plates whose whole edge swings past a rib
+    # 8 Sep 2026 (late): how far the full-band bevel reaches past the hinge line. Bracketed on corynexochida (seg7-tail
+    # interference) and phacopida (tiled-plate tip severing): 0 -> contacts from 1 deg; 0.25+ -> tips severed at 45 deg;
+    # 0.15 -> both clean to 10 deg, tail contact from 20 deg. The two full-width joints (head-seg0, last seg-tail) have
+    # no pleural tips in the band, so they keep the full reach and the tail interface stays clean to 30 deg.
+    reach = (WEDGE_REACH_WIDE if wide else WEDGE_REACH) * pitch(P)
     if rear:
         wedge = Box(band, L, L, align=(Align.CENTER, Align.MIN, Align.MAX)).rotate(Axis.X, -phi)
+        own_side = Box(band + 2, L + reach, 2 * L, align=(Align.CENTER, Align.MIN, Align.CENTER)).moved(Location((0, -reach, 0)))   # y >= hinge - reach
     else:
         wedge = Box(band, L, L, align=(Align.CENTER, Align.MAX, Align.MAX)).rotate(Axis.X, phi)
-    part -= wedge.moved(Location((0, y_axis, zh))) - barrel(0, Wh + 4, rB + c)
+        own_side = Box(band + 2, L + reach, 2 * L, align=(Align.CENTER, Align.MAX, Align.CENTER)).moved(Location((0, reach, 0)))    # y <= hinge + reach
+    # 8 Sep 2026: the tilted wedge reaches PAST the hinge line at depth (by z·tan phi). That reach is what bevels
+    # the stop block's face — the stop itself — but across the full band it also ate the low pleural tips once
+    # phi exceeded ~12° (tiled plates lost everything beyond |x| ≈ 0.75 w at 20°+). So: the full-band wedge is
+    # clipped to its own side of the hinge line (flap / lip underside only), and the past-the-line reach is kept
+    # only over the stop block's width. Identical geometry to before for phi ≤ ~10°; scalable beyond it.
+    wedge = wedge.moved(Location((0, y_axis, zh)))
+    keep = barrel(0, Wh + 4, rB + c)
+    for clip in (own_side.moved(Location((0, y_axis, zh))), Box(Wh + 2, 4 * L, 4 * L).moved(Location((0, y_axis, zh)))):
+        for w in (wedge & clip).solids():                     # subtract Solids, not a Compound: a Compound tool made the cut fail silently
+            part -= w - keep
     return part
 
 # =====================================================================
@@ -419,13 +439,15 @@ def build_cephalon(P):
             z -= 0.7 * F * trough(y - yk, 0.9) * trough(ax - (g - 1.2), 2.2) * (ax > 0.3 * g)
         # eyes: palpebral lobe + crescent visual surface facing outward
         if P["eyeSize"] > 0.01:
-            eR = P["eyeSize"] * wh; ye = -P["eyePos"] * Lc
-            xe = float(glab_half(ye)) + eR + 1.0
+            from eyes import eye_geometry                                       # one geometry for builder, sheet and FOV ruler
+            G = eye_geometry(P); eR, ye, xe, eH = G["eR"], G["ye"], G["xe"], G["eH"]
             r = np.hypot(ax - xe, y - ye)
             ang = np.degrees(np.arctan2(y - ye, ax - xe))
             mask = plateau(ang, P["eyeArc"] / 2, 12)
-            eH = P["eyeHeight"] * eR
-            z += eH * np.exp(-(r / (0.95 * eR)) ** 4)                        # domed eye (super-Gaussian, flat top)
+            if P.get("eyeSolid", 0) < 0.5:                                    # heightfield eye only when the solid primitive is off
+                z += eH * np.exp(-(r / (0.95 * eR)) ** G["exponent"])        # domed eye (super-Gaussian; exponent = eyeProfile)
+            else:
+                z += 0.15 * eH * np.exp(-(r / (1.3 * eR)) ** 2)                # a low socket so the solid eye has shell to sit on
             z += 0.35 * eH * trough(r - eR, 1.0) * mask                       # crescent visual surface rim
         z += tubercles(x, y, P, dict(box=(-wh + 3, wh - 3, -Lc + 4, -2), ok=lambda xk, yk: True), seed=99, count_scale=2.2 * wh)
         # border: furrow and raised rim along the outline
@@ -487,6 +509,20 @@ def build_cephalon(P):
                 head += arm
             else:
                 BUILD_NOTES.append(("head", "arm failed", f"side {side}"))
+    if P.get("eyeSolid", 0) > 0.5 and P["eyeSize"] > 0.01:                  # the eye as its own primitive (eye_solid.py)
+        from eyes import eye_geometry
+        from eye_solid import build_eye, eye_params
+        G = eye_geometry(P); EP = eye_params(P, G["eR"])
+        try:
+            xm = float(xmax(np.array([G["ye"]]))[0]) - 0.4                         # head outline at the eye's y: the lobe stops there
+            eye, n_lens = build_eye(**EP, clip_x=xm - G["xe"])
+            for side in (1, -1):
+                zb = float(zfun(np.array([side * G["xe"]]), np.array([G["ye"]]))[0]) - 0.3     # cheek height under the eye centre
+                e = eye.rotate(Axis.Z, 0 if side > 0 else 180).moved(Location((side * G["xe"], G["ye"], zb)))
+                head += e
+            BUILD_NOTES.append(("head", "eye solid", f"{n_lens} lenses/eye"))
+        except Exception as ex:
+            BUILD_NOTES.append(("head", "eye solid failed", str(ex)[:50]))
     if P["occipitalSpine"] > 0.02:
         head += spine(0.6 * margin, 0.5, P["occipitalSpine"] * Lc, (0, -0.07 * Lc, ring_top(P) - 1.0), 0, pitch_deg=55)
     return prune_slivers(head, label="head")
