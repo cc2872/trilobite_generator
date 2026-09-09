@@ -3,7 +3,7 @@ import numpy as np, trimesh
 import schema, trilobite as T, instrument2 as I2
 BOUNDS = (45.0, 35.0, 25.0)
 names = sys.argv[1:] or [os.path.basename(f)[:-5] for f in sorted(glob.glob("presets/*.json"))]
-for name in names:
+for name in names: 
     out = f"out10/{name}"; os.makedirs(out, exist_ok=True)
     log = open(f"{out}/log.txt", "a")
     try:
