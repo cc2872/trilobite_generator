@@ -11,7 +11,7 @@ last two steps of the pipeline, so both are instantly available the moment statu
 interactive 3D viewer is an opt-in, client-lazy-loaded secondary view that loads every part once, all
 at once, only after the build is already finished.
 """
-import json, os, time, threading, multiprocessing, io, webbrowser
+import json, os, shutil, time, threading, multiprocessing, io, webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
 import schema, fields, instrument
@@ -96,6 +96,22 @@ def _measure_hard_bounded(P, folder, names_all, parts):
     meas.update(instrument.print_validity(P, parts))
     return meas
 
+MAX_CACHED_BUILDS = 8    # cap how many distinct parameter combinations' results we keep at once, so a
+                         # long test session (many different sliders tried) doesn't grow CACHE/web_out
+                         # without bound - each entry used to also hold every part's full mesh bytes in
+                         # RAM forever (on top of the copy already written to disk), which was the biggest
+                         # avoidable memory cost in the process.
+
+def _evict_old_builds():
+    """Call with LOCK held. Drops the oldest builds' metadata and on-disk files once more than
+    MAX_CACHED_BUILDS are being kept. Never touches a build that is still building/measuring."""
+    if len(CACHE) <= MAX_CACHED_BUILDS: return
+    for old_key in list(CACHE):                                 # dicts preserve insertion order: oldest first
+        if len(CACHE) <= MAX_CACHED_BUILDS: break
+        if CACHE[old_key]["status"] in ("building", "measuring"): continue
+        del CACHE[old_key]
+        shutil.rmtree(os.path.join(OUT, old_key), ignore_errors=True)
+
 def _generate_outputs(P, names_all, blobs, meas, folder):
     """Render the technical sheet and a combined flat STL — the two things the client shows/downloads by
     default. This is fast (posing + concatenating already-tessellated meshes, plus a matplotlib figure —
@@ -115,6 +131,9 @@ def _run_build(k, P, folder, t0):
     trilobite.py's retry-on-garbage globals stay safe), measure enrollment in a hard-bounded subprocess,
     then render the sheet and combined STL. status moves building -> measuring -> done (or error)."""
     try:
+        blobs = {}                                              # thread-local: only needed transiently, to
+                                                                  # build the combined STL/sheet below - never
+                                                                  # stored in CACHE (see MAX_CACHED_BUILDS note)
         with BUILD_CPU_LOCK:
             names_all = T.PART_NAMES(P)
             fns = ([lambda: T.build_cephalon(P)] + [(lambda i=i: T.build_segment(P, i)) for i in range(int(P["segCount"]))]
@@ -129,20 +148,20 @@ def _run_build(k, P, folder, t0):
                 # trilobite._sane()) and cached the result; reusing it avoids tessellating twice and
                 # guarantees this is the same watertight-checked mesh, not a fresh, possibly different one.
                 m = getattr(p, "_checked_mesh", None) or T.to_trimesh(p, *T.SANE_MESH_TOL)
-                blob = m.export(file_type="stl")
-                try: m.export(os.path.join(folder, f"{n}.stl"))         # measuring subprocess reloads from here
+                blobs[n] = m.export(file_type="stl")
+                try: m.export(os.path.join(folder, f"{n}.stl"))         # measuring subprocess AND /api/mesh/ reload from here
                 except Exception: pass
                 with LOCK:
-                    e = CACHE[k]; e["names"].append(n); e["blobs"][n] = blob
+                    e = CACHE[k]; e["names"].append(n)
         with LOCK:
             e = CACHE[k]; e["mesh_seconds"] = round(time.time() - t0, 1); e["status"] = "measuring"
 
         meas = _measure_hard_bounded(P, folder, names_all, parts)
         with LOCK:
-            e = CACHE[k]; e["measure"] = meas; blobs_snapshot = dict(e["blobs"])
+            e = CACHE[k]; e["measure"] = meas
 
         try:
-            _generate_outputs(P, names_all, blobs_snapshot, meas, folder)
+            _generate_outputs(P, names_all, blobs, meas, folder)
             with LOCK:
                 e = CACHE[k]
                 e["sheet_ready"] = os.path.exists(os.path.join(folder, "sheet.png"))
@@ -162,7 +181,7 @@ def _status_snapshot(e):
     callers must already hold it. This is the piece that avoids reintroducing the self-deadlock: build()
     calls this directly on its already-cached-and-done fast path instead of calling build_status()
     (which acquires LOCK itself) from inside its own `with LOCK:` block."""
-    out = {kk: vv for kk, vv in e.items() if kk not in ("blobs", "P", "names")}
+    out = {kk: vv for kk, vv in e.items() if kk not in ("P", "names")}
     out["done_parts"] = len(e["names"]); out["maxAngle"] = e["P"]["maxAngle"]
     if e["status"] in ("measuring", "done"):
         out["derived"] = derived(e["P"])
@@ -187,10 +206,11 @@ def build(P):
         e = CACHE.get(k)
         if e is not None and e["status"] != "error":
             return _status_snapshot(e)
-        CACHE[k] = dict(key=k, P=P, status="building", names=[], blobs={}, offsets=None, hinge_z=None,
+        CACHE[k] = dict(key=k, P=P, status="building", names=[], offsets=None, hinge_z=None,
                         total_parts=len(T.PART_NAMES(P)), measure=None, seconds=None, mesh_seconds=None,
                         error=None, sheet_ready=False, stl_ready=False)
         snap = _status_snapshot(CACHE[k])
+        _evict_old_builds()
     folder = os.path.join(OUT, k); os.makedirs(folder, exist_ok=True)
     threading.Thread(target=_run_build, args=(k, P, folder, time.time()), daemon=True).start()
     return snap
@@ -223,10 +243,11 @@ class Handler(SimpleHTTPRequestHandler):
             return self.wfile.write(data)
         if path.startswith("/api/mesh/"):                              # /api/mesh/<key>/<name>.stl — lazy 3D view only
             _, _, _, key, fname = path.split("/", 4)
-            entry = CACHE.get(key); name = fname[:-4] if fname.endswith(".stl") else fname
-            if not entry or name not in entry["blobs"]:
-                return self.send_json(dict(error="mesh not in cache (server restarted?) — press Build again"), 404)
-            data = entry["blobs"][name]
+            name = fname[:-4] if fname.endswith(".stl") else fname
+            mesh_path = os.path.join(OUT, key, f"{name}.stl")           # served straight from what _run_build wrote to disk
+            if not os.path.exists(mesh_path):
+                return self.send_json(dict(error="mesh not found on disk (server restarted, or evicted by a long session - press Build again)"), 404)
+            data = open(mesh_path, "rb").read()
             self.send_response(200); self.send_header("Content-Type", "application/octet-stream")
             self.send_header("Content-Length", str(len(data))); self.send_header("Cache-Control", "no-store")
             self.end_headers(); self.wfile.write(data); return
