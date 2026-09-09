@@ -1,12 +1,9 @@
-"""Build + measure every preset on instrument 2.0. Bound policy (8 Sep 2026): the largest bevel from
-BOUNDS whose mid-thorax segment builds as one solid. A reading of anatomy/closed at theta < bound is
-bound-independent; a lower bound only censors more. The bound used is recorded in every JSON."""
 import sys, json, time, os, glob, traceback
 import numpy as np, trimesh
 import schema, trilobite as T, instrument2 as I2
 BOUNDS = (45.0, 35.0, 25.0)
 names = sys.argv[1:] or [os.path.basename(f)[:-5] for f in sorted(glob.glob("presets/*.json"))]
-for name in names:
+for name in names: 
     out = f"out10/{name}"; os.makedirs(out, exist_ok=True)
     log = open(f"{out}/log.txt", "a")
     try:
