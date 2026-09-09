@@ -413,12 +413,21 @@ function applyLook(){
 }
 document.querySelectorAll('#look span').forEach(s => s.onclick = () => { look = s.dataset.look; applyLook(); });
 const loader = new STLLoader();
-const loadSTL = url => new Promise((res, rej) => loader.load(url + '?t=' + Date.now(), res, undefined, e => rej(new Error('mesh fetch failed: ' + url))));
+const loadSTLOnce = url => new Promise((res, rej) => loader.load(url + '?t=' + Date.now(), res, undefined, e => rej(new Error('mesh fetch failed: ' + url))));
+// Render's free tier (and plain network hiccups) occasionally drop one of the several sequential mesh
+// fetches a 3D load makes; retrying beats failing the whole view over a single transient blip.
+async function loadSTL(url, tries = 4){
+  for (let i = 0; i < tries; i++){
+    try { return await loadSTLOnce(url); }
+    catch (e) { if (i === tries - 1) throw e; setStatus(`loading 3D… retry ${i + 1}/${tries - 1}`, true); await new Promise(r => setTimeout(r, 500 * (i + 1))); }
+  }
+}
 async function loadAllParts(){
   root.clear(); groups = []; meshes = [];
   root.position.set(0, built.hinge_z, 0);
   const names = built.part_names;
   for (let i = 0; i < names.length; i++){
+    setStatus(`loading 3D… ${i + 1} of ${names.length} parts`, true);
     const geo = await loadSTL(`/api/mesh/${built.key}/${names[i]}.stl`);
     const g = new THREE.Group(); g.position.set(0, i === 0 ? 0 : built.offsets[i - 1], 0);
     const [part, mesh] = blueprintPart(geo); part.position.set(0, 0, -built.hinge_z); g.add(part); meshes.push(mesh);
