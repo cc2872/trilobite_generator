@@ -422,6 +422,23 @@ async function loadSTL(url, tries = 4){
     catch (e) { if (i === tries - 1) throw e; setStatus(`loading 3D… retry ${i + 1}/${tries - 1}`, true); await new Promise(r => setTimeout(r, 500 * (i + 1))); }
   }
 }
+// The <img> itself never retries a failed load on its own, unlike loadSTL() above - a single transient
+// blip (same class of Render-free-tier/network hiccup that motivated loadSTL's retries) left the sheet
+// silently blank with no visible error, which read as "the blueprint sometimes doesn't appear".
+function loadSheetImage(url, tries = 4){
+  const img = $('sheetImg'); let attempt = 0;
+  const tryLoad = () => {
+    img.onerror = () => {
+      attempt++;
+      if (attempt >= tries) { img.onerror = null; setStatus('sheet image failed to load - press Build to retry', false); return; }
+      setStatus(`loading sheet… retry ${attempt}/${tries - 1}`, true);
+      setTimeout(tryLoad, 500 * attempt);
+    };
+    img.onload = () => { img.onerror = null; };
+    img.src = url + '?t=' + Date.now() + '-' + attempt;
+  };
+  tryLoad();
+}
 async function loadAllParts(){
   root.clear(); groups = []; meshes = [];
   root.position.set(0, built.hinge_z, 0);
@@ -520,7 +537,7 @@ async function build(){
     $('download').disabled = !r.stl_url;
     $('view3d').style.display = 'flex'; positionView3DButton();
     let msg = `built in ${r.seconds}s`;
-    if (r.sheet_url) $('sheetImg').src = r.sheet_url + '?t=' + Date.now();
+    if (r.sheet_url) loadSheetImage(r.sheet_url);
     else msg += ' — sheet unavailable' + (r.error ? ': ' + r.error : '');
     setStatus(msg, false);
   } catch (e) {
