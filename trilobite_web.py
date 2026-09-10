@@ -11,7 +11,8 @@ last two steps of the pipeline, so both are instantly available the moment statu
 interactive 3D viewer is an opt-in, client-lazy-loaded secondary view that loads every part once, all
 at once, only after the build is already finished.
 """
-import json, os, shutil, time, threading, multiprocessing, io, webbrowser
+import json, os, shutil, time, threading, multiprocessing, io, webbrowser, smtplib, traceback
+from email.mime.text import MIMEText
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
 import schema, fields, instrument
@@ -32,6 +33,28 @@ if os.path.isdir(_pdir):                                          # …then the 
             except Exception: pass
 KNOBS = [(p.key, p.label, p.lo, p.hi, p.step, p.group, p.kind, p.doc) for p in schema.PARAMS]
 INT_KEYS = [p.key for p in schema.PARAMS if p.kind in ("int", "odd_int")]
+
+# ---- failure alert email (Gmail SMTP + an app password: https://myaccount.google.com/apppasswords).
+# Set these on Render (Dashboard -> service -> Environment), never in code:
+#   GMAIL_USER          the Gmail address to send from, e.g. you@gmail.com
+#   GMAIL_APP_PASSWORD  a 16-character app password for that account (not your normal password)
+#   ALERT_EMAIL_TO      where to send alerts (defaults to GMAIL_USER if unset)
+# If any of GMAIL_USER/GMAIL_APP_PASSWORD is missing, alerts are skipped (logged to stdout) rather than
+# blocking or crashing anything - this is a notification feature, never load-bearing for the site itself.
+def send_failure_email(subject, body):
+    user, pw = os.environ.get("GMAIL_USER"), os.environ.get("GMAIL_APP_PASSWORD")
+    to_addr = os.environ.get("ALERT_EMAIL_TO") or user
+    if not user or not pw or not to_addr:
+        print(f"[alert email skipped - set GMAIL_USER/GMAIL_APP_PASSWORD/ALERT_EMAIL_TO] {subject}")
+        return
+    def _send():
+        try:
+            msg = MIMEText(body); msg["Subject"] = subject; msg["From"] = user; msg["To"] = to_addr
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as s:
+                s.starttls(); s.login(user, pw); s.sendmail(user, [to_addr], msg.as_string())
+        except Exception as ex:
+            print(f"[alert email failed to send] {ex}")
+    threading.Thread(target=_send, daemon=True).start()      # never let a slow/broken mail server block a build
 
 def derived(P):
     v = instrument.print_validity(P)
@@ -210,8 +233,12 @@ def _run_build(k, P, folder, t0):
         with LOCK:
             e = CACHE[k]; e["seconds"] = round(time.time() - t0, 1); e["status"] = "done"
     except Exception as ex:
+        tb = traceback.format_exc()
         with LOCK:
             CACHE[k]["status"] = "error"; CACHE[k]["error"] = str(ex)
+        send_failure_email(
+            f"Trilobite generator: build failed ({k})",
+            f"Build failed for key {k}\n\nError: {ex}\n\nTraceback:\n{tb}\n\nParams:\n{json.dumps(P, indent=2, default=str)}\n")
 
 def _status_snapshot(e):
     """Build the client-facing status dict from an already-fetched CACHE entry. Never touches LOCK —
