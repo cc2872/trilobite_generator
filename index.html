@@ -546,6 +546,13 @@ async function build(){
   if (myGen === buildGen) $('build').disabled = false;
 }
 $('build').onclick = build;
+// Best-effort cleanup: tell the server it can delete this build's files now rather than waiting for its
+// own count/disk-size eviction. sendBeacon fires even as the page is torn down (unlike a normal fetch,
+// which the browser may cancel), but delivery still isn't guaranteed - the server's own eviction (see
+// trilobite_web.py's MAX_CACHED_BUILDS/MAX_WEB_OUT_MB) is what actually bounds disk use regardless.
+window.addEventListener('pagehide', () => {
+  if (built && built.key && navigator.sendBeacon) navigator.sendBeacon('/api/release', JSON.stringify({key: built.key}));
+});
 init();
 </script>
 </body>

@@ -103,16 +103,46 @@ MAX_CACHED_BUILDS = 8    # cap how many distinct parameter combinations' results
                          # without bound - each entry used to also hold every part's full mesh bytes in
                          # RAM forever (on top of the copy already written to disk), which was the biggest
                          # avoidable memory cost in the process.
+MAX_WEB_OUT_MB = 300     # also cap total on-disk size directly, regardless of build count - some parameter
+                         # combinations (more segments, finer tessellation retries) produce much bigger STL
+                         # sets than others, so a pure count cap alone doesn't bound disk use.
+
+def _dir_size_bytes(path):
+    total = 0
+    for root, _, files in os.walk(path):
+        for f in files:
+            try: total += os.path.getsize(os.path.join(root, f))
+            except OSError: pass
+    return total
 
 def _evict_old_builds():
-    """Call with LOCK held. Drops the oldest builds' metadata and on-disk files once more than
-    MAX_CACHED_BUILDS are being kept. Never touches a build that is still building/measuring."""
-    if len(CACHE) <= MAX_CACHED_BUILDS: return
+    """Call with LOCK held. Drops the oldest builds' metadata and on-disk files (oldest first) until
+    both MAX_CACHED_BUILDS and MAX_WEB_OUT_MB are satisfied. Never touches a build that is still
+    building/measuring - at worst, in-progress work keeps the budget from being fully met until it
+    finishes, rather than deleting files still being written."""
+    def over_budget():
+        return len(CACHE) > MAX_CACHED_BUILDS or _dir_size_bytes(OUT) > MAX_WEB_OUT_MB * 1024 * 1024
+    if not over_budget(): return
     for old_key in list(CACHE):                                 # dicts preserve insertion order: oldest first
-        if len(CACHE) <= MAX_CACHED_BUILDS: break
+        if not over_budget(): break
         if CACHE[old_key]["status"] in ("building", "measuring"): continue
         del CACHE[old_key]
         shutil.rmtree(os.path.join(OUT, old_key), ignore_errors=True)
+
+def release(key):
+    """Delete one build's cached result and on-disk files immediately, e.g. when the browser tab that
+    built it is closing (sent as a best-effort navigator.sendBeacon(), so this may never arrive - it is
+    a bonus cleanup on top of _evict_old_builds()'s guaranteed cap, not a replacement for it). Multiple
+    tabs/users can share one cache entry when they build identical parameters (CACHE is keyed by param
+    hash, not by session), so this always deletes on request - if someone else is still relying on the
+    same exact result, their next mesh/sheet/download request would just need a rebuild, same as any
+    other eviction."""
+    with LOCK:
+        e = CACHE.get(key)
+        if e is None or e["status"] in ("building", "measuring"): return dict(ok=True, released=False)
+        del CACHE[key]
+    shutil.rmtree(os.path.join(OUT, key), ignore_errors=True)
+    return dict(ok=True, released=True)
 
 def _generate_outputs(P, names_all, blobs, meas, folder):
     """Render the technical sheet and a combined flat STL — the two things the client shows/downloads by
@@ -272,8 +302,9 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0)); body = json.loads(self.rfile.read(n) or b"{}")
-        P = schema.coerce(body.get("P", {}))
         try:
+            if self.path == "/api/release": return self.send_json(release(body.get("key", "")))    # tab-close beacon
+            P = schema.coerce(body.get("P", {}))
             if self.path == "/api/derived": return self.send_json(derived(P))
             if self.path == "/api/build": return self.send_json(build(P))
         except Exception as ex:
