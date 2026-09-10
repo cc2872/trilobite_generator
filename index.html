@@ -23,7 +23,7 @@
   input[type=text]{width:100%;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--line);padding:3px 0;font:inherit}
   input[type=text]:focus{outline:none;border-bottom-color:var(--ink)}
   select{width:100%;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--ink);padding:6px 0;font:inherit;border-radius:0}
-  .tabs{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--ink);margin-top:22px}
+  .tabs{display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--ink);margin-top:22px}
   .tabs div{padding:7px 0;text-align:center;cursor:pointer;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mid)}
   .tabs div.on{color:var(--ink);border-bottom:2px solid var(--ink);margin-bottom:-1px}
   .hint{color:var(--mid);font-size:11px;margin:6px 0 0}
@@ -162,8 +162,8 @@ async function init(){
     setStatus('init failed: ' + e.message + ' — reload the page', false);
   }
 }
-function row(host, id, label, lo, hi, step, val, onv){
-  const c = document.createElement('div'); c.className = 'ctrl';
+function row(host, id, label, lo, hi, step, val, onv, help){
+  const c = document.createElement('div'); c.className = 'ctrl'; if (help) c.title = help;
   c.innerHTML = `<div class="lab"><span>${label}</span><span id="v-${id}">${fmt(id, val)}</span></div><input type="range" id="s-${id}" min="${lo}" max="${hi}" step="${step}" value="${val}">`;
   $(host).appendChild(c);
   const s = c.querySelector('input'); s.addEventListener('input', () => { $('v-'+id).textContent = fmt(id, s.value); onv(parseFloat(s.value)); });
@@ -172,12 +172,12 @@ function row(host, id, label, lo, hi, step, val, onv){
 function knob(host, key){
   const p = KNOB[key]; if (!p) return;
   if (p.kind === 'expr') {
-    const c = document.createElement('div'); c.className = 'ctrl';
+    const c = document.createElement('div'); c.className = 'ctrl'; c.title = p.help;
     c.innerHTML = `<div class="lab"><span>${p.label}</span></div><input type="text" id="t-${key}" value="${P[key]}" title="${p.help}">`;
     $(host).appendChild(c); c.querySelector('input').addEventListener('change', e => { P[key] = e.target.value; drawArm(); refreshDerived(); });
     return;
   }
-  row(host, key, p.label, p.lo, p.hi, p.step, P[key], v => setP(key, v));
+  row(host, key, p.label, p.lo, p.hi, p.step, P[key], v => setP(key, v), p.help);
 }
 function setP(key, v){
   if (INT.has(key)) { v = Math.round(v); if (key === 'nKnuckles' && v % 2 === 0) v += 1; }

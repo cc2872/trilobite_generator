@@ -147,8 +147,14 @@ UI = {
         "Head":   ["headOutlineExp", "headDomeExp", "headDomeFill", "headRearArc", "genalSpine", "genalWidthMM",
                    "eyeSize", "eyeArc", "eyeHeight", "eyePos", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade",
                    "lensD", "lensRise"],   # lensGap is driven by the "Lens packing" slider in the eye editor instead
-        "Thorax": ["segCount", "bladeChord", "tipSweep", "tipTaper", "spineBase", "spineGrad", "spineSweep"],
-        "Tail":   ["pygFrac", "pygWidth", "pygSpine", "pygSplay", "pygRings", "pygMarginal"],
+        "Thorax": ["segCount", "bladeChord", "tipSweep", "tipTaper"],
+        "Tail":   ["pygFrac", "pygWidth", "pygRings"],
+        # every spine family in one place, head to tail, whether it's a lateral ("side") spine or a dorsal
+        # midline ("top") one - previously scattered across Thorax/Tail and, for axialSpine/occipitalSpine/
+        # termSpine/macroIndex/macroAmp/pygMarginalLen, not editable individually at all (only blendable via
+        # the "Spines" dial, or for the last three, not reachable from the UI whatsoever).
+        "Spines": ["genalSpine", "occipitalSpine", "axialSpine", "spineBase", "spineGrad", "spineSweep",
+                   "macroIndex", "macroAmp", "pygSpine", "pygSplay", "termSpine", "pygMarginal", "pygMarginalLen"],
     },
     "ruler": ["maxAngle", "clearance", "boreDia", "barrelR", "nKnuckles"],
     "arm": {"path": "genalPath", "curve": "genalCurve", "taper": "genalTaper"},
