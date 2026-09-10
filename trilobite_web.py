@@ -282,6 +282,15 @@ def build(P):
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw): super().__init__(*a, directory=HERE, **kw)
     def log_message(self, *a): pass
+    def handle_one_request(self):
+        # A client (tab closed/refreshed/navigated away mid status-poll, network dropped) disconnecting
+        # before a response finishes writing is routine, not a bug - the status poll loop alone hits this
+        # every time someone leaves mid-build. The default handler prints a full traceback to stderr for
+        # every one of these; log a single line instead so real errors aren't buried in expected noise.
+        try:
+            super().handle_one_request()
+        except ConnectionError as ex:                  # BrokenPipeError/ConnectionResetError/ConnectionAbortedError
+            print(f"[client disconnected mid-response] {ex}")
     def send_json(self, obj, code=200):
         data = json.dumps(obj).encode()
         self.send_response(code); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(data)))
