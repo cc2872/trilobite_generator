@@ -93,6 +93,8 @@ def _measure_hard_bounded(P, folder, names_all, parts):
                         e_max=None, free_curl_deg=None, total_curl_deg=round(joints * P["maxAngle"], 1),
                         closure_gap_mm=None, enroll_class="unknown", stopped_by=[], touching_at_zero=None,
                         seconds=MEASURE_HARD_TIMEOUT_S, error=f"measure result unreadable: {ex}")
+    try: proc.close()                       # release the subprocess's pipes/fds now rather than waiting on GC
+    except Exception: pass
     meas.update(instrument.print_validity(P, parts))
     return meas
 
@@ -135,6 +137,11 @@ def _run_build(k, P, folder, t0):
                                                                   # build the combined STL/sheet below - never
                                                                   # stored in CACHE (see MAX_CACHED_BUILDS note)
         with BUILD_CPU_LOCK:
+            # module-global in trilobite.py, appended to on every build and never trimmed otherwise - would
+            # otherwise grow for the entire life of the process. Only safe to clear here, while holding the
+            # same lock that serializes every build's use of it (clearing it from outside this lock could
+            # race with another build's in-flight _build_checked() retry/garbage-detection bookkeeping).
+            T.BUILD_NOTES.clear()
             names_all = T.PART_NAMES(P)
             fns = ([lambda: T.build_cephalon(P)] + [(lambda i=i: T.build_segment(P, i)) for i in range(int(P["segCount"]))]
                    + [lambda: T.build_pygidium(P)])
