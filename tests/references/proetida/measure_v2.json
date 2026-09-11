@@ -1,0 +1,159 @@
+{
+ "instrument": "2.1",
+ "params": "de84bf3185",
+ "bound_deg": 45.0,
+ "bevel_built_deg": 45.0,
+ "scan_step_deg": 2.5,
+ "res_deg": 0.1,
+ "rest_budget_mm3": 1.0,
+ "joints": 10,
+ "printed_stop_deg": 18.0,
+ "collision_rule": "overlap - overlap_at_rest > 0.5 mm3",
+ "measure_timed_out": false,
+ "limited_by": "closed",
+ "reason": "",
+ "rest_max_mm3": 0.0,
+ "rest_over_budget": [],
+ "theta_joint_deg": 22.81,
+ "total_deg": 228.1,
+ "closure_gap_mm": 0.0,
+ "gap_over_L": 0.0,
+ "enroll_class": "double",
+ "s_tail": 0.2578,
+ "tail_margin_xyz": [
+  0.0,
+  -35.18,
+  8.53
+ ],
+ "stopped_by": [
+  [
+   0,
+   10,
+   16.7
+  ]
+ ],
+ "scan_trace": [
+  [
+   2.5,
+   0
+  ],
+  [
+   5.0,
+   0
+  ],
+  [
+   7.5,
+   0
+  ],
+  [
+   10.0,
+   0
+  ],
+  [
+   12.5,
+   0
+  ],
+  [
+   15.0,
+   0
+  ],
+  [
+   17.5,
+   0
+  ],
+  [
+   20.0,
+   0
+  ],
+  [
+   22.5,
+   0
+  ],
+  [
+   25.0,
+   1
+  ]
+ ],
+ "stop_recommended_deg": 22.8,
+ "v1_equivalent_e_max": 1.0,
+ "seconds": 13.0,
+ "print_valid": true,
+ "violations": [],
+ "pitch": 8.08,
+ "hinge_z": 10.96,
+ "hinge_width": 10.77,
+ "knuckle": 3.29,
+ "pin_wall": 1.62,
+ "preset": "proetida",
+ "order": "proetida",
+ "blurb": "Proetida \u2014 Gon p. __. Wide bordered head, short genal spines, 9 segments, well-furrowed tail.",
+ "bevel_probe": {
+  "45.0": 1
+ },
+ "unsane_parts": [],
+ "build_notes": [
+  [
+   "seg1",
+   "rebuilt",
+   "grid jitter -2"
+  ],
+  [
+   "seg3",
+   "rebuilt",
+   "grid jitter +4"
+  ]
+ ],
+ "build_seconds": 121.7,
+ "schema_notes": [],
+ "closure_ref": "head body",
+ "wedge": {
+  "reach": 0.15,
+  "reach_wide": 0.5
+ },
+ "gap_curve": [
+  [
+   0.0,
+   67.49
+  ],
+  [
+   5.0,
+   61.18
+  ],
+  [
+   10.0,
+   52.4
+  ],
+  [
+   15.0,
+   39.26
+  ],
+  [
+   18.0,
+   29.45
+  ],
+  [
+   20.0,
+   12.63
+  ],
+  [
+   25.0,
+   0.0
+  ],
+  [
+   30.0,
+   0.0
+  ],
+  [
+   35.0,
+   0.0
+  ],
+  [
+   40.0,
+   0.0
+  ],
+  [
+   45.0,
+   0.08
+  ]
+ ]
+}

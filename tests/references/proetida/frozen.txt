@@ -1,0 +1,2 @@
+2026-09-10 23:09 instrument 2.1 BREP builder; 162 s
+proetida: bevel 45.0 (asked 45.0) probe {45.0: 1} build 121.7s unsane [] | theta 22.81 total 228.1 gap 0.0 closed double s_tail 0.2578 by [(0, 10, 16.7)] rest_max 0.0 print True []

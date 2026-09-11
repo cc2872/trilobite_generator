@@ -1,0 +1,2 @@
+2026-09-10 23:35 instrument 2.1 BREP builder; built in two halves via build_parts_only.py (per-call time cap), measured via measure_from_stl.py
+invalid unsane_parts:seg0,seg7 unsane ['seg0', 'seg7']

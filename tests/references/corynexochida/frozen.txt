@@ -1,0 +1,2 @@
+2026-09-10 23:14 instrument 2.1 BREP builder; 132 s
+corynexochida: bevel 45.0 (asked 45.0) probe {45.0: 1} build 98.9s unsane [] | theta 22.58 total 203.2 gap 0.0 closed sphaeroidal s_tail -0.0162 by [(0, 9, 18.4)] rest_max 0.0 print True []

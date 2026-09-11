@@ -1,0 +1,59 @@
+{
+ "instrument": "2.1",
+ "params": "448652b94c",
+ "bound_deg": 35.0,
+ "bevel_built_deg": 35.0,
+ "scan_step_deg": 2.5,
+ "res_deg": 0.1,
+ "rest_budget_mm3": 1.0,
+ "joints": 3,
+ "printed_stop_deg": 18.0,
+ "collision_rule": "overlap - overlap_at_rest > 0.5 mm3",
+ "theta_joint_deg": null,
+ "total_deg": null,
+ "closure_gap_mm": null,
+ "gap_over_L": null,
+ "stopped_by": [],
+ "stop_recommended_deg": null,
+ "v1_equivalent_e_max": null,
+ "s_tail": null,
+ "tail_margin_xyz": null,
+ "enroll_class": "censored",
+ "scan_trace": [],
+ "measure_timed_out": false,
+ "limited_by": "invalid",
+ "reason": "rest_interference",
+ "rest_max_mm3": 10.58,
+ "rest_over_budget": [
+  [
+   2,
+   3,
+   10.58
+  ]
+ ],
+ "seconds": 0.1,
+ "print_valid": true,
+ "violations": [],
+ "pitch": 8.1,
+ "hinge_z": 11.3,
+ "hinge_width": 13.06,
+ "knuckle": 4.05,
+ "pin_wall": 1.62,
+ "preset": "agnostida",
+ "order": "agnostida",
+ "blurb": "Agnostida \u2014 Gon p. __. Two segments, head and tail alike, blind.",
+ "bevel_probe": {
+  "45.0": 3,
+  "35.0": 1
+ },
+ "unsane_parts": [],
+ "build_notes": [],
+ "build_seconds": 31.5,
+ "schema_notes": [],
+ "closure_ref": "head",
+ "wedge": {
+  "reach": 0.15,
+  "reach_wide": 0.5
+ },
+ "gap_curve": null
+}

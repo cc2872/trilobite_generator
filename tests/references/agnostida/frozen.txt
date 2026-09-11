@@ -1,0 +1,2 @@
+2026-09-10 23:10 instrument 2.1 BREP builder; 52 s
+agnostida: bevel 35.0 (asked 35.0) probe {45.0: 3, 35.0: 1} build 31.5s unsane [] | theta None total None gap None invalid censored s_tail None by [] rest_max 10.58 print True []
