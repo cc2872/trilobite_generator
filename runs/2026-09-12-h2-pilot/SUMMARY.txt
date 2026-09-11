@@ -1,0 +1,16 @@
+H2 pilot, 60-animal pre-registered LHS design (sweep.py design --n-per-order 8 --n-control 20 --seed 7)
+Stratified sample: 6 non-control animals per order = 60. Real instrument (121x61 print grid).
+AFTER run is 53/60 (tool budget); BEFORE is the same 53 animals under the pre-fix builder.
+
+                 BEFORE fix   AFTER fix
+closed (feasible)    11           18
+anatomy (open/jam)    0            4
+bound                 2            2
+invalid (censored)   40           29
+
+Feasible fraction closed/(closed+open):
+  before: 11/11  (artifact -- open region was censored, denominator = survivors only)
+  after : 18/22 = 0.82
+
+KEY RESULT: open/anatomy animals appear for the first time (0 before, 4 after). The jam region
+was being censored as build failure, not measured. H2 is now testable; it was not before.
