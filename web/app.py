@@ -21,7 +21,7 @@ PORT = int(os.environ.get("PORT", 8765))   # the lab tunnel (trilomorph.org) poi
 
 # ---- maintenance mode: flip to False (or delete this block) to bring the generator back. While True, every
 # route - the page, every /api/*, every /files/* - returns this instead of running any real code.
-MAINTENANCE = True
+MAINTENANCE = False
 MAINTENANCE_HTML = """<!doctype html><html><head><meta charset="utf-8"><title>Trilobite Morphospace</title>
 <style>html,body{height:100%;margin:0;background:#000;color:#fff;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
 body{display:flex;align-items:center;justify-content:center}
