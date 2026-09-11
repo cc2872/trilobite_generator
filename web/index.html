@@ -287,7 +287,7 @@ function drawMap(){
   o.push(span(bx,y0,yH), span(bx,yH,yT), span(bx,yT,y1));
   o.push(hnd('cephFrac',bx,yH,q=>(q.y-y0)/L), hnd('pygFrac',bx,yT,q=>(y1-q.y)/L));
   o.push(`<path class="dim" d="M${F(ox-3)} ${F(y0)} L${F(ox+3)} ${F(y0)} M${F(ox)} ${F(y0)} L${F(ox)} ${F(y1)} M${F(ox-3)} ${F(y1)} L${F(ox+3)} ${F(y1)}"/>`);
-  o.push(`<text x="${F(ox)}" y="${F(y0-6)}" text-anchor="middle">${Math.round(P.length)} mm</text>`, hnd('length',ox,y1,q=>q.v0+q.dy*0.9));
+  o.push(`<text x="${F(ox)}" y="${F(y0-16)}" text-anchor="middle">${Math.round(P.length)} mm</text>`, hnd('length',ox,y1,q=>q.v0+q.dy*0.9));
   // segment count: the sketch's ring stack, one tap per ring
   const sy0=yH+26;                         // below the width caliper, which now crosses the shoulder
   o.push(`<rect class="step" data-seg="-1" x="${F(MAPW-42)}" y="${F(sy0)}" width="16" height="16"/><text class="steplab" x="${F(MAPW-34)}" y="${F(sy0+12)}" text-anchor="middle">–</text>`,
