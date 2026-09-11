@@ -325,6 +325,17 @@ def eye_geometry(P):
                 exponent=float(P.get("eyeProfile", 4.0)), glab_half=float(glab), head_halfwidth=float(wh), head_length=float(Lc),
                 blind=bool(P["eyeSize"] <= 0.01))
 
+FOV_VERSION = "0.1"
+def fov(P):
+    """Field-of-view summary from the eye geometry (eyes.fov, verbatim; the blueprint's eye panels read it)."""
+    g = eye_geometry(P)
+    if g["blind"]:
+        return dict(fov_version=FOV_VERSION, blind=True, azimuth_deg=0.0, front_blind_deg=180.0, rear_blind_deg=180.0, binocular_deg=0.0, elevation_half_deg=0.0)
+    arc = g["arc_deg"]; front_blind = max(0.0, 180.0 - arc); rear_blind = front_blind; binoc = max(0.0, arc - 180.0)
+    cov = 360.0 - front_blind - rear_blind; elev = math.degrees(math.atan(P["eyeHeight"]))
+    return dict(fov_version=FOV_VERSION, blind=False, azimuth_deg=round(cov, 1), front_blind_deg=round(front_blind, 1), rear_blind_deg=round(rear_blind, 1),
+                binocular_deg=round(binoc, 1), elevation_half_deg=round(elev, 1), eye_xy=(round(g["xe"], 2), round(g["ye"], 2)), eye_radius_mm=round(g["eR"], 2))
+
 def cephalon_plan(P, notes=None):
     """outline(u, v), zfun(x, y), the crescent-arm path and scalars. Transcribed from trilobite.build_cephalon, minus
     tubercles and the skin blend (ornament and scan-fit are out of the core; no preset used either)."""
@@ -488,6 +499,18 @@ def eye_solid(R, H, slope_deg, shade, arc_deg, lensD, lensGap, lensRise, embed=1
         spheres.append(M.to_manifold(sph.copy().apply_translation(c)))
     if spheres: body = body + Manifold.batch_boolean(spheres, __import__("manifold3d").OpType.Add)
     return M.from_manifold(body), len(cs)
+
+def lens_centres(R, H, slope, arc, lensD, lensGap):
+    """(theta, height, radius) of every lens on the visual band — the same lattice eye_solid() builds (eye_solid.lens_centres)."""
+    pitch_ = lensD * (1 + lensGap); rows = max(1, int(H / (0.87 * pitch_))); out = []
+    for i in range(rows):
+        s = (i + 0.5) * 0.87 * pitch_
+        if s > H - 0.5 * lensD: break
+        r = R + (H - s) * math.tan(slope); n = max(1, int(arc * r / pitch_)); off = 0.5 * (i % 2)
+        for k in range(n):
+            th = -arc / 2 + (k + off + 0.5) * arc / (n + 0.5)
+            if abs(th) <= arc / 2: out.append((th, s, r))
+    return out
 
 def eye_params(P, eR):
     return dict(R=eR, H=P.get("eyeHeight", 1.7) * eR, slope_deg=P.get("eyeSlope", 15.0), shade=P.get("eyeShade", 0.0),

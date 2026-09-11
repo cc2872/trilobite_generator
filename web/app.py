@@ -16,6 +16,7 @@ import schema, parts, instrument as I
 app = Flask(__name__, static_folder=None)
 CACHE = os.path.join(ROOT, "web", "cache"); os.makedirs(CACHE, exist_ok=True)
 LOCK = threading.Lock()          # one build or measurement at a time (the lab workstation has one job's worth of RAM to spare)
+MEASURED = {}                    # param hash -> last instrument result (so the sheet can carry the reading and the enrolled pose)
 PORT = int(os.environ.get("PORT", 8765))   # the lab tunnel (trilomorph.org) points at 8765, the legacy port
 
 # ---- maintenance mode: flip to False (or delete this block) to bring the generator back. While True, every
@@ -90,7 +91,44 @@ def api_measure():
         r, B = I.read(P)
     r = {k: v for k, v in r.items() if k not in ("scan_trace",)}
     r.update(kinematics=_kinematics(P), schema_notes=notes)
-    return jsonify(json.loads(json.dumps(r, default=str)))
+    MEASURED[schema.param_hash(P)] = json.loads(json.dumps(r, default=str))
+    return jsonify(MEASURED[schema.param_hash(P)])
+
+@app.post("/api/sheet")
+def api_sheet():
+    """The blueprint sheet (A3, blueprint.sheet) for the current parameters: the flat animal from the cached build, the
+    last instrument reading for these parameters if there is one (with the animal enrolled to its stop superimposed)."""
+    import trimesh, blueprint
+    P, notes = schema.coerce_report(request.get_json(force=True).get("P", {}), base=schema.table_defaults())
+    key = schema.param_hash(P); folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
+    if not os.path.exists(manifest):
+        with app.test_request_context(json={"P": P}): api_build()
+    man = json.load(open(manifest)); meas = MEASURED.get(key)
+    tag = "measured" if meas else "flat"; png = os.path.join(folder, f"sheet_{tag}.png")
+    if os.path.exists(png): return jsonify(url=f"/files/{key}/sheet_{tag}.png", measured=bool(meas))
+    with LOCK:
+        names = [p["name"] for p in man["parts"] if "error" not in p]
+        meshes = [trimesh.load(os.path.join(folder, f"{n}.stl")) for n in names]
+        flat = trimesh.util.concatenate(meshes)
+        m = dict(meas or {}); m.setdefault("limited_by", "not measured"); m.setdefault("enroll_class", "—")
+        m.update(hinge_z=round(parts.hinge_z(P), 2), pitch=round(parts.pitch(P), 2), knuckle=round(parts.hinge_width(P) / int(P["nKnuckles"]) - P["clearance"], 2),
+                 e_max=m.get("v1_equivalent_e_max", "—"), params=key, print_valid=man["print"]["print_valid"])
+        enrolled = None
+        if meas and meas.get("theta_joint_deg") is not None:
+            mats = I.transforms_deg(P, float(meas["theta_joint_deg"]))
+            enrolled = trimesh.util.concatenate([mm.copy().apply_transform(T) for mm, T in zip(meshes, mats)])
+        blueprint.sheet(flat, P, m, png, enrolled=enrolled)
+    return jsonify(url=f"/files/{key}/sheet_{tag}.png", measured=bool(meas))
+
+@app.get("/api/stl/<key>")
+def api_stl(key):
+    """One combined flat STL of the cached build — the download."""
+    import trimesh
+    folder = os.path.join(CACHE, key); man = json.load(open(os.path.join(folder, "manifest.json")))
+    out = os.path.join(folder, "flat.stl")
+    if not os.path.exists(out):
+        trimesh.util.concatenate([trimesh.load(os.path.join(folder, f"{p['name']}.stl")) for p in man["parts"] if "error" not in p]).export(out)
+    return send_file(out, as_attachment=True, download_name=f"trilobite_{key}.stl")
 
 @app.get("/files/<key>/<path:name>")
 def files(key, name): return send_from_directory(os.path.join(CACHE, key), name)

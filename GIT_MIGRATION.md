@@ -21,7 +21,8 @@ values frozen from the old builder (`tests/`). The old builder and site are in `
 5. **Glabella is ovoid**, not a bar (rounded nose, bulged sides, soft rear corners).
 6. **Instrument gates are stricter and honest.** A part must be ONE closed body; rest interference above 1 mm3 censors;
    the bevel actually built is recorded; the closed pose is classified (sphaeroidal / double / spiral / discoidal).
-7. **The site** is the 3x3 grid with visual controls and the curl animation; `e_max` and the dials are gone. Same
+7. **The site** keeps v1's look (its stylesheet, sheet-first stage, View 3D toggle, readout, rollbar) with the 3x3 grid
+   and glyph controls in place of the dials; the blueprint sheet is the default view again; `e_max` is gone. Same
    port (8765) so the trilomorph.org tunnel and the GitHub Actions image keep working.
 8. **Deleted:** batch_v2, build_v2, build_parts_only, measure_from_stl, presets_resave, eyes, eye_solid, eye_blueprint,
    instrument2; `requirements.txt` has no OCC. Old outputs, scan STLs, skins and PNGs are not in the tree.

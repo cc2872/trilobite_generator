@@ -1,119 +1,214 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>trilobite — generator 6.0 / instrument 2.1</title>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trilobite Morphospace</title>
 <style>
-body{margin:0;background:#0b0b0b;color:#e8e6df;font:14px/1.4 system-ui,sans-serif;display:grid;grid-template-columns:360px 1fr;height:100vh}
-#panel{padding:12px;overflow:auto;border-right:1px solid #222}#view{position:relative}canvas{display:block}
-h1{font-size:14px;font-weight:500;margin:0 0 8px;color:#8a897f}select,button,input[type=range],input[type=text]{font:inherit}
-.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin:8px 0}.cell{background:#141414;border:1px solid #2c2c2a;border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;font-size:12px;color:#c9c6bb}
-.cell.sel{border-color:#f0b040;color:#f0b040}.cell.mirror{color:#5a5952;cursor:default}.cell small{display:block;color:#5a5952;font-size:10px}
-.row{display:flex;align-items:center;gap:8px;margin:6px 0}.row label{width:110px;font-size:12px;color:#c9c6bb}.row input{flex:1}.row span{width:52px;text-align:right;font-size:12px;color:#8a897f}
-#doc{font-size:12px;color:#8a897f;margin:4px 0 8px}#more{font-size:12px;color:#8a897f;cursor:pointer}.card{border:1px solid #2c2c2a;border-radius:8px;padding:10px 12px;margin-top:10px}
-.glyph{width:100%;display:block;margin:4px 0 6px}.tines{display:flex;gap:5px;margin:4px 0}.tines button,.segs button{background:#141414;border:1px solid #2c2c2a;color:#c9c6bb;border-radius:6px;padding:0}
-.tines button{width:40px;height:40px}.tines button.on{border-color:#f0b040;color:#f0b040}.segs{display:flex;gap:3px;align-items:center;flex-wrap:wrap;margin:4px 0}.segs button{width:22px;height:40px;border-radius:4px}.segs .add{width:40px;border-radius:6px}
-#go{width:100%;margin-top:8px;padding:10px;background:transparent;color:#e8e6df;border:1px solid #5a5952;border-radius:8px;cursor:pointer}#status{position:absolute;left:12px;top:10px;font-size:12px;color:#8a897f}
-.big{font-size:22px;font-weight:500}.dim{color:#8a897f;font-size:12px}.sub{font-size:12px;color:#8a897f;margin:10px 0 2px}
-</style></head><body>
-<div id="panel">
-<h1>trilobite</h1>
-<div class="row"><label>order</label><select id="preset"></select></div>
-<div class="grid" id="grid"></div>
-<div id="cellname" style="color:#f0b040;font-weight:500"></div><div id="doc"></div><div id="controls"></div><div id="more">more…</div>
-<button id="go">curl it</button>
-<div class="card" id="read"><div class="dim">enrolment</div><div class="big" id="theta">—</div><div id="cls" class="dim">not measured</div><div id="print" class="dim"></div></div>
+  :root{--bg:#000000;--ink:#ffffff;--mid:#9a9a9a;--line:#262626;--soft:#141414}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;overflow:hidden;font-size:12px}
+  #app{display:grid;grid-template-columns:300px 1fr;height:100vh}
+  .panel{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .controls{overflow-y:auto;padding:18px 20px;flex:1}
+  h1{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:normal;margin:0 0 14px}
+  .sect{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mid);margin:22px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+  .ctrl{margin:9px 0}
+  .ctrl .lab{display:flex;justify-content:space-between;margin-bottom:2px}
+  .ctrl .lab span:last-child{color:var(--mid);font-variant-numeric:tabular-nums}
+  input[type=range]{-webkit-appearance:none;width:100%;height:1px;background:var(--ink);outline:none;margin:6px 0}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--ink);cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--ink);border:none;cursor:pointer}
+  input[type=text]{width:100%;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--line);padding:3px 0;font:inherit}
+  input[type=text]:focus{outline:none;border-bottom-color:var(--ink)}
+  select{width:100%;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--ink);padding:6px 0;font:inherit;border-radius:0}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);margin-top:8px}
+  .grid div{background:var(--bg);padding:9px 4px;text-align:center;cursor:pointer;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--mid)}
+  .grid div small{display:block;font-size:9px;letter-spacing:.08em;color:var(--line);text-transform:none}
+  .grid div.on{color:var(--ink);background:var(--soft)} .grid div.mirror{cursor:default;color:var(--line)} .grid div.wide{grid-column:1 / span 3}
+  .hint{color:var(--mid);font-size:11px;margin:6px 0 0}
+  .more{color:var(--mid);cursor:pointer;margin-top:14px;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+  .actions{padding:14px 20px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  button{background:var(--bg);color:var(--ink);border:1px solid var(--ink);border-radius:0;padding:8px 6px;font:inherit;cursor:pointer}
+  button.primary{background:var(--ink);color:var(--bg)}
+  button:hover{background:var(--soft)} button.primary:hover{opacity:.85} button:disabled{opacity:.35;cursor:default}
+  .stage{position:relative;min-width:0;background:#000}
+  canvas{display:block}
+  img.sheet{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+  .stage3d{position:absolute;inset:0;display:none}
+  #view3d{position:absolute;z-index:5;right:16px;bottom:56px;background:var(--bg);border:1px solid var(--ink);color:var(--ink);font-size:11px;letter-spacing:.06em;padding:8px 14px;text-transform:uppercase}
+  #view3d:hover{background:var(--ink);color:var(--bg)}
+  .readout{position:absolute;left:16px;top:14px;line-height:1.6;pointer-events:none;font-variant-numeric:tabular-nums;text-shadow:0 0 6px #000, 0 0 6px #000}
+  .readout b{font-weight:normal;border-bottom:1px solid var(--ink)}
+  .status{position:absolute;right:16px;top:14px;color:var(--mid);text-shadow:0 0 6px #000} .status.busy{color:var(--ink)}
+  .look{position:absolute;right:16px;top:36px;color:var(--mid);font-size:11px;letter-spacing:.06em;text-transform:uppercase;user-select:none;display:none}
+  .look span{cursor:pointer} .look span.on{color:var(--ink);border-bottom:1px solid var(--ink)}
+  .rollbar{position:absolute;left:16px;right:16px;bottom:16px;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;display:none}
+  .rollbar input[type=range]{height:1px} .rollbar input[type=range]::-webkit-slider-thumb{width:16px;height:16px}
+  .rollbar .val{min-width:120px;text-align:right;font-variant-numeric:tabular-nums}
+  svg.arm{width:100%;height:120px;display:block;margin:6px 0 2px;border:1px solid var(--line)}
+  svg.arm text{fill:var(--mid);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+  .tines{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin:6px 0}
+  .tines button{border:none;background:var(--bg);color:var(--mid);height:36px;padding:0} .tines button.on{color:var(--ink);background:var(--soft)}
+  .segs{display:flex;gap:2px;align-items:center;flex-wrap:wrap;margin:6px 0}
+  .segs button{border:1px solid var(--line);background:var(--bg);width:18px;height:36px;padding:0} .segs button.add{width:36px;border-color:var(--ink)} .segs span{color:var(--mid);margin-left:8px}
+  @media (max-width: 720px), (pointer: coarse) and (max-width: 1024px) {
+    html,body{overflow:auto;font-size:14px}
+    #app{display:flex;flex-direction:column;height:auto;min-height:100vh}
+    .stage{order:0;height:52vh;min-height:300px;border-bottom:1px solid var(--line)}
+    .panel{order:1;border-right:none}
+    .controls{overflow:visible;padding:16px}
+    .actions{position:sticky;bottom:0;background:var(--bg)}
+    input[type=range]{height:2px;margin:12px 0}
+    input[type=range]::-webkit-slider-thumb{width:22px;height:22px}
+    input[type=range]::-moz-range-thumb{width:22px;height:22px}
+    button{padding:12px 8px}
+    .readout{font-size:12px;left:12px;top:10px;max-width:70%}
+    .rollbar{left:12px;right:12px;bottom:12px;gap:10px}
+    svg.arm{height:150px}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="panel">
+    <div class="controls">
+      <h1>Trilobite Morphospace</h1>
+      <div class="ctrl"><div class="lab"><span>Order</span></div><select id="preset"></select></div>
+      <div class="grid" id="grid"></div>
+      <div class="sect" id="cellname"></div><div class="hint" id="doc"></div>
+      <div id="C"></div>
+      <div class="more" id="more">more</div>
+    </div>
+    <div class="actions">
+      <button class="primary" id="go">Curl it</button>
+      <button id="dl">Download STL</button>
+    </div>
+  </div>
+  <div class="stage">
+    <img class="sheet" id="sheet" alt="">
+    <div class="stage3d" id="stage3d"></div>
+    <button id="view3d">View 3D</button>
+    <div class="readout" id="readout"></div>
+    <div class="status" id="status"></div>
+    <div class="look" id="look"><span class="on" data-look="blueprint">Blueprint</span> · <span data-look="model">Model</span></div>
+    <div class="rollbar" id="rollbar"><input type="range" id="roll" min="0" max="45" step="0.1" value="0"><div class="val" id="rollval"></div></div>
+  </div>
 </div>
-<div id="view"><div id="status"></div></div>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
 <script type="module">
-import * as THREE from 'three'; import {OrbitControls} from 'three/addons/controls/OrbitControls.js'; import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import * as THREE from 'three'; import {OrbitControls} from 'three/addons/controls/OrbitControls.js'; import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 const S = await (await fetch('/api/schema')).json(); const META = Object.fromEntries(S.params.map(p=>[p.key,p]));
-let P = await (await fetch('/api/preset/'+S.default)).json(); let sel='frame', showMore=false, kin=null, partMeshes={}, limiting=null, buildTimer=null;
+let P = await (await fetch('/api/preset/'+S.default)).json(); let sel='frame', showMore=false, kin=null, partMeshes={}, buildKey=null, buildTimer=null, mode='sheet', lastMeas=null, threeReady=false;
+const $=id=>document.getElementById(id); const INK='#ffffff', MID='#9a9a9a', LINE='#262626', SOFT='#141414';
 const GRID=[['b1','a1'],['b2','a2'],['b3','a3']]; const ROWOF={b1:'head',a1:'head',b2:'seg',a2:'seg',b3:'tail',a3:'tail'};
-const NAMES={b1:'glabella',a1:'cheek + eye',b2:'axial rings',a2:'pleura',b3:'tail axis',a3:'tail margin'};
-const gridEl=document.getElementById('grid'), C=document.getElementById('controls');
-const frameBtn=mk('div','cell','body<small>frame</small>'); frameBtn.style.gridColumn='1 / span 3'; frameBtn.onclick=()=>{sel='frame';render();}; gridEl.appendChild(frameBtn);
-for(const [b,a] of GRID){ for(const [c,mir] of [[a,false],[b,false],[a,true]]){ const d=mk('div','cell'+(mir?' mirror':''), (mir?NAMES[c]+'<small>'+c.replace('a','c')+' (mirror)</small>':NAMES[c]+'<small>'+c+'</small>')); d.dataset.c=c; if(!mir) d.onclick=()=>{sel=c;render();}; d.onmouseenter=()=>highlight(ROWOF[c]); d.onmouseleave=()=>highlight(null); gridEl.appendChild(d);} }
-const rulerBtn=mk('div','cell','print + hinge<small>ruler</small>'); rulerBtn.style.gridColumn='1 / span 3'; rulerBtn.onclick=()=>{sel='ruler';render();}; gridEl.appendChild(rulerBtn);
-function mk(t,cls,html){const e=document.createElement(t); if(cls)e.className=cls; if(html!=null)e.innerHTML=html; return e;}
-const ps=document.getElementById('preset'); S.presets.forEach(n=>{const o=mk('option',null,n);o.value=n;if(n===S.default)o.selected=true;ps.appendChild(o);});
-ps.onchange=async()=>{P=await (await fetch('/api/preset/'+ps.value)).json(); render(); build();};
+const NAMES={b1:'glabella',a1:'cheek',b2:'axial rings',a2:'pleura',b3:'tail axis',a3:'tail margin'};
+const gridEl=$('grid'), C=$('C');
+function cellBtn(label,sub,c,mir,wide){const d=document.createElement('div'); d.innerHTML=label+'<small>'+sub+'</small>'; if(mir)d.className='mirror'; if(wide)d.className='wide'; d.dataset.c=c; if(!mir)d.onclick=()=>{sel=c;render();}; if(c in ROWOF){d.onmouseenter=()=>highlight(ROWOF[c]); d.onmouseleave=()=>highlight(null);} gridEl.appendChild(d); return d;}
+cellBtn('body','frame','frame',false,true);
+for(const [b,a] of GRID){ cellBtn(NAMES[a],a,a,false); cellBtn(NAMES[b],b,b,false); cellBtn(NAMES[a],a.replace('a','c')+' mirror',a,true); }
+cellBtn('print + hinge','ruler','ruler',false,true);
+const ps=$('preset'); S.presets.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;if(n===S.default)o.selected=true;ps.appendChild(o);});
+ps.onchange=async()=>{P=await (await fetch('/api/preset/'+ps.value)).json(); lastMeas=null; render(); build();};
 function fmt(v,m){return (m.kind==='int'||m.kind==='odd_int')?String(Math.round(v)):(+v).toFixed(m.step<0.01?3:m.step<0.1?2:m.step<1?1:0)+(m.unit?' '+m.unit:'');}
-function set(k,v){P[k]=v; redrawGlyphs(); scheduleBuild();}
-function slider(k, onchange){ const m=META[k]; const r=mk('div','row'); const v=P[k];
-  if(m.kind==='expr'){ r.innerHTML=`<label title="${m.doc}">${m.label}</label><input type="text" value="${v}"><span></span>`; r.querySelector('input').onchange=e=>set(k,e.target.value); return r;}
-  r.innerHTML=`<label title="${m.doc}">${m.label}</label><input type="range" min="${m.lo}" max="${m.hi}" step="${m.step}" value="${v}"><span>${fmt(v,m)}</span>`;
-  const inp=r.querySelector('input'); inp.oninput=e=>{P[k]=+e.target.value; r.querySelector('span').textContent=fmt(P[k],m); redrawGlyphs();}; inp.onchange=()=>scheduleBuild(); return r; }
-function sub(t){return mk('div','sub',t);}
-// ---- glyphs: each control is a picture of the anatomy, redrawn from P
-const GL={};
-function svg(id,vb,h){const s=mk('div',null,`<svg id="${id}" class="glyph" viewBox="${vb}" xmlns="http://www.w3.org/2000/svg"></svg>`); GL[id]=1; return s;}
-function redrawGlyphs(){ for(const id in GL){ const e=document.getElementById(id); if(!e){delete GL[id];continue;} DRAW[id](e);} }
+function set(k,v){P[k]=v; lastMeas=null; redraw(); scheduleBuild();}
+function slider(k){ const m=META[k]; const r=document.createElement('div'); r.className='ctrl';
+  if(m.kind==='expr'){ r.innerHTML=`<div class="lab"><span title="${m.doc}">${m.label}</span></div><input type="text" value="${P[k]}">`; r.querySelector('input').onchange=e=>set(k,e.target.value); return r;}
+  r.innerHTML=`<div class="lab"><span title="${m.doc}">${m.label}</span><span>${fmt(P[k],m)}</span></div><input type="range" min="${m.lo}" max="${m.hi}" step="${m.step}" value="${P[k]}">`;
+  const inp=r.querySelector('input'); inp.oninput=e=>{P[k]=+e.target.value; r.querySelector('.lab span:last-child').textContent=fmt(P[k],m); redraw();}; inp.onchange=()=>{lastMeas=null; scheduleBuild();}; return r; }
+function sect(t){const d=document.createElement('div'); d.className='sect'; d.textContent=t; return d;}
+const GL={}; function glyph(id,vb){const s=document.createElement('div'); s.innerHTML=`<svg class="arm" id="${id}" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg>`; GL[id]=1; return s;}
+function redraw(){ for(const id in GL){ const e=$(id); if(!e){delete GL[id];continue;} DRAW[id](e);} }
+const t=(x,y,s,anchor)=>`<text x="${x}" y="${y}"${anchor?` text-anchor="${anchor}"`:''}>${s}</text>`;
 const DRAW={
  prongHead:e=>prongGlyph(e,'head'), prongTail:e=>prongGlyph(e,'tail'),
- bodybar:e=>{const W=340,h=P.cephFrac*100,p=P.pygFrac*100,hw=W*h/100,pw=W*p/100; e.innerHTML=`<rect x="0" y="6" width="${hw}" height="22" rx="4" fill="#534AB7"/><rect x="${hw}" y="6" width="${W-hw-pw}" height="22" fill="#5F5E5A"/><rect x="${W-pw}" y="6" width="${pw}" height="22" rx="4" fill="#0F6E56"/><text x="8" y="21" font-size="11" fill="#e8e6df">head ${Math.round(h)}%</text><text x="${hw+8}" y="21" font-size="11" fill="#e8e6df">${Math.round(P.segCount)} segments</text><text x="${W-8}" y="21" font-size="11" fill="#e8e6df" text-anchor="end">tail ${Math.round(p)}%</text>`;},
- pleura:e=>{const inner=P.fulcrum, blade=1-P.fulcrum, dg=Math.atan(P.pleuralSlope*P.relief/Math.max(P.width*(1-P.axisFrac)/2,1))*180/Math.PI; const x0=40,y0=40,k=180,a=dg*Math.PI/180,x1=x0+inner*k,x2=x1+blade*k*Math.cos(a),y2=y0+blade*k*Math.sin(a);
-  e.innerHTML=`<rect x="10" y="30" width="30" height="20" rx="4" fill="#534AB7"/><text x="25" y="44" font-size="11" fill="#e8e6df" text-anchor="middle">axis</text><path d="M${x0} ${y0} L${x1.toFixed(1)} ${y0} L${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" stroke="#1D9E75" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${x1.toFixed(1)}" cy="${y0}" r="4" fill="#888780"/><text x="${((x0+x1)/2).toFixed(1)}" y="${y0-10}" font-size="11" fill="#8a897f" text-anchor="middle">inner run</text><text x="${((x1+x2)/2+10).toFixed(1)}" y="${((y0+y2)/2-6).toFixed(1)}" font-size="11" fill="#8a897f">blade · overlap ${(P.overlap*100).toFixed(0)}%</text><text x="${(x1+4).toFixed(1)}" y="${y0+18}" font-size="11" fill="#8a897f">bend ${dg.toFixed(0)}°</text>`;},
- glab:e=>{const inf=P.glabInflate,rise=P.glabRise,n=Math.round(P.glabLobes),nF=P.glabFront||2.5; const cx=90,yb=110,yt=22,a0=14; let h=`<path d="M20 ${yb} C20 40 60 ${yt} ${cx} ${yt} C120 ${yt} 160 40 160 ${yb} Z" fill="none" stroke="#5a5952" stroke-width="1.2"/>`;
-  const pts=[]; for(let i=0;i<=24;i++){const f=i/24,y=yb-(yb-yt)*f; let w=a0*(1+(inf-1)*f)*(1+0.10*Math.sin(Math.PI*f)); const fn=Math.min(Math.max((f-0.70)/0.30,0),1); w*=Math.pow(Math.max(1-Math.pow(fn,nF),0),1/nF); w*=0.75+0.25*Math.min(f/0.10,1); pts.push([cx-Math.max(w,0.35*a0),y,cx+Math.max(w,0.35*a0)]);}
+ bodybar:e=>{const W=300,h=P.cephFrac*100,p=P.pygFrac*100,hw=W*h/100,pw=W*p/100; e.innerHTML=`<rect x="20" y="30" width="${hw}" height="18" fill="${INK}"/><rect x="${20+hw}" y="30" width="${W-hw-pw}" height="18" fill="${SOFT}" stroke="${LINE}"/><rect x="${20+W-pw}" y="30" width="${pw}" height="18" fill="${MID}"/>${t(20,22,'head '+Math.round(h)+'%')}${t(20+hw+4,22,Math.round(P.segCount)+' segments')}${t(320,22,'tail '+Math.round(p)+'%','end')}${t(20,72,'length '+Math.round(P.length)+' mm · width '+Math.round(P.width)+' mm')}`;},
+ pleura:e=>{const inner=P.fulcrum, blade=1-P.fulcrum, dg=Math.atan(P.pleuralSlope*P.relief/Math.max(P.width*(1-P.axisFrac)/2,1))*180/Math.PI; const x0=60,y0=40,k=200,a=dg*Math.PI/180,x1=x0+inner*k,x2=x1+blade*k*Math.cos(a),y2=y0+blade*k*Math.sin(a);
+  e.innerHTML=`<rect x="20" y="30" width="40" height="20" fill="${SOFT}" stroke="${INK}"/>${t(40,44,'axis','middle')}<path d="M${x0} ${y0} L${x1.toFixed(1)} ${y0} L${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${x1.toFixed(1)}" cy="${y0}" r="4" fill="${MID}"/>${t((x0+x1)/2,y0-10,'inner run','middle')}${t((x1+x2)/2+10,(y0+y2)/2-6,'blade · overlap '+(P.overlap*100).toFixed(0)+'%')}${t(x1+4,y0+18,'bend '+dg.toFixed(0)+'°')}`;},
+ glab:e=>{const inf=P.glabInflate,rise=P.glabRise,n=Math.round(P.glabLobes),nF=P.glabFront||2.5; const cx=90,yb=105,yt=18,a0=14; let h=`<path d="M25 ${yb} C25 38 60 ${yt} ${cx} ${yt} C120 ${yt} 155 38 155 ${yb} Z" fill="none" stroke="${LINE}"/>`;
+  const pts=[]; for(let i=0;i<=24;i++){const f=i/24,y=yb-(yb-yt)*f; let w=a0*(1+(inf-1)*f)*(1+0.10*Math.sin(Math.PI*f)); const fn=Math.min(Math.max((f-0.70)/0.30,0),1); w*=Math.pow(Math.max(1-Math.pow(fn,nF),0),1/nF); w*=0.75+0.25*Math.min(f/0.10,1); w=Math.max(w,0.35*a0); pts.push([cx-w,y,cx+w]);}
   let d='M'+pts[0][0].toFixed(1)+' '+pts[0][1]; for(let i=1;i<pts.length;i++)d+=' L'+pts[i][0].toFixed(1)+' '+pts[i][1].toFixed(1); for(let i=pts.length-1;i>=0;i--)d+=' L'+pts[i][2].toFixed(1)+' '+pts[i][1].toFixed(1);
-  h+=`<path d="${d} Z" fill="#3C3489" stroke="#AFA9EC" stroke-width="1.5"/>`; for(let k=0;k<n;k++){const f=0.28+0.16*k,y=yb-(yb-yt)*f; const q=pts[Math.round(f*24)]; h+=`<line x1="${q[0].toFixed(1)}" y1="${y.toFixed(1)}" x2="${(cx-(cx-q[0])*0.45).toFixed(1)}" y2="${(y+3).toFixed(1)}" stroke="#CECBF6" stroke-width="2" stroke-linecap="round"/><line x1="${q[2].toFixed(1)}" y1="${y.toFixed(1)}" x2="${(cx+(q[2]-cx)*0.45).toFixed(1)}" y2="${(y+3).toFixed(1)}" stroke="#CECBF6" stroke-width="2" stroke-linecap="round"/>`;}
-  const x0=200,x1=330,base=110,hR=22+rise*120; h+=`<path d="M${x0} ${base} C${x0+25} ${base-hR*0.6} ${x0+60} ${base-hR} ${x0+95} ${base-hR*0.9} C${x0+115} ${base-hR*0.7} ${x1-6} ${base-hR*0.3} ${x1} ${base}" fill="#3C3489" stroke="#AFA9EC" stroke-width="1.5"/><text x="${cx}" y="136" font-size="11" fill="#8a897f" text-anchor="middle">plan</text><text x="${(x0+x1)/2}" y="136" font-size="11" fill="#8a897f" text-anchor="middle">side · rise</text>`; e.innerHTML=h;},
- eye:e=>{const R=P.eyeSize*100, H=P.eyeHeight*R, arc=P.eyeArc; const cx=80,cy=60; let h=`<circle cx="${cx}" cy="${cy}" r="${R.toFixed(1)}" fill="none" stroke="#5a5952" stroke-dasharray="3 3"/>`; const a0=-arc/2*Math.PI/180,a1=arc/2*Math.PI/180; h+=`<path d="M${(cx+R*Math.cos(a0)).toFixed(1)} ${(cy+R*Math.sin(a0)).toFixed(1)} A${R.toFixed(1)} ${R.toFixed(1)} 0 ${arc>180?1:0} 1 ${(cx+R*Math.cos(a1)).toFixed(1)} ${(cy+R*Math.sin(a1)).toFixed(1)}" fill="none" stroke="#5DCAA5" stroke-width="5" stroke-linecap="round"/><text x="${cx}" y="${cy+R+16}" font-size="11" fill="#8a897f" text-anchor="middle">visual arc ${arc}°</text>`;
-  const x0=200,b=100; h+=`<rect x="${x0}" y="${(b-H).toFixed(1)}" width="${(2*R).toFixed(1)}" height="${H.toFixed(1)}" rx="3" fill="#085041" stroke="#5DCAA5"/><text x="${x0+R}" y="${b+14}" font-size="11" fill="#8a897f" text-anchor="middle">height ${P.eyeHeight.toFixed(2)} × size</text>`; e.innerHTML=h;}
+  h+=`<path d="${d} Z" fill="${SOFT}" stroke="${INK}" stroke-width="1.2"/>`; for(let k=0;k<n;k++){const f=0.28+0.16*k,y=yb-(yb-yt)*f; const q=pts[Math.round(f*24)]; h+=`<line x1="${q[0].toFixed(1)}" y1="${y.toFixed(1)}" x2="${(cx-(cx-q[0])*0.45).toFixed(1)}" y2="${(y+3).toFixed(1)}" stroke="${INK}" stroke-width="1.5"/><line x1="${q[2].toFixed(1)}" y1="${y.toFixed(1)}" x2="${(cx+(q[2]-cx)*0.45).toFixed(1)}" y2="${(y+3).toFixed(1)}" stroke="${INK}" stroke-width="1.5"/>`;}
+  const x0=195,x1=320,base=100,hR=20+rise*110; h+=`<path d="M${x0} ${base} C${x0+25} ${base-hR*0.6} ${x0+60} ${base-hR} ${x0+95} ${base-hR*0.9} C${x0+112} ${base-hR*0.7} ${x1-6} ${base-hR*0.3} ${x1} ${base}" fill="${SOFT}" stroke="${INK}" stroke-width="1.2"/>${t(cx,116,'plan','middle')}${t((x0+x1)/2,116,'side · rise','middle')}`; e.innerHTML=h;},
+ eye:e=>{const R=P.eyeSize*100, H=P.eyeHeight*R, arc=P.eyeArc; const cx=80,cy=58; const a0=-arc/2*Math.PI/180,a1=arc/2*Math.PI/180; let h=`<circle cx="${cx}" cy="${cy}" r="${R.toFixed(1)}" fill="none" stroke="${LINE}" stroke-dasharray="2 2"/><path d="M${(cx+R*Math.cos(a0)).toFixed(1)} ${(cy+R*Math.sin(a0)).toFixed(1)} A${R.toFixed(1)} ${R.toFixed(1)} 0 ${arc>180?1:0} 1 ${(cx+R*Math.cos(a1)).toFixed(1)} ${(cy+R*Math.sin(a1)).toFixed(1)}" fill="none" stroke="${INK}" stroke-width="4" stroke-linecap="round"/>${t(cx,cy+R+16,'visual arc '+arc+'°','middle')}`;
+  const x0=200,b=96; h+=`<rect x="${x0}" y="${(b-H).toFixed(1)}" width="${(2*R).toFixed(1)}" height="${H.toFixed(1)}" fill="${SOFT}" stroke="${INK}"/>${t(x0+R,b+14,'height '+P.eyeHeight.toFixed(2)+' × R','middle')}`; e.innerHTML=h;}
 };
 function prongGlyph(e,which){const d=Math.round(P[which+'Prongs']||0), L=(P[which+'ProngLen']||0.6)*110, s=P[which+'ProngStem']||0, sp=P[which+'ProngSplay']||30, c=P[which+'ProngCenter']||1, cu=P[which+'ProngCurl']||0;
-  if(d===0){e.innerHTML=`<text x="170" y="64" font-size="12" fill="#5a5952" text-anchor="middle">no ${which} prong — pick a tine count</text>`; return;}
-  const x0=30,y0=60,stem=L*s,tl=L-stem,sx=x0+stem; let h=`<circle cx="${x0}" cy="${y0}" r="6" fill="#888780"/><line x1="${x0}" y1="${y0}" x2="${sx.toFixed(1)}" y2="${y0}" stroke="#888780" stroke-width="7" stroke-linecap="round"/><circle cx="${sx.toFixed(1)}" cy="${y0}" r="4" fill="#888780"/>`;
-  for(let k=0;k<d;k++){const off=d==1?0:sp*(k/(d-1)-0.5), len=tl*((d%2==1&&k==(d-1)/2)?c:1), a=(off-cu*0.6)*Math.PI/180; h+=`<line x1="${sx.toFixed(1)}" y1="${y0}" x2="${(sx+len*Math.cos(a)).toFixed(1)}" y2="${(y0+len*Math.sin(a)).toFixed(1)}" stroke="#7F77DD" stroke-width="4" stroke-linecap="round"/>`;}
-  h+=`<text x="${x0-8}" y="${y0+26}" font-size="11" fill="#8a897f">root</text>`; if(stem>10)h+=`<text x="${(x0+stem/2).toFixed(1)}" y="${y0-12}" font-size="11" fill="#8a897f" text-anchor="middle">shaft</text>`; e.innerHTML=h;}
-function tinePicker(which){const w=mk('div','tines'); for(let k=0;k<=5;k++){const b=mk('button'); b.title=k?k+' tines':'none'; let g='';
-  if(k){g='<svg viewBox="0 0 40 40" width="26" height="26"><line x1="20" y1="36" x2="20" y2="22" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>'; for(let j=0;j<k;j++){const off=k==1?0:50*(j/(k-1)-0.5),a=(-90+off)*Math.PI/180; g+=`<line x1="20" y1="22" x2="${(20+15*Math.cos(a)).toFixed(1)}" y2="${(22+15*Math.sin(a)).toFixed(1)}" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>`;} g+='</svg>';} else g='—';
-  b.innerHTML=g; if(Math.round(P[which+'Prongs']||0)===k)b.classList.add('on'); b.onclick=()=>{set(which+'Prongs',k); render();}; w.appendChild(b);} return w;}
-function segRow(){const w=mk('div','segs'); const n=Math.round(P.segCount); for(let i=0;i<n;i++){const b=mk('button'); b.title='remove a segment'; b.innerHTML='<svg viewBox="0 0 20 40" width="16" height="32"><rect x="7" y="2" width="6" height="36" rx="2" fill="#888780"/><rect x="1" y="6" width="6" height="26" rx="2" fill="#5F5E5A"/><rect x="13" y="6" width="6" height="26" rx="2" fill="#5F5E5A"/></svg>'; b.onclick=()=>{if(n>2){set('segCount',n-1);render();}}; w.appendChild(b);}
-  const a=mk('button','add','+'); a.title='add a segment'; a.onclick=()=>{if(n<16){set('segCount',n+1);render();}}; w.appendChild(a); return w;}
-// ---- what each cell shows
+  if(d===0){e.innerHTML=t(170,64,'no '+which+' prong','middle'); return;}
+  const x0=30,y0=60,stem=L*s,tl=L-stem,sx=x0+stem; let h=`<circle cx="${x0}" cy="${y0}" r="5" fill="${MID}"/><line x1="${x0}" y1="${y0}" x2="${sx.toFixed(1)}" y2="${y0}" stroke="${MID}" stroke-width="6" stroke-linecap="round"/><circle cx="${sx.toFixed(1)}" cy="${y0}" r="3.5" fill="${MID}"/>`;
+  for(let k=0;k<d;k++){const off=d==1?0:sp*(k/(d-1)-0.5), len=tl*((d%2==1&&k==(d-1)/2)?c:1), a=(off-cu*0.6)*Math.PI/180; h+=`<line x1="${sx.toFixed(1)}" y1="${y0}" x2="${(sx+len*Math.cos(a)).toFixed(1)}" y2="${(y0+len*Math.sin(a)).toFixed(1)}" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>`;}
+  h+=t(x0-8,y0+24,'root'); if(stem>10)h+=t(x0+stem/2,y0-12,'shaft','middle'); e.innerHTML=h;}
+function tinePicker(which){const w=document.createElement('div'); w.className='tines'; for(let k=0;k<=5;k++){const b=document.createElement('button'); b.title=k?k+' tines':'none';
+  let g='—'; if(k){g='<svg viewBox="0 0 40 40" width="24" height="24"><line x1="20" y1="36" x2="20" y2="22" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>'; for(let j=0;j<k;j++){const off=k==1?0:50*(j/(k-1)-0.5),a=(-90+off)*Math.PI/180; g+=`<line x1="20" y1="22" x2="${(20+15*Math.cos(a)).toFixed(1)}" y2="${(22+15*Math.sin(a)).toFixed(1)}" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>`;} g+='</svg>';}
+  b.innerHTML=g; if(Math.round(P[which+'Prongs']||0)===k)b.className='on'; b.onclick=()=>{set(which+'Prongs',k); render();}; w.appendChild(b);} return w;}
+function segRow(){const w=document.createElement('div'); w.className='segs'; const n=Math.round(P.segCount); for(let i=0;i<n;i++){const b=document.createElement('button'); b.title='remove a segment'; b.innerHTML=`<svg viewBox="0 0 20 40" width="14" height="30"><rect x="7" y="2" width="6" height="36" fill="${INK}"/><rect x="1" y="6" width="5" height="26" fill="${MID}"/><rect x="14" y="6" width="5" height="26" fill="${MID}"/></svg>`; b.onclick=()=>{if(n>2){set('segCount',n-1);render();}}; w.appendChild(b);}
+  const a=document.createElement('button'); a.className='add'; a.textContent='+'; a.onclick=()=>{if(n<16){set('segCount',n+1);render();}}; w.appendChild(a); const s=document.createElement('span'); s.textContent=n+' segments'; w.appendChild(s); return w;}
 const VISUAL={
- frame:()=>[sub('segments — tap to remove, + to add'), segRow(), sub('proportions'), svg('bodybar','0 0 340 34'), slider('cephFrac'), slider('pygFrac'), sub('size'), slider('length'), slider('width'), slider('relief')],
- b1:()=>[svg('glab','0 0 340 150'), slider('glabInflate'), slider('glabRise'), slider('glabLobes')],
- a1:()=>[sub('eye'), svg('eye','0 0 340 130'), slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), sub('genal angle'), slider('genalSpine'), slider('headRearArc'), sub('anterior prong'), svg('prongHead','0 0 340 120'), tinePicker('head'), slider('headProngLen'), slider('headProngStem'), slider('headProngSplay'), slider('headProngCenter'), slider('headProngCurl')],
+ frame:()=>[sect('Segments'), segRow(), sect('Proportions'), glyph('bodybar','0 0 340 80'), slider('cephFrac'), slider('pygFrac'), sect('Size'), slider('length'), slider('width'), slider('relief')],
+ b1:()=>[glyph('glab','0 0 340 125'), slider('glabInflate'), slider('glabRise'), slider('glabLobes')],
+ a1:()=>[sect('Eye'), glyph('eye','0 0 340 120'), slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), sect('Genal angle'), slider('genalSpine'), slider('headRearArc'), sect('Anterior prong'), glyph('prongHead','0 0 340 120'), tinePicker('head'), slider('headProngLen'), slider('headProngStem'), slider('headProngSplay'), slider('headProngCenter'), slider('headProngCurl')],
  b2:()=>[slider('axisFrac'), slider('axisRise'), slider('furrowDepth')],
- a2:()=>[svg('pleura','0 0 340 110'), slider('fulcrum'), slider('pleuralSlope'), slider('overlap')],
+ a2:()=>[glyph('pleura','0 0 340 110'), slider('fulcrum'), slider('pleuralSlope'), slider('overlap')],
  b3:()=>[slider('pygRings'), slider('tailRelief'), slider('tailDomeExp')],
- a3:()=>[slider('pygWidth'), slider('pygSpine'), slider('pygMarginal'), sub('posterior prong'), svg('prongTail','0 0 340 120'), tinePicker('tail'), slider('tailProngLen'), slider('tailProngStem'), slider('tailProngSplay'), slider('tailProngCenter'), slider('tailProngCurl')],
+ a3:()=>[slider('pygWidth'), slider('pygSpine'), slider('pygMarginal'), sect('Posterior prong'), glyph('prongTail','0 0 340 120'), tinePicker('tail'), slider('tailProngLen'), slider('tailProngStem'), slider('tailProngSplay'), slider('tailProngCenter'), slider('tailProngCurl')],
  ruler:()=>[slider('maxAngle'), slider('clearance'), slider('nKnuckles')],
 };
-const SHOWN=new Set();
-function render(){ const c=S.cells[sel]; document.getElementById('cellname').textContent=c.label; document.getElementById('doc').textContent=c.doc;
-  [...gridEl.children].forEach(d=>d.classList.toggle('sel',d.dataset.c===sel||(sel==='frame'&&d===frameBtn)||(sel==='ruler'&&d===rulerBtn)));
-  C.innerHTML=''; SHOWN.clear(); const els=VISUAL[sel](); els.forEach(e=>C.appendChild(e));
-  const used=new Set([...C.querySelectorAll('.row label')].map(l=>l.textContent)); const usedKeys=new Set(S.params.filter(p=>used.has(p.label)).map(p=>p.key));
-  if(showMore){ const rest=[...c.primary,...c.more].filter(k=>!usedKeys.has(k)); if(rest.length){C.appendChild(sub('more')); rest.forEach(k=>C.appendChild(slider(k)));} }
-  document.getElementById('more').textContent=showMore?'less':'more…'; redrawGlyphs(); }
-document.getElementById('more').onclick=()=>{showMore=!showMore;render();};
-function scheduleBuild(){ clearTimeout(buildTimer); buildTimer=setTimeout(build, 400); }
-// ---- viewer
-const view=document.getElementById('view'); const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0b0b0b);
-const cam=new THREE.PerspectiveCamera(40,1,1,3000); cam.position.set(180,-260,200); cam.up.set(0,0,1);
-const ren=new THREE.WebGLRenderer({antialias:true}); view.appendChild(ren.domElement); const ctl=new OrbitControls(cam,ren.domElement);
-scene.add(new THREE.HemisphereLight(0xffffff,0x222222,1.2)); const dl=new THREE.DirectionalLight(0xffffff,1.4); dl.position.set(200,-200,400); scene.add(dl);
-function resize(){ren.setSize(view.clientWidth,view.clientHeight); cam.aspect=view.clientWidth/view.clientHeight; cam.updateProjectionMatrix();} window.onresize=resize; resize();
-const MAT=()=>new THREE.MeshStandardMaterial({color:0xb8b3a4,roughness:0.6,metalness:0.05}); const loader=new GLTFLoader(); const group=new THREE.Group(); scene.add(group);
-function highlight(row){ for(const [n,m] of Object.entries(partMeshes)){ const on=row&&(row==='seg'?n.startsWith('seg'):n===row); m.traverse(o=>{if(o.isMesh){o.material.emissive=new THREE.Color(on?0x5a3a00:0x000000);}}); } }
+function render(){ const c=S.cells[sel]; $('cellname').textContent=c.label; $('doc').textContent=c.doc;
+  [...gridEl.children].forEach(d=>{ if(d.className!=='mirror') d.classList.toggle('on', d.dataset.c===sel); });
+  C.innerHTML=''; VISUAL[sel]().forEach(e=>C.appendChild(e));
+  const used=new Set([...C.querySelectorAll('.ctrl .lab span:first-child')].map(l=>l.textContent)); const usedKeys=new Set(S.params.filter(p=>used.has(p.label)).map(p=>p.key));
+  if(showMore){ const rest=[...c.primary,...c.more].filter(k=>!usedKeys.has(k)); if(rest.length){C.appendChild(sect('More')); rest.forEach(k=>C.appendChild(slider(k)));} }
+  $('more').textContent=showMore?'less':'more'; redraw(); }
+$('more').onclick=()=>{showMore=!showMore;render();};
+function scheduleBuild(){ clearTimeout(buildTimer); buildTimer=setTimeout(build, 500); }
+function status(s,busy){$('status').textContent=s; $('status').className='status'+(busy?' busy':'');}
+function readout(){ const m=lastMeas; let h=`<b>${ps.value}</b> · ${Math.round(P.segCount)} segments · ${Math.round(P.length)} mm`; if(m&&m.theta_joint_deg!=null){ const w={sphaeroidal:'closes, margins meet',double:'closes, tail under head',spiral:'closes, tail past head',discoidal:'closes flat',open:'stops on itself'}[m.enroll_class]||m.enroll_class; h+=`<br>${m.theta_joint_deg}° per joint · ${m.total_deg}° total · ${w}`; if(m.stopped_by&&m.stopped_by.length) h+=`<br>limited by ${kin.names[m.stopped_by[0][0]]}–${kin.names[m.stopped_by[0][1]]}`; h+=`<br>instrument ${m.instrument} · bevel ${m.bevel_built_deg}°`; } else if(m) h+=`<br>${m.limited_by}: ${m.reason||''}`; $('readout').innerHTML=h; }
+// ---- build -> sheet
 let building=false, pending=false;
-async function build(){ if(building){pending=true;return;} building=true; status('building…');
-  try{ const man=await (await fetch('/api/build',{method:'POST',body:JSON.stringify({P})})).json();
-  kin=man.kinematics; group.clear(); partMeshes={}; limiting=null;
-  for(const p of man.parts){ if(p.error) continue; await new Promise(res=>loader.load(p.url,g=>{g.scene.traverse(o=>{if(o.isMesh)o.material=MAT();}); partMeshes[p.name]=g.scene; group.add(g.scene); res();},undefined,()=>res())); }
-  pose(0); status(`built in ${man.build_seconds}s · ${man.print.print_valid?'printable':'print: '+man.print.violations.join('; ')}`);
-  document.getElementById('print').textContent=man.print.print_valid?'':man.print.violations.join('; '); document.getElementById('theta').textContent='—'; document.getElementById('cls').textContent='not measured';
+async function build(){ if(building){pending=true;return;} building=true; status('building',true);
+  try{ const man=await (await fetch('/api/build',{method:'POST',body:JSON.stringify({P})})).json(); kin=man.kinematics; buildKey=man.key; readout();
+    status(`built in ${man.build_seconds}s · ${man.print.print_valid?'printable':man.print.violations.join('; ')}`,false);
+    if(mode==='sheet') await sheet(); else await load3d(man);
   } finally { building=false; if(pending){pending=false; build();} } }
-function pose(th){ if(!kin) return; const zh=kin.hinge_z, offs=kin.offsets; let M=new THREE.Matrix4(); const rot=new THREE.Matrix4().makeRotationX(-th*Math.PI/180);
-  kin.names.forEach((n,i)=>{ if(i>0){ const T=new THREE.Matrix4().makeTranslation(0,offs[i-1],0), U=new THREE.Matrix4().makeTranslation(0,0,zh), D=new THREE.Matrix4().makeTranslation(0,0,-zh); M=M.clone().multiply(T).multiply(U).multiply(rot).multiply(D);} const m=partMeshes[n]; if(m){m.matrixAutoUpdate=false; m.matrix.copy(M);} }); }
-function status(t){document.getElementById('status').textContent=t;}
-document.getElementById('go').onclick=async()=>{ status('measuring — fixed 45° bevel, probing, sweeping (about 30 s)…'); const r=await (await fetch('/api/measure',{method:'POST',body:JSON.stringify({P})})).json();
-  kin=r.kinematics; const th=r.theta_joint_deg; const words={sphaeroidal:'closes; head and tail margins meet',double:'closes; tail tucks under the head',spiral:'closes; tail passes the head front',discoidal:'closes flat, head over tail',open:'stops on itself before closing',censored:'not measurable — '+(r.reason||'ruler ran out')}[r.enroll_class]||r.enroll_class;
-  document.getElementById('theta').innerHTML=th==null?'—':`${th}°<span class="dim"> / joint · ${r.total_deg}° total</span>`; document.getElementById('cls').textContent=words+(r.stopped_by&&r.stopped_by.length?` · limited by ${kin.names[r.stopped_by[0][0]]}–${kin.names[r.stopped_by[0][1]]}`:'');
-  status(`bevel built ${r.bevel_built_deg}° · ${r.limited_by} · instrument ${r.instrument}`); if(th!=null){ limiting=r.stopped_by&&r.stopped_by[0]; let t=0; const step=()=>{t=Math.min(th,t+th/60); pose(t); if(t<th) requestAnimationFrame(step); else flash();}; step(); } };
-function flash(){ if(!limiting) return; let n=0; const [a,b]=limiting; const iv=setInterval(()=>{ n++; for(const i of [a,b]){ const m=partMeshes[kin.names[i]]; if(m) m.traverse(o=>{if(o.isMesh)o.material.emissive=new THREE.Color(n%2?0x8a3a00:0x000000);}); } if(n>7) clearInterval(iv); },220); }
-(function loop(){ requestAnimationFrame(loop); ctl.update(); ren.render(scene,cam); })();
+async function sheet(){ status('drawing sheet',true); const r=await (await fetch('/api/sheet',{method:'POST',body:JSON.stringify({P})})).json(); $('sheet').src=r.url+'?'+Date.now(); status(r.measured?'sheet · measured':'sheet · not measured',false); }
+$('dl').onclick=()=>{ if(buildKey) window.location='/api/stl/'+buildKey; };
+// ---- 3D — v1's model view: black fill with white feature edges (blueprint look) or shaded (model look), Z-up root, grid
+let scene,cam,ren,ctl,loader,root,grid,look='blueprint';
+const fillMat=new THREE.MeshBasicMaterial({color:0x000000,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
+const inkLine=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.9});
+const faintLine=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.18});
+const shaded=new THREE.MeshStandardMaterial({color:0xbfbfbf,roughness:0.8,metalness:0.0});
+function init3d(){ if(threeReady) return; threeReady=true; const view=$('stage3d'); scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+  cam=new THREE.PerspectiveCamera(40,1,1,5000); cam.position.set(140,110,190); ren=new THREE.WebGLRenderer({antialias:true}); view.appendChild(ren.domElement); ctl=new OrbitControls(cam,ren.domElement); ctl.target.set(0,10,0);
+  scene.add(new THREE.HemisphereLight(0xffffff,0x888888,1.0)); const key=new THREE.DirectionalLight(0xffffff,1.2); key.position.set(80,160,120); scene.add(key);
+  grid=new THREE.GridHelper(400,40,0x2a2a2a,0x161616); grid.position.y=-0.5; scene.add(grid);
+  root=new THREE.Group(); root.rotation.x=-Math.PI/2; scene.add(root); loader=new STLLoader();
+  const rs=()=>{ren.setSize(view.clientWidth,view.clientHeight); cam.aspect=view.clientWidth/view.clientHeight; cam.updateProjectionMatrix();}; window.addEventListener('resize',rs); rs();
+  (function loop(){requestAnimationFrame(loop); ctl.update(); ren.render(scene,cam);})(); }
+function partGroup(geo){ const g=new THREE.Group(); const m=new THREE.Mesh(geo, look==='blueprint'?fillMat:shaded); m.name='fill'; g.add(m);
+  const e1=new THREE.LineSegments(new THREE.EdgesGeometry(geo,24), inkLine.clone()); e1.name='edges'; g.add(e1);
+  const e2=new THREE.LineSegments(new THREE.EdgesGeometry(geo,8), faintLine.clone()); e2.name='faint'; g.add(e2); return g; }
+function setLook(l){ look=l; [...$('look').children].forEach(s=>s.classList.toggle('on',s.dataset.look===l)); if(!threeReady) return;
+  scene.background=new THREE.Color(l==='blueprint'?0x000000:0xffffff); for(const g of Object.values(partMeshes)){ g.getObjectByName('fill').material=(l==='blueprint'?fillMat:shaded); g.getObjectByName('edges').visible=(l==='blueprint'); g.getObjectByName('faint').visible=(l==='blueprint'); }
+  scene.remove(grid); grid=l==='blueprint'?new THREE.GridHelper(400,40,0x2a2a2a,0x161616):new THREE.GridHelper(400,40,0xdddddd,0xeeeeee); grid.position.y=-0.5; scene.add(grid); }
+$('look').onclick=e=>{ if(e.target.dataset.look) setLook(e.target.dataset.look); };
+async function load3d(man){ init3d(); root.clear(); partMeshes={}; if(!man) man=await (await fetch('/api/build',{method:'POST',body:JSON.stringify({P})})).json(); kin=man.kinematics;
+  for(const p of man.parts){ if(p.error) continue; await new Promise(res=>loader.load(p.stl,geo=>{geo.computeVertexNormals(); const g=partGroup(geo); partMeshes[p.name]=g; root.add(g); res();},undefined,()=>res())); }
+  pose(+$('roll').value); fit(); }
+function fit(){ const box=new THREE.Box3().setFromObject(root); if(box.isEmpty()) return; const c=box.getCenter(new THREE.Vector3()), s=box.getSize(new THREE.Vector3()).length();
+  ctl.target.copy(c); cam.position.copy(c).add(new THREE.Vector3(0.6,0.55,0.95).multiplyScalar(s*0.9)); cam.near=s/100; cam.far=s*10; cam.updateProjectionMatrix(); }
+function pose(th){ if(!kin||!threeReady) return; const zh=kin.hinge_z, offs=kin.offsets; let M=new THREE.Matrix4(); const rot=new THREE.Matrix4().makeRotationX(-th*Math.PI/180);
+  kin.names.forEach((n,i)=>{ if(i>0){ M=M.clone().multiply(new THREE.Matrix4().makeTranslation(0,offs[i-1],0)).multiply(new THREE.Matrix4().makeTranslation(0,0,zh)).multiply(rot).multiply(new THREE.Matrix4().makeTranslation(0,0,-zh)); } const g=partMeshes[n]; if(g){g.matrixAutoUpdate=false; g.matrix.copy(M);} }); }
+function highlight(row){ if(!threeReady) return; for(const [n,g] of Object.entries(partMeshes)){ const on=row&&(row==='seg'?n.startsWith('seg'):n===row); const e=g.getObjectByName('edges'); if(e) e.material.opacity=on?1.0:(row?0.35:0.9); } }
+$('view3d').onclick=async()=>{ if(mode==='sheet'){ mode='3d'; $('sheet').style.display='none'; $('stage3d').style.display='block'; $('rollbar').style.display='grid'; $('look').style.display='block'; $('view3d').textContent='View sheet'; await load3d(null); }
+  else { mode='sheet'; $('stage3d').style.display='none'; $('rollbar').style.display='none'; $('look').style.display='none'; $('sheet').style.display='block'; $('view3d').textContent='View 3D'; await sheet(); } };
+$('roll').oninput=e=>{ $('rollval').textContent=(+e.target.value).toFixed(1)+'° per joint'; pose(+e.target.value); };
+// ---- measure
+$('go').onclick=async()=>{ status('measuring — fixed 45° bevel, probing, sweeping (about 30 s)',true); $('go').disabled=true;
+  try{ lastMeas=await (await fetch('/api/measure',{method:'POST',body:JSON.stringify({P})})).json(); kin=lastMeas.kinematics; readout(); status(`${lastMeas.limited_by} · bevel built ${lastMeas.bevel_built_deg}°`,false);
+    const th=lastMeas.theta_joint_deg; if(th!=null){ $('roll').max=Math.max(th,1); $('roll').value=th; $('rollval').textContent=th.toFixed(1)+'° per joint'; }
+    if(mode==='sheet') await sheet(); else if(th!=null){ let x=0; const step=()=>{x=Math.min(th,x+th/60); pose(x); if(x<th) requestAnimationFrame(step);}; step(); }
+  } finally { $('go').disabled=false; } };
 render(); build();
-</script></body></html>
+</script>
+</body>
+</html>

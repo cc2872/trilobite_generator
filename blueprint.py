@@ -41,7 +41,7 @@ def _eye_panels(fig, gs, m, P):
     geometry is the drawing), the outward view of the band with its lens lattice, and the band unrolled with
     the lattice formulas. All four read the same parameters the builder used."""
     import math as _m
-    from eyes import eye_geometry, fov
+    from parts import eye_geometry, fov
     G = eye_geometry(P)
     axes = [fig.add_subplot(gs[4:6, 4:5]), fig.add_subplot(gs[4:6, 5:6]), fig.add_subplot(gs[4:6, 6:7]), fig.add_subplot(gs[4:6, 7:9])]
     for ax in axes: ax.set_facecolor(BG); ax.set_aspect("equal"); ax.axis("off")
@@ -97,7 +97,7 @@ def _eye_panels(fig, gs, m, P):
     ax.set_title(f"SECTION B–B · lean {P.get('eyeSlope', 0):.0f}°", color=INK, fontsize=7, family="monospace", loc="left")
     # ---- outward view and unrolled band: the lattice as built
     try:
-        from eye_solid import lens_centres, eye_params
+        from parts import lens_centres, eye_params
         EP = eye_params(P, eR); slope = _m.radians(EP["slope_deg"]); arc = _m.radians(EP["arc_deg"]); H = EP["H"]
         D = EP["lensD"] * eR; cs = lens_centres(eR, H, slope, arc, D, EP["lensGap"]); rb = eR + H * _m.tan(slope)
         ax = axes[2]; yt, yb = eR * _m.sin(arc / 2), rb * _m.sin(arc / 2)
@@ -132,7 +132,7 @@ def _eye_detail(ax, m, P):
     arc from eyes.eye_geometry (the same numbers the builder used), a transverse section through the eye centre
     below it, and the dimensions the primitive will be fitted to: R, band height over the cheek, arc."""
     try:
-        from eyes import eye_geometry, fov
+        from parts import eye_geometry, fov
         G = eye_geometry(P)
     except Exception as ex:
         ax.text(0, 0, f"eye: {str(ex)[:30]}", color=DIM, fontsize=7, family="monospace"); return
@@ -168,7 +168,7 @@ def _eye_detail(ax, m, P):
     _dim(ax, xe - eR, ye + W + 2, xe + eR, ye + W + 2, f"R {eR:.1f}", off=0)
     if P.get("eyeSolid", 0) > 0.5:                                                   # lattice as built (eye_solid.lens_centres), outward view
         try:
-            from eye_solid import lens_centres, eye_params
+            from parts import lens_centres, eye_params
             EP = eye_params(P, eR); import math as _m
             cs = lens_centres(EP["R"], EP["H"], _m.radians(EP["slope_deg"]), _m.radians(EP["arc_deg"]), EP["lensD"] * eR, EP["lensGap"])
             ox = xe + W + 4; oz = ye - W - 4 - (z1 - z0) - 14 - EP["H"]
@@ -217,7 +217,7 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None):
     except Exception: pass
     ax.axhline(0, color=DIM, lw=0.4, ls=(0, (6, 4))); ax.axvline(0, color=DIM, lw=0.4, ls=(0, (6, 4)))
     try:
-        from eyes import eye_geometry
+        from parts import eye_geometry
         G = eye_geometry(P)
     except Exception: pass
     W, L = x1 - x0, y1 - y0
@@ -246,7 +246,7 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None):
     except Exception: pass
     # section C–C: longitudinal through the eye centre (x = xe), so the eye's profile sits on the lateral view
     try:
-        from eyes import eye_geometry
+        from parts import eye_geometry
         G = eye_geometry(P)
         if not G["blind"]:
             s = m.section(plane_origin=[G["xe"], 0, 0], plane_normal=[1, 0, 0])
