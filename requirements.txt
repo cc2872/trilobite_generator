@@ -1,0 +1,9 @@
+numpy>=1.26
+scipy>=1.11
+trimesh>=4.4
+manifold3d>=3.0
+python-fcl>=0.7
+rtree>=1.0
+matplotlib>=3.8
+pandas>=2.0
+pytest>=8.0
