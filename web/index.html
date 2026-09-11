@@ -255,18 +255,24 @@ function drawMap(){
     o.push(`<path class="ghost" d="M${F(cx+gx)} ${F(gyr)} L${F(cx+gx+7)} ${F(gyr+9)}"/>`,
            hnd2('genalCurve','genalSpine',cx+gx+7,gyr+9,q=>invCurve(q,12),q=>(q.y-gyr)/(hL*g.scGenal)));
   }
-  // pleural spine: the outward arrow the sketch labels "spine length"
+  // pleural spine: the sketch's outward arrow. Its tip is polar about the blade root — how far out is the
+  // length, how far back is the sweep — so the one grip carries both numbers, as the genal horn's does.
   const im=Math.floor(seg/2), ym=yH+im*p+p*0.42, wm=wAt(g,im), Ls=P.spineBase*hw*g.scSpine, sa=P.spineSweep*Math.PI/180;
   const sx=cx+wm+Ls*Math.cos(sa), sy=ym+Ls*Math.sin(sa);
+  const invSlen=q=>Math.hypot(q.x-(cx+wm),q.y-ym)/(hw*g.scSpine);
+  const invSweep=q=>Math.atan2(q.y-ym,Math.max(q.x-(cx+wm),0.001))*180/Math.PI;
   if(Ls>2){ o.push(`<path class="ink" d="M${F(cx+wm)} ${F(ym)} L${F(sx)} ${F(sy)}"/>`, `<path class="mir" d="M${F(cx-wm)} ${F(ym)} L${F(2*cx-sx)} ${F(sy)}"/>`,
-                   `<path class="hit" data-c="a2" d="M${F(cx+wm)} ${F(ym)} L${F(sx)} ${F(sy)}"/>`, mt(sx,sy+9,'spine length','end')); }
+                   `<path class="hit" data-c="a2" d="M${F(cx+wm)} ${F(ym)} L${F(sx)} ${F(sy)}"/>`, mt(sx,sy+10,'length · sweep','end')); }
   else o.push(`<path class="ghost" d="M${F(cx+wm)} ${F(ym)} L${F(cx+wm+8)} ${F(ym+5)}"/>`);
-  o.push(hnd('spineBase',Ls>2?sx:cx+wm+8,Ls>2?sy:ym+5,q=>(q.x-(cx+wm))/(hw*g.scSpine)));
-  // tail forks (pygSpine), then the two prongs
+  o.push(hnd2('spineSweep','spineBase',Ls>2?sx:cx+wm+8,Ls>2?sy:ym+5,invSweep,invSlen));
+  // tail forks: same polar grip — reach from the tail tip is the length, angle off the midline is the splay
   const Lf=P.pygSpine*tL*g.scFork, fs=P.pygSplay*Math.PI/180;
+  const invFlen=q=>Math.hypot(q.x-cx,Math.max(q.y-y1,0))/(tL*g.scFork);
+  const invSplay=q=>Math.atan2(Math.max(q.x-cx,0),Math.max(q.y-y1,0.001))*180/Math.PI;
   if(Lf>3){ for(const s of [1,-1]) o.push(`<path class="${s>0?'ink':'mir'}" d="M${F(cx+s*a*0.3)} ${F(y1-1)} L${F(cx+s*Lf*Math.sin(fs))} ${F(y1+Lf*Math.cos(fs))}"/>`);
     o.push(`<path class="hit" data-c="a3" d="M${F(cx+a*0.3)} ${F(y1-1)} L${F(cx+Lf*Math.sin(fs))} ${F(y1+Lf*Math.cos(fs))}"/>`);
-    o.push(hnd('pygSpine',cx+Lf*Math.sin(fs),y1+Lf*Math.cos(fs),q=>(q.y-y1)/(tL*g.scFork))); }
+    o.push(hnd2('pygSplay','pygSpine',cx+Lf*Math.sin(fs),y1+Lf*Math.cos(fs),invSplay,invFlen)); }
+  else o.push(hnd2('pygSplay','pygSpine',cx+11,y1+6,invSplay,invFlen));   // clear of the tail prong's stem
   const ph=prong(g,'head',cx,headY(g,0,'front'),-1,g.scProng,hL), pt=prong(g,'tail',cx,y1+(Lf>3?6:0),1,g.scTailProng,tL);
   o.push(ph[0],ph[1],ph[2],pt[0],pt[1],pt[2]);
   // the w arrow across the axis, and the body caliper
@@ -315,9 +321,9 @@ const VISUAL={
  b1:()=>[glyph('glab','0 0 340 125'), slider('glabInflate'), slider('glabRise'), slider('glabLobes'), slider('glabFront'), slider('headOutlineExp'), slider('headDomeExp'), slider('cephParallel')],
  a1:()=>[slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('genalSpine'), slider('genalCurve'), slider('genalPath'), slider('genalTaper'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
  b2:()=>[slider('axisFrac'), slider('axisRise'), slider('furrowDepth')],
- a2:()=>[glyph('pleura','0 0 340 110'), slider('fulcrum'), slider('pleuralSlope'), slider('overlap'), slider('spineBase')],
+ a2:()=>[glyph('pleura','0 0 340 110'), slider('fulcrum'), slider('pleuralSlope'), slider('overlap'), slider('spineBase'), slider('spineSweep')],
  b3:()=>[slider('pygRings'), slider('tailRelief'), slider('tailDomeExp')],
- a3:()=>[slider('pygWidth'), slider('pygSpine'), slider('pygMarginal'), slider('tailProngs'), slider('tailProngLen'), slider('tailProngSplay'), slider('tailProngStem'), slider('tailProngCenter'), slider('tailProngCurl')],
+ a3:()=>[slider('pygWidth'), slider('pygSpine'), slider('pygSplay'), slider('pygMarginal'), slider('tailProngs'), slider('tailProngLen'), slider('tailProngSplay'), slider('tailProngStem'), slider('tailProngCenter'), slider('tailProngCurl')],
  ruler:()=>[slider('maxAngle'), slider('clearance'), slider('nKnuckles')],
 };
 function render(){ const c=S.cells[sel]; $('cellname').textContent=c.label;
