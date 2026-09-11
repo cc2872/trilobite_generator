@@ -30,7 +30,8 @@ WEDGE_REACH = 0.15        # seg-seg joints: bevel reach past the hinge line, fra
 WEDGE_REACH_WIDE = 0.5    # head-seg0 and last-seg-tail joints (full-width plates, no tips to sever)
 GRID_SEG = (121, 61)      # (nu, nv) — 10 Sep verdict: 120x60 per part; nu odd so the axis is a vertex column
 GRID_TAIL = (121, 61)
-TIP_KEEP_MM = 3.0         # the bevel band stops this far short of a segment's pleural tip (11 Sep: harpetida seg7)
+TIP_KEEP_MM = 3.0
+WIDE_OVERSPAN_MM = 4.0    # last-seg rear band overspans the local plate by this much so no tip is stranded outboard         # the bevel band stops this far short of a segment's pleural tip (11 Sep: harpetida seg7)
 
 # ---------------------------------------------------------------- derived scalars (trilobite.py, unchanged)
 def pitch(P): return P["length"] * (1 - P["cephFrac"] - P["pygFrac"]) / P["segCount"]
@@ -81,7 +82,7 @@ def spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg=0):
     s.apply_translation(at)
     return s
 
-def _hinge_geometry(P, wide, halfwidth=None):
+def _hinge_geometry(P, wide, halfwidth=None, overspan=False):
     """Bevel band width and reach. 11 Sep 2026: the band follows the LOCAL half-width of the plate (the BREP builder
     sized it from the animal's maximum width, so on a narrow rear segment the 'axial band + 0.12 W' covered nearly the
     whole pleura and the wedge severed its tips — harpetida seg7; OCC's grid-jitter retries had been hiding it).
@@ -92,13 +93,17 @@ def _hinge_geometry(P, wide, halfwidth=None):
     else:                                    band = 2 * (P["axisFrac"] * (W / 2)) + 0.45 * W
     if not wide and halfwidth is not None:                      # seg-seg joints: never within 3 mm of the local tip
         band = min(band, 2 * (halfwidth - TIP_KEEP_MM))         # (wide joints keep the validated global-width rule)
+    if overspan and halfwidth is not None:                      # last-segment rear joint ONLY: the wide wedge must
+        band = max(band, 2 * halfwidth + WIDE_OVERSPAN_MM)      # span the whole tapered plate, or the outboard
+        #  pleural tip is stranded as an orphan body (never cut, just disconnected -- 68 mm3 pair, 12 Sep asaphida
+        #  seg10). Head and pygidium are NOT overspanned: their bands were validated on the frozen readings.
     reach = (WEDGE_REACH_WIDE if wide else WEDGE_REACH) * pitch(P)
     return band, reach
 
-def add_hinge(part, env, P, y_axis, rear, wide=False, bevel_deg=None, halfwidth=None):
+def add_hinge(part, env, P, y_axis, rear, wide=False, bevel_deg=None, halfwidth=None, overspan=False):
     """trilobite.add_hinge on the mesh builder. bevel_deg = None uses the printed stop P['maxAngle']; the instrument
     passes its own fixed bevel here — no global, no clamp in the way. halfwidth = the plate's local half-width."""
-    band, reach = _hinge_geometry(P, wide, halfwidth)
+    band, reach = _hinge_geometry(P, wide, halfwidth, overspan=overspan)
     return M.hinge(part, env, y_axis=y_axis, rear=rear, zh=hinge_z(P), Wh=hinge_width(P), barrel_r=P["barrelR"],
                    clearance=P["clearance"], n_knuckles=int(P["nKnuckles"]), ring_top=ring_top(P), wall=P["wall"],
                    bore_d=P["boreDia"], band=band, reach=reach,
@@ -182,7 +187,7 @@ def segment(P, i, bevel_deg=None, grid=GRID_SEG):
     seg = M.heightfield_shell(S["outline"], S["zfun"], S["t"], nu=grid[0], nv=grid[1])
     env = M.under_envelope(S["outline"], S["zfun"], nu=grid[0], nv=grid[1])
     seg = _doublure(seg, S, P)
-    seg = add_hinge(seg, env, P, S["d"], rear=True, wide=S["last"], bevel_deg=bevel_deg, halfwidth=S["w"])
+    seg = add_hinge(seg, env, P, S["d"], rear=True, wide=S["last"], bevel_deg=bevel_deg, halfwidth=S["w"], overspan=S["last"])
     seg = add_hinge(seg, env, P, 0.0, rear=False, wide=(i == 0), bevel_deg=bevel_deg, halfwidth=S["w"])
     if P["axialSpine"] > 0.02:
         r = 0.45 * S["margin"]
