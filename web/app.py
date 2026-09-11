@@ -17,6 +17,8 @@ app = Flask(__name__, static_folder=None)
 CACHE = os.path.join(ROOT, "web", "cache"); os.makedirs(CACHE, exist_ok=True)
 LOCK = threading.Lock()          # one build or measurement at a time (the lab workstation has one job's worth of RAM to spare)
 MEASURED = {}                    # param hash -> last instrument result (so the sheet can carry the reading and the enrolled pose)
+PROGRESS = {"done": 0, "total": 0}   # parts finished in the build now running; the page polls it for its loading count
+                                     # (one build at a time, held by LOCK, so a single global is enough)
 PORT = int(os.environ.get("PORT", 8765))   # the lab tunnel (trilomorph.org) points at 8765, the legacy port
 
 # ---- maintenance mode: flip to False (or delete this block) to bring the generator back. While True, every
@@ -48,6 +50,12 @@ def _presets():
 @app.get("/")
 def index(): return send_file(os.path.join(ROOT, "web", "index.html"))
 
+@app.get("/loading.gif")
+def loading_gif(): return send_file(os.path.join(ROOT, "web", "loading.gif"))
+
+@app.get("/api/progress")
+def api_progress(): return jsonify(PROGRESS)
+
 @app.get("/api/schema")
 def api_schema():
     return jsonify(dict(version=schema.SCHEMA_VERSION, instrument=I.INSTRUMENT_VERSION, params=_params_meta(), cells=schema.CELLS,
@@ -67,9 +75,13 @@ def api_build():
     """Print geometry: every part at the printed stop bevel (P['maxAngle']), one GLB each, cached by parameter hash."""
     P, notes = schema.coerce_report(request.get_json(force=True).get("P", {}), base=schema.table_defaults())
     key = schema.param_hash(P); folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
-    if os.path.exists(manifest): return send_file(manifest)
+    n_parts = int(P["segCount"]) + 2
+    PROGRESS.update(done=0, total=n_parts)
+    if os.path.exists(manifest):
+        PROGRESS.update(done=n_parts); return send_file(manifest)
     with LOCK:
-        if os.path.exists(manifest): return send_file(manifest)
+        if os.path.exists(manifest):
+            PROGRESS.update(done=n_parts); return send_file(manifest)
         t0 = time.time(); os.makedirs(folder, exist_ok=True); bnotes = []; out = []
         builders = [("head", lambda: parts.cephalon(P, notes=bnotes))] + [(f"seg{i}", (lambda i=i: parts.segment(P, i))) for i in range(int(P["segCount"]))] + [("tail", lambda: parts.pygidium(P))]
         for name, fn in builders:
@@ -78,6 +90,7 @@ def api_build():
                 out.append(dict(name=name, url=f"/files/{key}/{name}.glb", stl=f"/files/{key}/{name}.stl", bodies=len(__import__("mesh").bodies(m)), volume=round(m.volume, 1)))
             except Exception as ex:
                 out.append(dict(name=name, error=str(ex)[:120]))
+            PROGRESS.update(done=len(out))
         man = dict(key=key, parts=out, kinematics=_kinematics(P), print=I.print_validity(P), schema_notes=notes, build_notes=bnotes,
                    build_seconds=round(time.time() - t0, 1), schema=schema.SCHEMA_VERSION)
         json.dump(P, open(os.path.join(folder, "params.json"), "w")); json.dump(man, open(manifest, "w")); _evict()

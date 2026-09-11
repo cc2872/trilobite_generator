@@ -42,6 +42,11 @@
   .rollbar{position:absolute;left:16px;right:16px;bottom:16px;display:none;grid-template-columns:1fr auto auto;gap:14px;align-items:center}
   .rollbar input[type=range]{height:1px} .rollbar input[type=range]::-webkit-slider-thumb{width:16px;height:16px}
   .rollbar .val{min-width:120px;text-align:right;font-variant-numeric:tabular-nums}
+  .loading{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#000;z-index:6}
+  .loading.on{display:flex}
+  .loading img{width:150px;height:auto;image-rendering:auto;opacity:.9}
+  .loading .count{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--mid);font-variant-numeric:tabular-nums}
+  .loading .note{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-size:8px;letter-spacing:.06em;color:var(--line)}
   svg.arm{width:100%;height:120px;display:block;margin:6px 0 2px;border:1px solid var(--line)}
   svg.arm text{fill:var(--mid);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
   /* the anatomy map: the picker is the animal, traced from the dorsal sketch */
@@ -102,6 +107,11 @@
     <div class="status" id="status"></div>
     <div class="look" id="look"><span class="on" data-look="blueprint">Blueprint</span> · <span data-look="model">Model</span></div>
     <div class="rollbar" id="rollbar"><input type="range" id="roll" min="0" max="45" step="0.1" value="0"><div class="val" id="rollval"></div><button id="go">Roll</button></div>
+    <div class="loading" id="loading">
+      <img src="/loading.gif" alt="">
+      <div class="count" id="lcount"></div>
+      <div class="note">(placeholder image until animation asset made)</div>
+    </div>
   </div>
 </div>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
@@ -319,7 +329,15 @@ async function post(url,body){ const r=await fetch(url,{method:'POST',body:JSON.
 async function retryPost(url,what){        // one retry: covers a dropped connection or a restarting box,
   try{ return await post(url,{P}); }       // not a request that fails on the geometry itself
   catch(ex){ status(what+' failed · retrying',true); await new Promise(r=>setTimeout(r,1200)); return post(url,{P}); } }
-async function build(){ if(building){pending=true;return;} building=true; status('building',true);
+// ---- loading: the parts land one at a time on the server, so poll its count while the stage is blank
+let poll=null;
+function lcount(done,total){ $('lcount').textContent=`${done} part${done===1?'':'s'} out of ${total} built`; }
+function loadingOn(){ const total=Math.round(P.segCount)+2; lcount(0,total); $('loading').classList.add('on');
+  clearInterval(poll); poll=setInterval(async()=>{
+    try{ const r=await (await fetch('/api/progress')).json(); if(r.total) lcount(Math.min(r.done,r.total),r.total); }
+    catch(ex){ /* the count is decoration; a dropped poll must not break the build */ } },400); }
+function loadingOff(){ clearInterval(poll); poll=null; $('loading').classList.remove('on'); }
+async function build(){ if(building){pending=true;return;} building=true; status('building',true); loadingOn();
   try{
     let man;
     try{ man=await retryPost('/api/build','build'); }
@@ -327,18 +345,21 @@ async function build(){ if(building){pending=true;return;} building=true; status
     kin=man.kinematics; buildKey=man.key; readout();
     status(`built in ${man.build_seconds}s · ${man.print.print_valid?'printable':man.print.violations.join('; ')}`,false);
     if(mode==='sheet') await sheet(); else await load3d(man);
-  } finally { building=false; if(pending){pending=false; build();} } }
-async function sheet(){ status('drawing sheet',true);
+  } finally { building=false; loadingOff(); if(pending){pending=false; build();} } }
+let sheetWait=null;                        // resolved by the img's own load/error, so the overlay lifts on the
+async function sheet(){ status('drawing sheet',true);   // painted sheet rather than on the response
   try{ const r=await retryPost('/api/sheet','sheet'); if(!r.url) throw new Error(r.error||'no sheet');
-    $('sheet').src=r.url+'?'+Date.now(); status(r.measured?'sheet · measured':'sheet',false); }
+    const done=new Promise(res=>{ sheetWait=res; setTimeout(()=>{ if(sheetWait===res){ sheetWait=null; res(); } },8000); });
+    $('sheet').src=r.url+'?'+Date.now(); status(r.measured?'sheet · measured':'sheet',false); await done; }
   catch(ex){ status('sheet failed · '+why(ex),false); } }
 const SHEET_ASPECT=16.5/11.7, V3D=[0.80,0.585,0.13,0.08];        // blueprint.sheet is A3 landscape; the title block leaves this box blank
 function placeView3D(){ const b=$('view3d'); if(mode!=='sheet'){ b.className='corner'; return; } b.className='';
   const st=$('sheet').parentElement, W=st.clientWidth, H=st.clientHeight; let w=W, h=W/SHEET_ASPECT; if(h>H){h=H; w=H*SHEET_ASPECT;} const x0=(W-w)/2, y0=(H-h)/2;
   b.style.left=(x0+V3D[0]*w)+'px'; b.style.top=(y0+V3D[1]*h)+'px'; b.style.width=(V3D[2]*w)+'px'; b.style.height=(V3D[3]*h)+'px'; }
 window.addEventListener('resize',placeView3D);
-$('sheet').onload=()=>{ $('view3d').style.display='flex'; placeView3D(); };   // the toggle appears with the sheet it sits on
-$('sheet').onerror=()=>{ if($('sheet').getAttribute('src')) status('sheet image failed',false); };
+const sheetDone=()=>{ if(sheetWait){ const r=sheetWait; sheetWait=null; r(); } };
+$('sheet').onload=()=>{ $('view3d').style.display='flex'; placeView3D(); sheetDone(); };   // the toggle appears with the sheet it sits on
+$('sheet').onerror=()=>{ if($('sheet').getAttribute('src')) status('sheet image failed',false); sheetDone(); };
 $('dl').onclick=()=>{ if(buildKey) window.location='/api/stl/'+buildKey; };
 // ---- 3D — v1's model view: black fill with white feature edges (blueprint look) or shaded (model look), Z-up root, grid
 let scene,cam,ren,ctl,loader,root,grid,look='blueprint';
