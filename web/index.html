@@ -309,20 +309,34 @@ function dirty(){ status('edited',false); }
 $('buildBtn').onclick=()=>build();
 function status(s,busy){$('status').textContent=s; $('status').className='status'+(busy?' busy':'');}
 function readout(){ const m=lastMeas; let h=`<b>${ps.value}</b> · ${Math.round(P.segCount)} segments · ${Math.round(P.length)} mm`; if(m&&m.theta_joint_deg!=null){ const w={sphaeroidal:'closes, margins meet',double:'closes, tail under head',spiral:'closes, tail past head',discoidal:'closes flat',open:'stops on itself'}[m.enroll_class]||m.enroll_class; h+=`<br>${m.theta_joint_deg}° per joint · ${m.total_deg}° total · ${w}`; if(m.stopped_by&&m.stopped_by.length) h+=`<br>limited by ${kin.names[m.stopped_by[0][0]]}–${kin.names[m.stopped_by[0][1]]}`; h+=`<br>instrument ${m.instrument} · bevel ${m.bevel_built_deg}°`; } else if(m) h+=`<br>${m.limited_by}: ${m.reason||''}`; $('readout').innerHTML=h; }
-// ---- build -> sheet
+// ---- build -> sheet. Both endpoints can 500 (a build that raises before the per-part catch, a sheet that
+// fails in matplotlib); one retry covers the transient case, and the reason is put on the status line rather
+// than left as an unhandled rejection with the status stuck on 'building'.
 let building=false, pending=false;
+const why=ex=>String(ex&&ex.message||ex).slice(0,60);
+async function post(url,body){ const r=await fetch(url,{method:'POST',body:JSON.stringify(body)});
+  if(!r.ok) throw new Error(r.status+' '+url.split('/').pop()); return r.json(); }
 async function build(){ if(building){pending=true;return;} building=true; status('building',true);
-  try{ const man=await (await fetch('/api/build',{method:'POST',body:JSON.stringify({P})})).json(); kin=man.kinematics; buildKey=man.key; readout();
+  try{
+    let man;
+    try{ man=await post('/api/build',{P}); }
+    catch(ex){ status('build failed · retrying',true); await new Promise(r=>setTimeout(r,1200));
+      try{ man=await post('/api/build',{P}); } catch(ex2){ status('build failed · '+why(ex2),false); return; } }
+    kin=man.kinematics; buildKey=man.key; readout();
     status(`built in ${man.build_seconds}s · ${man.print.print_valid?'printable':man.print.violations.join('; ')}`,false);
     if(mode==='sheet') await sheet(); else await load3d(man);
   } finally { building=false; if(pending){pending=false; build();} } }
-async function sheet(){ status('drawing sheet',true); const r=await (await fetch('/api/sheet',{method:'POST',body:JSON.stringify({P})})).json(); $('sheet').src=r.url+'?'+Date.now(); status(r.measured?'sheet · measured':'sheet · not measured',false); }
+async function sheet(){ status('drawing sheet',true);
+  try{ const r=await post('/api/sheet',{P}); if(!r.url) throw new Error(r.error||'no sheet');
+    $('sheet').src=r.url+'?'+Date.now(); status(r.measured?'sheet · measured':'sheet',false); }
+  catch(ex){ status('sheet failed · '+why(ex),false); } }
 const SHEET_ASPECT=16.5/11.7, V3D=[0.80,0.585,0.13,0.08];        // blueprint.sheet is A3 landscape; the title block leaves this box blank
 function placeView3D(){ const b=$('view3d'); if(mode!=='sheet'){ b.className='corner'; return; } b.className='';
   const st=$('sheet').parentElement, W=st.clientWidth, H=st.clientHeight; let w=W, h=W/SHEET_ASPECT; if(h>H){h=H; w=H*SHEET_ASPECT;} const x0=(W-w)/2, y0=(H-h)/2;
   b.style.left=(x0+V3D[0]*w)+'px'; b.style.top=(y0+V3D[1]*h)+'px'; b.style.width=(V3D[2]*w)+'px'; b.style.height=(V3D[3]*h)+'px'; }
 window.addEventListener('resize',placeView3D);
 $('sheet').onload=()=>{ $('view3d').style.display='flex'; placeView3D(); };   // the toggle appears with the sheet it sits on
+$('sheet').onerror=()=>{ if($('sheet').getAttribute('src')) status('sheet image failed',false); };
 $('dl').onclick=()=>{ if(buildKey) window.location='/api/stl/'+buildKey; };
 // ---- 3D — v1's model view: black fill with white feature edges (blueprint look) or shaded (model look), Z-up root, grid
 let scene,cam,ren,ctl,loader,root,grid,look='blueprint';
@@ -344,7 +358,9 @@ function setLook(l){ look=l; [...$('look').children].forEach(s=>s.classList.togg
   scene.background=new THREE.Color(l==='blueprint'?0x000000:0xffffff); for(const g of Object.values(partMeshes)){ g.getObjectByName('fill').material=(l==='blueprint'?fillMat:shaded); g.getObjectByName('edges').visible=(l==='blueprint'); g.getObjectByName('faint').visible=(l==='blueprint'); }
   scene.remove(grid); grid=l==='blueprint'?new THREE.GridHelper(400,40,0x2a2a2a,0x161616):new THREE.GridHelper(400,40,0xdddddd,0xeeeeee); grid.position.y=-0.5; scene.add(grid); }
 $('look').onclick=e=>{ if(e.target.dataset.look) setLook(e.target.dataset.look); };
-async function load3d(man){ init3d(); root.clear(); partMeshes={}; if(!man) man=await (await fetch('/api/build',{method:'POST',body:JSON.stringify({P})})).json(); kin=man.kinematics;
+async function load3d(man){ init3d(); root.clear(); partMeshes={};
+  if(!man){ try{ man=await post('/api/build',{P}); } catch(ex){ status('3D failed · '+why(ex),false); return; } }
+  kin=man.kinematics;
   for(const p of man.parts){ if(p.error) continue; await new Promise(res=>loader.load(p.stl,geo=>{geo.computeVertexNormals(); const g=partGroup(geo); partMeshes[p.name]=g; root.add(g); res();},undefined,()=>res())); }
   pose(+$('roll').value); fit(); $('view3d').style.display='flex'; }
 function fit(){ const box=new THREE.Box3().setFromObject(root); if(box.isEmpty()) return; const c=box.getCenter(new THREE.Vector3()), s=box.getSize(new THREE.Vector3()).length();
@@ -358,10 +374,11 @@ function rollLabel(v){ const mx=+$('roll').max||1; return Math.round(100*v/mx)+'
 $('roll').oninput=e=>{ $('rollval').textContent=rollLabel(+e.target.value); pose(+e.target.value); };
 // ---- measure
 $('go').onclick=async()=>{ status('measuring',true); $('go').disabled=true;
-  try{ lastMeas=await (await fetch('/api/measure',{method:'POST',body:JSON.stringify({P})})).json(); kin=lastMeas.kinematics; readout(); status(`measured · ${lastMeas.limited_by}`,false);
+  try{ lastMeas=await post('/api/measure',{P}); kin=lastMeas.kinematics; readout(); status(`measured · ${lastMeas.limited_by}`,false);
     const th=lastMeas.theta_joint_deg; if(th!=null){ $('roll').max=Math.max(th,1); $('roll').value=th; $('rollval').textContent=rollLabel(th); }
     if(th!=null){ let x=0; const step=()=>{x=Math.min(th,x+th/60); pose(x); if(x<th) requestAnimationFrame(step);}; step(); }
-  } finally { $('go').disabled=false; } };
+  } catch(ex){ status('measure failed · '+why(ex),false); }
+  finally { $('go').disabled=false; } };
 $('roll').max=P.maxAngle; $('roll').value=P.maxAngle; $('rollval').textContent=rollLabel(P.maxAngle);
 render(); build(); placeView3D();
 </script>
