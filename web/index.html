@@ -90,7 +90,7 @@
     <div class="controls">
       <h1>Trilobite Morphospace</h1>
       <div class="ctrl"><div class="lab"><span>Order</span></div><select id="preset"></select></div>
-      <svg class="map" id="map" viewBox="0 0 300 400" xmlns="http://www.w3.org/2000/svg"></svg>
+      <svg class="map" id="map" viewBox="0 0 300 372" xmlns="http://www.w3.org/2000/svg"></svg>
       <div class="sect" id="cellname"></div>
       <div id="C"></div>
       <div class="more" id="more">more</div>
@@ -155,7 +155,7 @@ const DRAW={
 // Filled regions pick a cell. The callouts the sketch labels — prong, eye R and arc, genal and
 // pleural spine length, the w arrow, the head / thorax / tail brackets — are live handles, so the
 // annotations ARE the controls. Sliders under the map stay for numeric precision.
-const MAPW=300, MAPH=400;
+const MAPW=300, MAPH=372;
 let HND=[], drag=null;
 const F=v=>(+v).toFixed(1);
 function hnd(k,x,y,inv){ const i=HND.length; HND.push({k,inv}); return `<circle class="h" data-i="${i}" cx="${F(x)}" cy="${F(y)}" r="3.2"><title>${META[k].label}</title></circle>`; }
@@ -249,8 +249,7 @@ function drawMap(){
     const dx=Math.max(Math.min(curPx(Lg), outRoom), -inRoom);
     const horn=s=>`M${F(cx+s*gx)} ${F(gyr)} Q${F(cx+s*(gx+0.35*dx))} ${F(gyr+0.60*Lg)} ${F(cx+s*(gx+dx))} ${F(gyr+Lg)}`;
     o.push(`<path class="mir" d="${horn(-1)}"/>`, `<path class="ink" d="${horn(1)}"/>`, `<path class="hit" data-c="a1" d="${horn(1)}"/>`);
-    o.push(mt(cx+gx+dx+4, gyr+Lg,'length · curve'),
-           hnd2('genalCurve','genalSpine',cx+gx+dx,gyr+Lg,q=>invCurve(q,Lg),q=>(q.y-gyr)/(hL*g.scGenal)));
+    o.push(hnd2('genalCurve','genalSpine',cx+gx+dx,gyr+Lg,q=>invCurve(q,Lg),q=>(q.y-gyr)/(hL*g.scGenal)));
   } else {
     o.push(`<path class="ghost" d="M${F(cx+gx)} ${F(gyr)} L${F(cx+gx+7)} ${F(gyr+9)}"/>`,
            hnd2('genalCurve','genalSpine',cx+gx+7,gyr+9,q=>invCurve(q,12),q=>(q.y-gyr)/(hL*g.scGenal)));
@@ -262,7 +261,7 @@ function drawMap(){
   const invSlen=q=>Math.hypot(q.x-(cx+wm),q.y-ym)/(hw*g.scSpine);
   const invSweep=q=>Math.atan2(q.y-ym,Math.max(q.x-(cx+wm),0.001))*180/Math.PI;
   if(Ls>2){ o.push(`<path class="ink" d="M${F(cx+wm)} ${F(ym)} L${F(sx)} ${F(sy)}"/>`, `<path class="mir" d="M${F(cx-wm)} ${F(ym)} L${F(2*cx-sx)} ${F(sy)}"/>`,
-                   `<path class="hit" data-c="a2" d="M${F(cx+wm)} ${F(ym)} L${F(sx)} ${F(sy)}"/>`, mt(sx,sy+10,'length · sweep','end')); }
+                   `<path class="hit" data-c="a2" d="M${F(cx+wm)} ${F(ym)} L${F(sx)} ${F(sy)}"/>`); }
   else o.push(`<path class="ghost" d="M${F(cx+wm)} ${F(ym)} L${F(cx+wm+8)} ${F(ym+5)}"/>`);
   o.push(hnd2('spineSweep','spineBase',Ls>2?sx:cx+wm+8,Ls>2?sy:ym+5,invSweep,invSlen));
   // tail forks: same polar grip — reach from the tail tip is the length, angle off the midline is the splay
@@ -278,21 +277,22 @@ function drawMap(){
   // the w arrow across the axis, and the body caliper
   const yw=yH+thL*0.45;
   o.push(`<path class="dim" d="M${F(cx)} ${F(yw)} L${F(cx+a)} ${F(yw)}"/>`, mt(cx+a*0.5,yw-3,'w','middle'), hnd('axisFrac',cx+a,yw,q=>(q.x-cx)/hw));
-  const yc=y1+52;
+  const yc=yH+p*0.5;                       // the caliper sits at the shoulder, where the animal is widest
   o.push(`<path class="dim" d="M${F(cx-hw)} ${F(yc)} L${F(cx+hw)} ${F(yc)} M${F(cx-hw)} ${F(yc-3)} L${F(cx-hw)} ${F(yc+3)} M${F(cx+hw)} ${F(yc-3)} L${F(cx+hw)} ${F(yc+3)}"/>`);
-  o.push(mt(cx,yc+10,Math.round(P.width)+' mm','middle'), hnd('width',cx+hw,yc,q=>P.width*(q.x-cx)/hw));
+  o.push(mt(cx+hw-1,yc-4,Math.round(P.width)+' mm','end'), hnd('width',cx+hw,yc,q=>P.width*(q.x-cx)/hw));
   // the bracket stack on the left: head / thorax / tail, and the overall length outside it
   const bx=32, ox=14;
-  const span=(x,ya,yb,lab)=>`<path class="dim" d="M${F(x-3)} ${F(ya)} L${F(x+3)} ${F(ya)} M${F(x)} ${F(ya)} L${F(x)} ${F(yb)} M${F(x-3)} ${F(yb)} L${F(x+3)} ${F(yb)}"/><text x="${F(x+5)}" y="${F((ya+yb)/2)}">${lab}</text>`;
+  const span=(x,ya,yb)=>`<path class="dim" d="M${F(x-3)} ${F(ya)} L${F(x+3)} ${F(ya)} M${F(x)} ${F(ya)} L${F(x)} ${F(yb)} M${F(x-3)} ${F(yb)} L${F(x+3)} ${F(yb)}"/>`;
   o.push(`<rect class="reg${sel==='frame'?' on':''}" data-c="frame" x="4" y="${F(y0-12)}" width="38" height="${F(L+26)}" fill-opacity="0.02"/>`);
-  o.push(span(bx,y0,yH,'head'), span(bx,yH,yT,'thorax'), span(bx,yT,y1,'tail'));
+  o.push(span(bx,y0,yH), span(bx,yH,yT), span(bx,yT,y1));
   o.push(hnd('cephFrac',bx,yH,q=>(q.y-y0)/L), hnd('pygFrac',bx,yT,q=>(y1-q.y)/L));
   o.push(`<path class="dim" d="M${F(ox-3)} ${F(y0)} L${F(ox+3)} ${F(y0)} M${F(ox)} ${F(y0)} L${F(ox)} ${F(y1)} M${F(ox-3)} ${F(y1)} L${F(ox+3)} ${F(y1)}"/>`);
   o.push(`<text x="${F(ox)}" y="${F(y0-6)}" text-anchor="middle">${Math.round(P.length)} mm</text>`, hnd('length',ox,y1,q=>q.v0+q.dy*0.9));
   // segment count: the sketch's ring stack, one tap per ring
-  o.push(`<rect class="step" data-seg="-1" x="${F(MAPW-42)}" y="${F(yH)}" width="16" height="16"/><text class="steplab" x="${F(MAPW-34)}" y="${F(yH+12)}" text-anchor="middle">–</text>`,
-         `<rect class="step" data-seg="1" x="${F(MAPW-22)}" y="${F(yH)}" width="16" height="16"/><text class="steplab" x="${F(MAPW-14)}" y="${F(yH+12)}" text-anchor="middle">+</text>`,
-         mt(MAPW-42,yH+26,seg+' seg'));
+  const sy0=yH+26;                         // below the width caliper, which now crosses the shoulder
+  o.push(`<rect class="step" data-seg="-1" x="${F(MAPW-42)}" y="${F(sy0)}" width="16" height="16"/><text class="steplab" x="${F(MAPW-34)}" y="${F(sy0+12)}" text-anchor="middle">–</text>`,
+         `<rect class="step" data-seg="1" x="${F(MAPW-22)}" y="${F(sy0)}" width="16" height="16"/><text class="steplab" x="${F(MAPW-14)}" y="${F(sy0+12)}" text-anchor="middle">+</text>`,
+         mt(MAPW-42,sy0+26,seg+' seg'));
   $('map').innerHTML=o.join('');
 }
 // map input: tap a region to pick a cell, tap a prong to add a tine, drag a mark to set a value
