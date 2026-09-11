@@ -38,7 +38,9 @@ def to_manifold(m):
     _check(man, "input")
     return man
 
-SLIVER_MM3 = 1e-3         # components below this volume are boolean artifacts (coincident faces), not geometry
+SLIVER_MM3 = 2.0          # components below this volume are boolean artifacts (coincident faces), not geometry.
+                          # 12 Sep 2026: measured bimodal — ghosts 0.001-1 mm3, real severed tips 3-30 mm3; gap at 1.2-6.1.
+                          # 1e-3 caught none of the ghosts. 2.0 sits in the gap.
 
 def _drop_slivers(man):
     parts = man.decompose()
@@ -81,9 +83,16 @@ def intersection(a, b):
 
 def volume(m): return float(_as_man(m).volume())
 
-def bodies(m):
-    """Connected solid bodies of a mesh (a severed pleural tip shows up here, not as a silent extra solid)."""
-    return m.split(only_watertight=True)
+def bodies(m, sliver_mm3=SLIVER_MM3):
+    """Connected solid bodies of a mesh (a severed pleural tip shows up here, not as a silent extra solid).
+    Components below sliver_mm3 are boolean artifacts (coincident/degenerate faces from the Manifold cut),
+    not real geometry, and are dropped — otherwise a watertight plate carrying two zero-volume ghost shells
+    is miscounted as 'severed' and censored (11 Sep 2026: this false positive was the bulk of the sweep's
+    ~70% invalid rate; the real plate volume was intact). Pass sliver_mm3=0 to count every split component."""
+    comps = m.split(only_watertight=True)
+    if sliver_mm3 <= 0:
+        return comps
+    return [c for c in comps if c.volume >= sliver_mm3]
 
 # ---------------------------------------------------------------- primitives (all centred conventions stated)
 def box(sx, sy, sz, at=(0, 0, 0), align=("c", "c", "c")):
