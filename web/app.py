@@ -18,6 +18,20 @@ CACHE = os.path.join(ROOT, "web", "cache"); os.makedirs(CACHE, exist_ok=True)
 LOCK = threading.Lock()          # one build or measurement at a time (the lab workstation has one job's worth of RAM to spare)
 PORT = int(os.environ.get("PORT", 8765))   # the lab tunnel (trilomorph.org) points at 8765, the legacy port
 
+# ---- maintenance mode: flip to False (or delete this block) to bring the generator back. While True, every
+# route - the page, every /api/*, every /files/* - returns this instead of running any real code.
+MAINTENANCE = True
+MAINTENANCE_HTML = """<!doctype html><html><head><meta charset="utf-8"><title>Trilobite Morphospace</title>
+<style>html,body{height:100%;margin:0;background:#000;color:#fff;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
+body{display:flex;align-items:center;justify-content:center}
+h1{font-size:1.6rem;letter-spacing:.18em;text-transform:uppercase;font-weight:normal}</style></head>
+<body><h1>Under maintenance</h1></body></html>"""
+
+@app.before_request
+def _maintenance_gate():
+    if MAINTENANCE:
+        return MAINTENANCE_HTML, 503
+
 def _params_meta():
     return [dict(key=p.key, label=p.label, default=p.default, lo=p.lo, hi=p.hi, step=p.step, kind=p.kind, doc=p.doc, unit=p.unit, group=p.group)
             for p in schema.PARAMS]
