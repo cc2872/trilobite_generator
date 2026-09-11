@@ -14,7 +14,7 @@ Manifold booleans, mirror-symmetric by construction.
 ## Layout (95 parameters, 8 modules)
 | file | what |
 |---|---|
-| `schema.py` | the 86 parameters, presets, `coerce()`, `coerce_report()`, `migrate()`, and **CELLS** — the 3x3 contract (three primary keys per cell) |
+| `schema.py` | the 86 parameters, presets, `coerce()`, `coerce_report()`, `migrate()`, and *CELLS*, the 3x3 contract (three primary keys per cell) |
 | `fields.py` | outline and lobe fields (the sculpture's numpy) |
 | `mesh.py` | height-field shells, envelopes, Manifold booleans, primitives, the hinge, mirror/symmetry |
 | `parts.py` | cephalon / segment rows / pygidium on `mesh.py`, their a·b·c cells, spines, prongs, eye solid |
