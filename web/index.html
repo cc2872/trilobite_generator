@@ -35,14 +35,15 @@
   canvas{display:block}
   img.sheet{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
   .stage3d{position:absolute;inset:0;display:none}
-  #view3d{position:absolute;z-index:5;right:16px;bottom:56px;background:var(--bg);border:1px solid var(--ink);color:var(--ink);font-size:11px;letter-spacing:.06em;padding:8px 14px;text-transform:uppercase}
+  #view3d{position:absolute;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);color:var(--ink);border:1px solid rgba(255,255,255,.5);font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:0}
+  #view3d.corner{background:var(--bg);border:1px solid var(--ink);padding:8px 14px;right:16px;top:16px;left:auto!important;bottom:auto!important;width:auto!important;height:auto!important}
   #view3d:hover{background:var(--ink);color:var(--bg)}
   .readout{position:absolute;left:16px;top:14px;line-height:1.6;pointer-events:none;font-variant-numeric:tabular-nums;text-shadow:0 0 6px #000, 0 0 6px #000}
   .readout b{font-weight:normal;border-bottom:1px solid var(--ink)}
   .status{position:absolute;right:16px;top:14px;color:var(--mid);text-shadow:0 0 6px #000} .status.busy{color:var(--ink)}
   .look{position:absolute;right:16px;top:36px;color:var(--mid);font-size:11px;letter-spacing:.06em;text-transform:uppercase;user-select:none;display:none}
   .look span{cursor:pointer} .look span.on{color:var(--ink);border-bottom:1px solid var(--ink)}
-  .rollbar{position:absolute;left:16px;right:16px;bottom:16px;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;display:none}
+  .rollbar{position:absolute;left:16px;right:16px;bottom:16px;display:none;grid-template-columns:1fr auto auto;gap:14px;align-items:center}
   .rollbar input[type=range]{height:1px} .rollbar input[type=range]::-webkit-slider-thumb{width:16px;height:16px}
   .rollbar .val{min-width:120px;text-align:right;font-variant-numeric:tabular-nums}
   svg.arm{width:100%;height:120px;display:block;margin:6px 0 2px;border:1px solid var(--line)}
@@ -80,7 +81,7 @@
       <div class="more" id="more">more</div>
     </div>
     <div class="actions">
-      <button class="primary" id="go">Curl it</button>
+      <button class="primary" id="buildBtn">Build</button>
       <button id="dl">Download STL</button>
     </div>
   </div>
@@ -91,7 +92,7 @@
     <div class="readout" id="readout"></div>
     <div class="status" id="status"></div>
     <div class="look" id="look"><span class="on" data-look="blueprint">Blueprint</span> · <span data-look="model">Model</span></div>
-    <div class="rollbar" id="rollbar"><input type="range" id="roll" min="0" max="45" step="0.1" value="0"><div class="val" id="rollval"></div></div>
+    <div class="rollbar" id="rollbar"><input type="range" id="roll" min="0" max="45" step="0.1" value="0"><div class="val" id="rollval"></div><button id="go">Roll</button></div>
   </div>
 </div>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
@@ -108,13 +109,13 @@ cellBtn('body','frame','frame',false,true);
 for(const [b,a] of GRID){ cellBtn(NAMES[a],a,a,false); cellBtn(NAMES[b],b,b,false); cellBtn(NAMES[a],a.replace('a','c')+' mirror',a,true); }
 cellBtn('print + hinge','ruler','ruler',false,true);
 const ps=$('preset'); S.presets.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;if(n===S.default)o.selected=true;ps.appendChild(o);});
-ps.onchange=async()=>{P=await (await fetch('/api/preset/'+ps.value)).json(); lastMeas=null; render(); build();};
+ps.onchange=async()=>{P=await (await fetch('/api/preset/'+ps.value)).json(); lastMeas=null; render(); dirty();};
 function fmt(v,m){return (m.kind==='int'||m.kind==='odd_int')?String(Math.round(v)):(+v).toFixed(m.step<0.01?3:m.step<0.1?2:m.step<1?1:0)+(m.unit?' '+m.unit:'');}
-function set(k,v){P[k]=v; lastMeas=null; redraw(); scheduleBuild();}
+function set(k,v){P[k]=v; lastMeas=null; redraw(); dirty();}
 function slider(k){ const m=META[k]; const r=document.createElement('div'); r.className='ctrl';
   if(m.kind==='expr'){ r.innerHTML=`<div class="lab"><span title="${m.doc}">${m.label}</span></div><input type="text" value="${P[k]}">`; r.querySelector('input').onchange=e=>set(k,e.target.value); return r;}
   r.innerHTML=`<div class="lab"><span title="${m.doc}">${m.label}</span><span>${fmt(P[k],m)}</span></div><input type="range" min="${m.lo}" max="${m.hi}" step="${m.step}" value="${P[k]}">`;
-  const inp=r.querySelector('input'); inp.oninput=e=>{P[k]=+e.target.value; r.querySelector('.lab span:last-child').textContent=fmt(P[k],m); redraw();}; inp.onchange=()=>{lastMeas=null; scheduleBuild();}; return r; }
+  const inp=r.querySelector('input'); inp.oninput=e=>{P[k]=+e.target.value; r.querySelector('.lab span:last-child').textContent=fmt(P[k],m); redraw();}; inp.onchange=()=>{lastMeas=null; dirty();}; return r; }
 function sect(t){const d=document.createElement('div'); d.className='sect'; d.textContent=t; return d;}
 const GL={}; function glyph(id,vb){const s=document.createElement('div'); s.innerHTML=`<svg class="arm" id="${id}" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg>`; GL[id]=1; return s;}
 function redraw(){ for(const id in GL){ const e=$(id); if(!e){delete GL[id];continue;} DRAW[id](e);} }
@@ -159,7 +160,8 @@ function render(){ const c=S.cells[sel]; $('cellname').textContent=c.label; $('d
   if(showMore){ const rest=[...c.primary,...c.more].filter(k=>!usedKeys.has(k)); if(rest.length){C.appendChild(sect('More')); rest.forEach(k=>C.appendChild(slider(k)));} }
   $('more').textContent=showMore?'less':'more'; redraw(); }
 $('more').onclick=()=>{showMore=!showMore;render();};
-function scheduleBuild(){ clearTimeout(buildTimer); buildTimer=setTimeout(build, 500); }
+function dirty(){ status('edited',false); }
+$('buildBtn').onclick=()=>build();
 function status(s,busy){$('status').textContent=s; $('status').className='status'+(busy?' busy':'');}
 function readout(){ const m=lastMeas; let h=`<b>${ps.value}</b> · ${Math.round(P.segCount)} segments · ${Math.round(P.length)} mm`; if(m&&m.theta_joint_deg!=null){ const w={sphaeroidal:'closes, margins meet',double:'closes, tail under head',spiral:'closes, tail past head',discoidal:'closes flat',open:'stops on itself'}[m.enroll_class]||m.enroll_class; h+=`<br>${m.theta_joint_deg}° per joint · ${m.total_deg}° total · ${w}`; if(m.stopped_by&&m.stopped_by.length) h+=`<br>limited by ${kin.names[m.stopped_by[0][0]]}–${kin.names[m.stopped_by[0][1]]}`; h+=`<br>instrument ${m.instrument} · bevel ${m.bevel_built_deg}°`; } else if(m) h+=`<br>${m.limited_by}: ${m.reason||''}`; $('readout').innerHTML=h; }
 // ---- build -> sheet
@@ -170,6 +172,11 @@ async function build(){ if(building){pending=true;return;} building=true; status
     if(mode==='sheet') await sheet(); else await load3d(man);
   } finally { building=false; if(pending){pending=false; build();} } }
 async function sheet(){ status('drawing sheet',true); const r=await (await fetch('/api/sheet',{method:'POST',body:JSON.stringify({P})})).json(); $('sheet').src=r.url+'?'+Date.now(); status(r.measured?'sheet · measured':'sheet · not measured',false); }
+const SHEET_ASPECT=16.5/11.7, V3D=[0.84,0.64,0.13,0.08];         // blueprint.sheet is A3 landscape; the title block leaves this box blank
+function placeView3D(){ const b=$('view3d'); if(mode!=='sheet'){ b.className='corner'; return; } b.className='';
+  const st=$('sheet').parentElement, W=st.clientWidth, H=st.clientHeight; let w=W, h=W/SHEET_ASPECT; if(h>H){h=H; w=H*SHEET_ASPECT;} const x0=(W-w)/2, y0=(H-h)/2;
+  b.style.left=(x0+V3D[0]*w)+'px'; b.style.top=(y0+V3D[1]*h)+'px'; b.style.width=(V3D[2]*w)+'px'; b.style.height=(V3D[3]*h)+'px'; }
+window.addEventListener('resize',placeView3D); $('sheet').onload=placeView3D;
 $('dl').onclick=()=>{ if(buildKey) window.location='/api/stl/'+buildKey; };
 // ---- 3D — v1's model view: black fill with white feature edges (blueprint look) or shaded (model look), Z-up root, grid
 let scene,cam,ren,ctl,loader,root,grid,look='blueprint';
@@ -199,16 +206,18 @@ function fit(){ const box=new THREE.Box3().setFromObject(root); if(box.isEmpty()
 function pose(th){ if(!kin||!threeReady) return; const zh=kin.hinge_z, offs=kin.offsets; let M=new THREE.Matrix4(); const rot=new THREE.Matrix4().makeRotationX(-th*Math.PI/180);
   kin.names.forEach((n,i)=>{ if(i>0){ M=M.clone().multiply(new THREE.Matrix4().makeTranslation(0,offs[i-1],0)).multiply(new THREE.Matrix4().makeTranslation(0,0,zh)).multiply(rot).multiply(new THREE.Matrix4().makeTranslation(0,0,-zh)); } const g=partMeshes[n]; if(g){g.matrixAutoUpdate=false; g.matrix.copy(M);} }); }
 function highlight(row){ if(!threeReady) return; for(const [n,g] of Object.entries(partMeshes)){ const on=row&&(row==='seg'?n.startsWith('seg'):n===row); const e=g.getObjectByName('edges'); if(e) e.material.opacity=on?1.0:(row?0.35:0.9); } }
-$('view3d').onclick=async()=>{ if(mode==='sheet'){ mode='3d'; $('sheet').style.display='none'; $('stage3d').style.display='block'; $('rollbar').style.display='grid'; $('look').style.display='block'; $('view3d').textContent='View sheet'; await load3d(null); }
-  else { mode='sheet'; $('stage3d').style.display='none'; $('rollbar').style.display='none'; $('look').style.display='none'; $('sheet').style.display='block'; $('view3d').textContent='View 3D'; await sheet(); } };
-$('roll').oninput=e=>{ $('rollval').textContent=(+e.target.value).toFixed(1)+'° per joint'; pose(+e.target.value); };
+$('view3d').onclick=async()=>{ if(mode==='sheet'){ mode='3d'; $('sheet').style.display='none'; $('stage3d').style.display='block'; $('rollbar').style.display='grid'; $('look').style.display='block'; $('view3d').textContent='View sheet'; placeView3D(); await load3d(null); }
+  else { mode='sheet'; $('stage3d').style.display='none'; $('rollbar').style.display='none'; $('look').style.display='none'; $('sheet').style.display='block'; $('view3d').textContent='View 3D'; placeView3D(); await sheet(); } };
+function rollLabel(v){ const mx=+$('roll').max||1; return Math.round(100*v/mx)+'% · '+(+v).toFixed(1)+'° / joint'; }
+$('roll').oninput=e=>{ $('rollval').textContent=rollLabel(+e.target.value); pose(+e.target.value); };
 // ---- measure
-$('go').onclick=async()=>{ status('measuring — fixed 45° bevel, probing, sweeping (about 30 s)',true); $('go').disabled=true;
-  try{ lastMeas=await (await fetch('/api/measure',{method:'POST',body:JSON.stringify({P})})).json(); kin=lastMeas.kinematics; readout(); status(`${lastMeas.limited_by} · bevel built ${lastMeas.bevel_built_deg}°`,false);
-    const th=lastMeas.theta_joint_deg; if(th!=null){ $('roll').max=Math.max(th,1); $('roll').value=th; $('rollval').textContent=th.toFixed(1)+'° per joint'; }
-    if(mode==='sheet') await sheet(); else if(th!=null){ let x=0; const step=()=>{x=Math.min(th,x+th/60); pose(x); if(x<th) requestAnimationFrame(step);}; step(); }
+$('go').onclick=async()=>{ status('measuring',true); $('go').disabled=true;
+  try{ lastMeas=await (await fetch('/api/measure',{method:'POST',body:JSON.stringify({P})})).json(); kin=lastMeas.kinematics; readout(); status(`measured · ${lastMeas.limited_by}`,false);
+    const th=lastMeas.theta_joint_deg; if(th!=null){ $('roll').max=Math.max(th,1); $('roll').value=th; $('rollval').textContent=rollLabel(th); }
+    if(th!=null){ let x=0; const step=()=>{x=Math.min(th,x+th/60); pose(x); if(x<th) requestAnimationFrame(step);}; step(); }
   } finally { $('go').disabled=false; } };
-render(); build();
+$('roll').max=P.maxAngle; $('roll').value=P.maxAngle; $('rollval').textContent=rollLabel(P.maxAngle);
+render(); build(); placeView3D();
 </script>
 </body>
 </html>
