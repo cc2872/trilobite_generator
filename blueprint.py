@@ -46,7 +46,7 @@ def _eye_panels(fig, gs, m, P):
     axes = [fig.add_subplot(gs[4:6, 4:5]), fig.add_subplot(gs[4:6, 5:6]), fig.add_subplot(gs[4:6, 6:7]), fig.add_subplot(gs[4:6, 7:9])]
     for ax in axes: ax.set_facecolor(BG); ax.set_aspect("equal"); ax.axis("off")
     if G["blind"]:
-        axes[0].set_title("EYE · blind (eyeSize 0)", color=INK, fontsize=8, family="monospace", loc="left"); return
+        axes[0].set_title("EYE · blind", color=INK, fontsize=8, family="monospace", loc="left"); return
     xe, ye, eR = G["xe"], G["ye"], G["eR"]; W = 2.6 * eR
     # the head alone: the component of the concatenated mesh that contains the eye (no seams from other parts)
     head = m
@@ -114,13 +114,12 @@ def _eye_panels(fig, gs, m, P):
         for th, sz, r in cs: ax.add_patch(Circle((th * r, sz), D / 2, fill=False, color=INK, lw=0.35))
         ax.set_xlim(-arcl / 2 - 1, arcl / 2 + 1); ax.set_ylim(-H * 1.15 - 2, H + 1.5)
         F = fov(P)
-        ax.text(-arcl / 2, -1.2, "\n".join([f"arc {arcl:.1f} mm across · band {H:.1f} mm up",
-                                             f"pitch {pitch:.2f} = D(1+{EP['lensGap']:.1f}) · rows {rows}",
-                                             f"packing {D / pitch:.2f} = D/pitch (1 = holochroal)",
-                                             f"files per row = arc·r / pitch",
+        ax.text(-arcl / 2, -1.2, "\n".join([f"arc {arcl:.1f} mm · band {H:.1f} mm",
+                                             f"pitch {pitch:.2f} · rows {rows}",
+                                             f"packing {D / pitch:.2f}",
                                              f"arc {EP['arc_deg']:.0f}° · lean {EP['slope_deg']:.0f}° · brim {EP['shade']:.2f} R",
-                                             f"rise {EP['lensRise']:.2f} D/2 · axis = normal (v1)",
-                                             f"FOV v{F['fov_version']} · az {F['azimuth_deg']:.0f}° · el ±{F['elevation_half_deg']:.0f}°",
+                                             f"rise {EP['lensRise']:.2f} D/2",
+                                             f"az {F['azimuth_deg']:.0f}° · el ±{F['elevation_half_deg']:.0f}°",
                                              f"blind {F['front_blind_deg']:.0f}° fore / {F['rear_blind_deg']:.0f}° aft"]),
                 color=DIM, fontsize=6.4, family="monospace", va="top", linespacing=1.55)
         ax.set_title("BAND UNROLLED · (θ, s)", color=INK, fontsize=7.5, family="monospace", loc="left")
@@ -137,7 +136,7 @@ def _eye_detail(ax, m, P):
     except Exception as ex:
         ax.text(0, 0, f"eye: {str(ex)[:30]}", color=DIM, fontsize=7, family="monospace"); return
     if G["blind"]:
-        ax.set_title("EYE · blind (eyeSize 0)", color=INK, fontsize=8, family="monospace", loc="left"); return
+        ax.set_title("EYE · blind", color=INK, fontsize=8, family="monospace", loc="left"); return
     xe, ye, eR = G["xe"], G["ye"], G["eR"]; W = 3.0 * eR
     sub = m.slice_plane([xe - W, 0, 0], [1, 0, 0]).slice_plane([xe + W, 0, 0], [-1, 0, 0]) \
            .slice_plane([0, ye - W, 0], [0, 1, 0]).slice_plane([0, ye + W, 0], [0, -1, 0])
@@ -161,7 +160,7 @@ def _eye_detail(ax, m, P):
         foot = pts[np.abs(pts[:, 0] - (xe + 1.6 * eR)) < 0.5, 2]; foot = float(np.median(foot)) if len(foot) else float(pts[:, 2].min())
         ax.plot([xe - W, xe + W], [yb - (z1 - foot)] * 2, color=DIM, lw=0.4, ls=(0, (4, 3)))
         _dim(ax, xe + W + 2, yb - (z1 - foot), xe + W + 2, yb - (z1 - crest), f"h {crest - foot:.1f}", off=0)
-        ax.text(xe - W, yb - (z1 - z0) - 5, "SECTION B-B · transverse through the eye centre · cheek dashed", color=INK, fontsize=6.5, family="monospace")
+        ax.text(xe - W, yb - (z1 - z0) - 5, "SECTION B–B", color=INK, fontsize=6.5, family="monospace")
         ax.set_ylim(yb - (z1 - z0) - 9, ye + W + 8)
     except Exception:
         ax.set_ylim(ye - W - 4, ye + W + 8)
@@ -225,7 +224,7 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None):
     _dim(ax, x1, y0, x1, y1, f"{L:.1f}", off=10)
     pitch = meas.get("pitch", 0)
     if pitch: _dim(ax, x0, y0 + P["cephFrac"] * P["length"] * 0 + 0, x0, y0 + pitch, f"p {pitch:.1f}", off=-18)
-    ax.text(x0, y1 + 6, "PLAN · dorsal · contours every %.1f mm" % ((z1 - z0) / 14), color=INK, fontsize=8, family="monospace")
+    ax.text(x0, y1 + 6, "PLAN · contours %.1f mm" % ((z1 - z0) / 14), color=INK, fontsize=8, family="monospace")
     # axis triad, 10 mm long, at the front-left corner: x across, y along, z toward the viewer (dot)
     tx, ty = x0 - 20, y0 - 14
     ax.annotate("", xy=(tx + 10, ty), xytext=(tx, ty), arrowprops=dict(arrowstyle="->", color=INK, lw=0.8)); ax.text(tx + 11.5, ty, "x", color=INK, fontsize=7, va="center", family="monospace")
@@ -255,7 +254,7 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None):
     hz = meas.get("hinge_z")
     if hz: ax2.axhline(hz, color=DIM, lw=0.5, ls=(0, (4, 3))); ax2.text(y0 - 2, hz + 1.5, f"hinge z {hz:.1f}", color=INK, fontsize=7, va="bottom", ha="left", family="monospace")
     _dim(ax2, y1 + 14, z0, y1 + 14, z1, f"{z1 - z0:.1f}", off=0)
-    ax2.text(y0, z1 + 6, "SECTION A–A · midline (ink) · C–C through the eye (half tone) · lateral silhouette dimmed", color=INK, fontsize=8, family="monospace")
+    ax2.text(y0, z1 + 6, "SECTION A–A · C–C at the eye", color=INK, fontsize=8, family="monospace")
     ty2, tz2 = y0 - 6, z0 - 2
     ax2.annotate("", xy=(ty2 + 10, tz2), xytext=(ty2, tz2), arrowprops=dict(arrowstyle="->", color=INK, lw=0.8)); ax2.text(ty2 + 11.5, tz2, "y", color=INK, fontsize=7, va="center", family="monospace")
     ax2.annotate("", xy=(ty2, tz2 + 10), xytext=(ty2, tz2), arrowprops=dict(arrowstyle="->", color=INK, lw=0.8)); ax2.text(ty2, tz2 + 11.5, "z", color=INK, fontsize=7, ha="center", family="monospace")
@@ -285,7 +284,7 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None):
             ax3.text(ey0, ez0 - 6, f"closure gap {float(gap):.1f} mm", color=INK, fontsize=7, family="monospace")
         elif gap not in (None, "—"):
             ax3.text(en.bounds[0][1], en.bounds[0][2] - 6, "closed", color=INK, fontsize=7, family="monospace")
-    ax3.set_title(f"ENROLLED · e@stop {meas.get('e_max', '—')} · {free:.0f}° of {tot:.0f}° · flat dimmed", color=INK, fontsize=8, family="monospace", loc="left")
+    ax3.set_title(f"ENROLLED · e@stop {meas.get('e_max', '—')} · {free:.0f}° of {tot:.0f}°", color=INK, fontsize=8, family="monospace", loc="left")
     # ---- the six dials, drawn as they are on the site: a line and a dot. This animal is one point in the space they span.
     ax4 = fig.add_subplot(gs[3:4, 4:7]); ax4.set_facecolor(BG); ax4.axis("off")
     dials = [("SCULPT", P.get("furrowDepth", 0) / 1.2), ("HEAD", (P["cephFrac"] - 0.22) / 0.2), ("TAIL", (P["pygFrac"] - 0.05) / 0.33),
@@ -297,17 +296,11 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None):
         ax4.text(-0.03, y, n, color=INK, fontsize=7, ha="right", va="center", family="monospace")
         ax4.text(1.04, y, f"{v:.2f}", color=DIM, fontsize=7, va="center", family="monospace")
     ax4.set_xlim(-0.34, 1.16); ax4.set_ylim(-0.12, 1.1)
-    ax4.set_title("DIALS · morphospace", color=INK, fontsize=8, family="monospace", loc="left")
+    ax4.set_title("DIALS", color=INK, fontsize=8, family="monospace", loc="left")
     # ---- eye detail: enlarged plan of the right eye with contours, and a transverse section through its centre
     _eye_panels(fig, gs, m, P)
     # ---- title block
     ax5 = fig.add_subplot(gs[0:3, 7:9]); ax5.set_facecolor(BG); ax5.axis("off")
-    for s in ["    " + title, "", f"DRAWING  {meas.get('params', '—')}", f"SCHEMA   {P.get('_schema', '5.0')}", "",
-              f"LENGTH   {L:.1f} mm", f"WIDTH    {W:.1f} mm", f"RELIEF   {z1 - z0:.1f} mm", f"SEGMENTS {int(P['segCount'])}", f"PITCH    {pitch:.2f} mm", "",
-              f"HINGE    z {meas.get('hinge_z', '—')}   Ø {P.get('boreDia', '—')} bore", f"KNUCKLE  {meas.get('knuckle', '—')} mm × {int(P.get('nKnuckles', 3))}", f"STOP     {P['maxAngle']}° / joint", "",
-              f"E@STOP   {meas.get('e_max', '—')}", f"GAP      {meas.get('closure_gap_mm', '—')} mm", f"CLASS    {str(meas.get('enroll_class', '—')).upper()}", f"PRINT    {'VALID' if meas.get('print_valid') else 'CHECK'}", "",
-              "GENAL PATH", f"  {P.get('genalPath', '—')}", f"  {P.get('genalCurve', 0)}°  {P.get('genalWidthMM', 0)} mm", "", "SHEET 1 / 1     REV A"]:
-        pass
     lines = ["    " + title, "", f"DRAWING  {meas.get('params', '—')}", "",
              f"LENGTH   {L:.1f} mm", f"WIDTH    {W:.1f} mm", f"RELIEF   {z1 - z0:.1f} mm", f"SEGMENTS {int(P['segCount'])}", f"PITCH    {pitch:.2f} mm", "",
              f"HINGE z  {meas.get('hinge_z', '—')} mm", f"KNUCKLE  {meas.get('knuckle', '—')} mm × {int(P.get('nKnuckles', 3))}", f"STOP     {P['maxAngle']}° / joint", "",

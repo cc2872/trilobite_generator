@@ -7,7 +7,7 @@
   :root{--bg:#000000;--ink:#ffffff;--mid:#9a9a9a;--line:#262626;--soft:#141414}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;overflow:hidden;font-size:12px}
-  #app{display:grid;grid-template-columns:300px 1fr;height:100vh}
+  #app{display:grid;grid-template-columns:340px 1fr;height:100vh}
   .panel{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
   .controls{overflow-y:auto;padding:18px 20px;flex:1}
   h1{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:normal;margin:0 0 14px}
@@ -46,7 +46,7 @@
   svg.arm text{fill:var(--mid);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
   /* the anatomy map: the picker is the animal, traced from the dorsal sketch */
   svg.map{width:100%;display:block;margin-top:8px;border:1px solid var(--line);background:var(--bg);touch-action:none;user-select:none}
-  svg.map text{fill:var(--mid);font-size:8px;letter-spacing:.06em;text-transform:uppercase;pointer-events:none}
+  svg.map text{fill:var(--mid);font-size:9px;letter-spacing:.06em;text-transform:uppercase;pointer-events:none}
   svg.map .reg{fill:#0b0b0b;stroke:var(--mid);stroke-width:1;cursor:pointer}
   svg.map .reg:hover{fill:var(--soft);stroke:var(--ink)}
   svg.map .reg.on{fill:var(--soft);stroke:var(--ink);stroke-width:1.5}
@@ -59,8 +59,7 @@
   svg.map .h:hover{fill:var(--ink)}
   svg.map .step{fill:var(--bg);stroke:var(--line);cursor:pointer}
   svg.map .step:hover{stroke:var(--ink)}
-  svg.map .steplab{fill:var(--ink);font-size:11px;pointer-events:none}
-  .maphint{color:var(--line);font-size:10px;letter-spacing:.06em;text-transform:uppercase;margin-top:5px}
+  svg.map .steplab{fill:var(--ink);font-size:12px;pointer-events:none}
   @media (max-width: 720px), (pointer: coarse) and (max-width: 1024px) {
     html,body{overflow:auto;font-size:14px}
     #app{display:flex;flex-direction:column;height:auto;min-height:100vh}
@@ -85,9 +84,8 @@
     <div class="controls">
       <h1>Trilobite Morphospace</h1>
       <div class="ctrl"><div class="lab"><span>Order</span></div><select id="preset"></select></div>
-      <svg class="map" id="map" viewBox="0 0 260 344" xmlns="http://www.w3.org/2000/svg"></svg>
-      <div class="maphint">tap a part · drag a mark · tap a prong for a tine</div>
-      <div class="sect" id="cellname"></div><div class="hint" id="doc"></div>
+      <svg class="map" id="map" viewBox="0 0 300 400" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="sect" id="cellname"></div>
       <div id="C"></div>
       <div class="more" id="more">more</div>
     </div>
@@ -128,40 +126,53 @@ function slider(k){ const m=META[k]; const r=document.createElement('div'); r.cl
   if(m.kind==='expr'){ r.innerHTML=`<div class="lab"><span title="${m.doc}">${m.label}</span></div><input type="text" value="${P[k]}">`; r.querySelector('input').onchange=e=>set(k,e.target.value); return r;}
   r.innerHTML=`<div class="lab"><span title="${m.doc}">${m.label}</span><span>${fmt(P[k],m)}</span></div><input type="range" min="${m.lo}" max="${m.hi}" step="${m.step}" value="${P[k]}">`;
   const inp=r.querySelector('input'); inp.oninput=e=>{P[k]=+e.target.value; r.querySelector('.lab span:last-child').textContent=fmt(P[k],m); redraw();}; inp.onchange=()=>{lastMeas=null; dirty();}; return r; }
-function sect(t){const d=document.createElement('div'); d.className='sect'; d.textContent=t; return d;}
 const GL={}; function glyph(id,vb){const s=document.createElement('div'); s.innerHTML=`<svg class="arm" id="${id}" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg>`; GL[id]=1; return s;}
 function redraw(){ drawMap(); for(const id in GL){ const e=$(id); if(!e){delete GL[id];continue;} DRAW[id](e);} }
 const t=(x,y,s,anchor)=>`<text x="${x}" y="${y}"${anchor?` text-anchor="${anchor}"`:''}>${s}</text>`;
 const DRAW={
  pleura:e=>{const inner=P.fulcrum, blade=1-P.fulcrum, dg=Math.atan(P.pleuralSlope*P.relief/Math.max(P.width*(1-P.axisFrac)/2,1))*180/Math.PI; const x0=60,y0=40,k=200,a=dg*Math.PI/180,x1=x0+inner*k,x2=x1+blade*k*Math.cos(a),y2=y0+blade*k*Math.sin(a);
-  e.innerHTML=`<rect x="20" y="30" width="40" height="20" fill="${SOFT}" stroke="${INK}"/>${t(40,44,'axis','middle')}<path d="M${x0} ${y0} L${x1.toFixed(1)} ${y0} L${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${x1.toFixed(1)}" cy="${y0}" r="4" fill="${MID}"/>${t((x0+x1)/2,y0-10,'inner run','middle')}${t((x1+x2)/2+10,(y0+y2)/2-6,'blade · overlap '+(P.overlap*100).toFixed(0)+'%')}${t(x1+4,y0+18,'bend '+dg.toFixed(0)+'°')}`;},
+  e.innerHTML=`<rect x="20" y="30" width="40" height="20" fill="${SOFT}" stroke="${INK}"/><path d="M${x0} ${y0} L${x1.toFixed(1)} ${y0} L${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${x1.toFixed(1)}" cy="${y0}" r="4" fill="${MID}"/>${t((x1+x2)/2+10,(y0+y2)/2-6,(P.overlap*100).toFixed(0)+'% overlap')}${t(x1+4,y0+18,dg.toFixed(0)+'°')}`;},
  glab:e=>{const inf=P.glabInflate,rise=P.glabRise,n=Math.round(P.glabLobes),nF=P.glabFront||2.5; const cx=90,yb=105,yt=18,a0=14; let h=`<path d="M25 ${yb} C25 38 60 ${yt} ${cx} ${yt} C120 ${yt} 155 38 155 ${yb} Z" fill="none" stroke="${LINE}"/>`;
   const pts=[]; for(let i=0;i<=24;i++){const f=i/24,y=yb-(yb-yt)*f; let w=a0*(1+(inf-1)*f)*(1+0.10*Math.sin(Math.PI*f)); const fn=Math.min(Math.max((f-0.70)/0.30,0),1); w*=Math.pow(Math.max(1-Math.pow(fn,nF),0),1/nF); w*=0.75+0.25*Math.min(f/0.10,1); w=Math.max(w,0.35*a0); pts.push([cx-w,y,cx+w]);}
   let d='M'+pts[0][0].toFixed(1)+' '+pts[0][1]; for(let i=1;i<pts.length;i++)d+=' L'+pts[i][0].toFixed(1)+' '+pts[i][1].toFixed(1); for(let i=pts.length-1;i>=0;i--)d+=' L'+pts[i][2].toFixed(1)+' '+pts[i][1].toFixed(1);
   h+=`<path d="${d} Z" fill="${SOFT}" stroke="${INK}" stroke-width="1.2"/>`; for(let k=0;k<n;k++){const f=0.28+0.16*k,y=yb-(yb-yt)*f; const q=pts[Math.round(f*24)]; h+=`<line x1="${q[0].toFixed(1)}" y1="${y.toFixed(1)}" x2="${(cx-(cx-q[0])*0.45).toFixed(1)}" y2="${(y+3).toFixed(1)}" stroke="${INK}" stroke-width="1.5"/><line x1="${q[2].toFixed(1)}" y1="${y.toFixed(1)}" x2="${(cx+(q[2]-cx)*0.45).toFixed(1)}" y2="${(y+3).toFixed(1)}" stroke="${INK}" stroke-width="1.5"/>`;}
-  const x0=195,x1=320,base=100,hR=20+rise*110; h+=`<path d="M${x0} ${base} C${x0+25} ${base-hR*0.6} ${x0+60} ${base-hR} ${x0+95} ${base-hR*0.9} C${x0+112} ${base-hR*0.7} ${x1-6} ${base-hR*0.3} ${x1} ${base}" fill="${SOFT}" stroke="${INK}" stroke-width="1.2"/>${t(cx,116,'plan','middle')}${t((x0+x1)/2,116,'side · rise','middle')}`; e.innerHTML=h;}
+  const x0=195,x1=320,base=100,hR=20+rise*110; h+=`<path d="M${x0} ${base} C${x0+25} ${base-hR*0.6} ${x0+60} ${base-hR} ${x0+95} ${base-hR*0.9} C${x0+112} ${base-hR*0.7} ${x1-6} ${base-hR*0.3} ${x1} ${base}" fill="${SOFT}" stroke="${INK}" stroke-width="1.2"/>`; e.innerHTML=h;}
 };
 // ================================================================ the anatomy map
 // Traced from the dorsal sketch: head up, tail down, the left side its dimmed mirror (c = mirror a).
 // Filled regions pick a cell. The callouts the sketch labels — prong, eye R and arc, genal and
 // pleural spine length, the w arrow, the head / thorax / tail brackets — are live handles, so the
 // annotations ARE the controls. Sliders under the map stay for numeric precision.
-const MAPW=260, MAPH=344;
+const MAPW=300, MAPH=400;
 let HND=[], drag=null;
 const F=v=>(+v).toFixed(1);
 function hnd(k,x,y,inv){ const i=HND.length; HND.push({k,inv}); return `<circle class="h" data-i="${i}" cx="${F(x)}" cy="${F(y)}" r="3.2"><title>${META[k].label}</title></circle>`; }
 function reg(c,d){ return `<path class="reg${sel===c?' on':''}" data-c="${c}" d="${d}"/>`; }
 function mt(x,y,s,anchor){ return `<text x="${F(x)}" y="${F(y)}"${anchor?` text-anchor="${anchor}"`:''}>${s}</text>`; }
 function geom(){
-  const cx=150, y0=54, L=214, y1=y0+L;
-  const hw=Math.max(16, Math.min(72, 0.5*L*P.width/P.length));
-  const hL=P.cephFrac*L, tL=P.pygFrac*L, thL=Math.max(L-P.cephFrac*L-P.pygFrac*L, 14);
+  const cx=170, y0=58, L=266, y1=y0+L;
+  const hw=Math.max(18, Math.min(92, 0.5*L*P.width/P.length));
+  const hL=P.cephFrac*L, tL=P.pygFrac*L, thL=Math.max(L-P.cephFrac*L-P.pygFrac*L, 16);
   const yH=y0+hL, yT=yH+thL, seg=Math.round(P.segCount), a=Math.max(P.axisFrac*hw, 4);
   // drawing scales: a parameter at its schema maximum just reaches the space it has, never past the sheet
   return {cx,y0,L,y1,hw,hL,thL,tL,yH,yT,seg,a,
-          scProng:38/(META.headProngLen.hi*hL), scGenal:(0.92*thL)/(META.genalSpine.hi*hL),
-          scSpine:(MAPW-10-(cx+hw))/(META.spineBase.hi*hw), scFork:34/(META.pygSpine.hi*tL),
+          scProng:44/(META.headProngLen.hi*hL), scGenal:(0.92*thL)/(META.genalSpine.hi*hL),
+          scSpine:(MAPW-12-(cx+hw))/(META.spineBase.hi*hw), scFork:34/(META.pygSpine.hi*tL),
           scTailProng:26/(META.tailProngLen.hi*tL)};
+}
+// the head outline IS its exponents: superellipse front (headOutlineExp) over a parallel-sided rear
+// (cephParallel), rear edge bowed back to the genal angles by headRearArc with shape headRearExp.
+function headY(g,r,edge){
+  const par=P.cephParallel*g.hL, Le=g.hL-par;
+  if(edge==='front') return g.yH-par-Le*Math.pow(Math.max(1-Math.pow(r,P.headOutlineExp),0),1/P.headOutlineExp);
+  const q=Math.max((r*g.hw-g.a)/Math.max(g.hw-g.a,1e-6),0);
+  return g.yH+P.headRearArc*g.hL*Math.pow(q,P.headRearExp);
+}
+function headPath(g,s){
+  const N=20; let d=`M${F(g.cx)} ${F(headY(g,0,'front'))}`;
+  for(let j=1;j<=N;j++) d+=` L${F(g.cx+s*(j/N)*g.hw)} ${F(headY(g,j/N,'front'))}`;
+  for(let j=N;j>=0;j--) d+=` L${F(g.cx+s*(j/N)*g.hw)} ${F(headY(g,j/N,'rear'))}`;
+  return d+' Z';
 }
 function wAt(g,i){ return g.hw*(P.widthThoraxFront+(P.widthThoraxRear-P.widthThoraxFront)*(g.seg>1?i/(g.seg-1):0)); }
 function prong(g,which,x0,yr,dir,sc,base){   // dir: -1 forward off the head, +1 rearward off the tail
@@ -180,11 +191,10 @@ function prong(g,which,x0,yr,dir,sc,base){   // dir: -1 forward off the head, +1
 }
 function drawMap(){
   const g=geom(), {cx,y0,L,y1,hw,hL,thL,tL,yH,yT,seg,a}=g; HND=[];
-  const o=[], hwH=hw*P.widthHeadFront, p=thL/seg, tw=Math.max(hw*P.widthThoraxRear*P.pygWidth,6);
+  const o=[], p=thL/seg, tw=Math.max(hw*P.widthThoraxRear*P.pygWidth,6);
   // head: cheek (a1) live on the right, mirror on the left; glabella (b1) on the midline
-  const headHalf=s=>`M${F(cx)} ${F(y0)} C${F(cx+s*0.66*hwH)} ${F(y0)} ${F(cx+s*hwH)} ${F(y0+0.40*hL)} ${F(cx+s*hw)} ${F(y0+0.80*hL)} L${F(cx+s*hw)} ${F(yH)} L${F(cx)} ${F(yH)} Z`;
-  o.push(`<path class="mir" d="${headHalf(-1)}"/>`, reg('a1',headHalf(1)));
-  const gw=Math.min(a*P.glabInflate, hwH*0.8), gy=y0+0.12*hL;
+  o.push(`<path class="mir" d="${headPath(g,-1)}"/>`, reg('a1',headPath(g,1)));
+  const gw=Math.min(a*P.glabInflate, hw*0.8), gy=headY(g,0,'front')+0.10*hL;
   o.push(reg('b1',`M${F(cx-a)} ${F(yH)} C${F(cx-gw)} ${F(yH-0.55*(yH-gy))} ${F(cx-gw*0.8)} ${F(gy)} ${F(cx)} ${F(gy)} C${F(cx+gw*0.8)} ${F(gy)} ${F(cx+gw)} ${F(yH-0.55*(yH-gy))} ${F(cx+a)} ${F(yH)} Z`));
   // thorax: one axial ring (b2) and one right pleura (a2) per segment, mirrored left
   for(let i=0;i<seg;i++){
@@ -201,7 +211,7 @@ function drawMap(){
   const nk=Math.round(P.nKnuckles), kw=2*a/nk;
   for(let k=0;k<nk;k++) o.push(`<rect class="reg${sel==='ruler'?' on':''}" data-c="ruler" x="${F(cx-a+k*kw+0.4)}" y="${F(yH-2.2)}" width="${F(Math.max(kw-0.8,1))}" height="4.4"/>`);
   // eye: the sketch's circle with R and the arc, both draggable
-  const eR=Math.max(P.eyeSize*hw,1.5), xe=P.eyeLat>0.01?cx+P.eyeLat*hw:cx+Math.min(a*P.glabInflate+eR+2, Math.max(hwH-eR-1,a+2)), ye=yH-P.eyePos*hL;
+  const eR=Math.max(P.eyeSize*hw,1.5), xe=P.eyeLat>0.01?cx+P.eyeLat*hw:cx+Math.min(a*P.glabInflate+eR+2, Math.max(hw-eR-1,a+2)), ye=yH-P.eyePos*hL;
   if(P.eyeSize>0.01){
     const ar=eR+4.5, e0=-P.eyeArc/2*Math.PI/180, e1=P.eyeArc/2*Math.PI/180;
     o.push(`<circle class="mir" cx="${F(2*cx-xe)}" cy="${F(ye)}" r="${F(eR)}"/>`);
@@ -215,15 +225,15 @@ function drawMap(){
            hnd('eyeSize',xe+4,ye,q=>(q.x-xe)/hw));
   }
   // genal spine: the long horn sweeping back off the cheek
-  const Lg=P.genalSpine*hL*g.scGenal, cur=Math.tan(P.genalCurve*Math.PI/180);
+  const Lg=P.genalSpine*hL*g.scGenal, cur=Math.tan(P.genalCurve*Math.PI/180), gx=hw*0.96, gyr=headY(g,0.96,'rear');
   if(Lg>3){
-    const dx=Math.min(0.30*Lg*Math.max(cur,0)+5, MAPW-14-(cx+hw*0.96));
-    const horn=s=>`M${F(cx+s*hw*0.96)} ${F(yH)} Q${F(cx+s*(hw*0.96+0.35*dx))} ${F(yH+0.60*Lg)} ${F(cx+s*(hw*0.96+dx))} ${F(yH+Lg)}`;
+    const dx=Math.min(0.30*Lg*Math.max(cur,0)+5, MAPW-16-(cx+gx));
+    const horn=s=>`M${F(cx+s*gx)} ${F(gyr)} Q${F(cx+s*(gx+0.35*dx))} ${F(gyr+0.60*Lg)} ${F(cx+s*(gx+dx))} ${F(gyr+Lg)}`;
     o.push(`<path class="mir" d="${horn(-1)}"/>`, `<path class="ink" d="${horn(1)}"/>`, `<path class="hit" data-c="a1" d="${horn(1)}"/>`);
-    o.push(mt(cx+hw*0.96+dx+3, yH+Lg,'length'), hnd('genalSpine',cx+hw*0.96+dx,yH+Lg,q=>(q.y-yH)/(hL*g.scGenal)));
+    o.push(mt(cx+gx+dx+3, gyr+Lg,'length'), hnd('genalSpine',cx+gx+dx,gyr+Lg,q=>(q.y-gyr)/(hL*g.scGenal)));
   } else {
-    o.push(`<path class="ghost" d="M${F(cx+hw*0.96)} ${F(yH)} L${F(cx+hw*0.96+7)} ${F(yH+9)}"/>`,
-           hnd('genalSpine',cx+hw*0.96+7,yH+9,q=>(q.y-yH)/(hL*g.scGenal)));
+    o.push(`<path class="ghost" d="M${F(cx+gx)} ${F(gyr)} L${F(cx+gx+7)} ${F(gyr+9)}"/>`,
+           hnd('genalSpine',cx+gx+7,gyr+9,q=>(q.y-gyr)/(hL*g.scGenal)));
   }
   // pleural spine: the outward arrow the sketch labels "spine length"
   const im=Math.floor(seg/2), ym=yH+im*p+p*0.42, wm=wAt(g,im), Ls=P.spineBase*hw*g.scSpine, sa=P.spineSweep*Math.PI/180;
@@ -237,7 +247,7 @@ function drawMap(){
   if(Lf>3){ for(const s of [1,-1]) o.push(`<path class="${s>0?'ink':'mir'}" d="M${F(cx+s*a*0.3)} ${F(y1-1)} L${F(cx+s*Lf*Math.sin(fs))} ${F(y1+Lf*Math.cos(fs))}"/>`);
     o.push(`<path class="hit" data-c="a3" d="M${F(cx+a*0.3)} ${F(y1-1)} L${F(cx+Lf*Math.sin(fs))} ${F(y1+Lf*Math.cos(fs))}"/>`);
     o.push(hnd('pygSpine',cx+Lf*Math.sin(fs),y1+Lf*Math.cos(fs),q=>(q.y-y1)/(tL*g.scFork))); }
-  const ph=prong(g,'head',cx,y0,-1,g.scProng,hL), pt=prong(g,'tail',cx,y1+(Lf>3?6:0),1,g.scTailProng,tL);
+  const ph=prong(g,'head',cx,headY(g,0,'front'),-1,g.scProng,hL), pt=prong(g,'tail',cx,y1+(Lf>3?6:0),1,g.scTailProng,tL);
   o.push(ph[0],ph[1],ph[2],pt[0],pt[1],pt[2]);
   // the w arrow across the axis, and the body caliper
   const yw=yH+thL*0.45;
@@ -246,9 +256,9 @@ function drawMap(){
   o.push(`<path class="dim" d="M${F(cx-hw)} ${F(yc)} L${F(cx+hw)} ${F(yc)} M${F(cx-hw)} ${F(yc-3)} L${F(cx-hw)} ${F(yc+3)} M${F(cx+hw)} ${F(yc-3)} L${F(cx+hw)} ${F(yc+3)}"/>`);
   o.push(mt(cx,yc+10,Math.round(P.width)+' mm','middle'), hnd('width',cx+hw,yc,q=>P.width*(q.x-cx)/hw));
   // the bracket stack on the left: head / thorax / tail, and the overall length outside it
-  const bx=28, ox=13;
+  const bx=32, ox=14;
   const span=(x,ya,yb,lab)=>`<path class="dim" d="M${F(x-3)} ${F(ya)} L${F(x+3)} ${F(ya)} M${F(x)} ${F(ya)} L${F(x)} ${F(yb)} M${F(x-3)} ${F(yb)} L${F(x+3)} ${F(yb)}"/><text x="${F(x+5)}" y="${F((ya+yb)/2)}">${lab}</text>`;
-  o.push(`<rect class="reg${sel==='frame'?' on':''}" data-c="frame" x="4" y="${F(y0-12)}" width="34" height="${F(L+26)}" fill-opacity="0.02"/>`);
+  o.push(`<rect class="reg${sel==='frame'?' on':''}" data-c="frame" x="4" y="${F(y0-12)}" width="38" height="${F(L+26)}" fill-opacity="0.02"/>`);
   o.push(span(bx,y0,yH,'head'), span(bx,yH,yT,'thorax'), span(bx,yT,y1,'tail'));
   o.push(hnd('cephFrac',bx,yH,q=>(q.y-y0)/L), hnd('pygFrac',bx,yT,q=>(y1-q.y)/L));
   o.push(`<path class="dim" d="M${F(ox-3)} ${F(y0)} L${F(ox+3)} ${F(y0)} M${F(ox)} ${F(y0)} L${F(ox)} ${F(y1)} M${F(ox-3)} ${F(y1)} L${F(ox+3)} ${F(y1)}"/>`);
@@ -280,19 +290,19 @@ mapEl.addEventListener('pointerup',()=>{ if(drag){ drag=null; dirty(); } });
 mapEl.addEventListener('pointerleave',()=>highlight(null));
 // ================================================================ cell panels
 const VISUAL={
- frame:()=>[sect('Size'), slider('length'), slider('width'), slider('relief'), sect('Proportions'), slider('segCount'), slider('cephFrac'), slider('pygFrac')],
- b1:()=>[glyph('glab','0 0 340 125'), slider('glabInflate'), slider('glabRise'), slider('glabLobes')],
- a1:()=>[sect('Eye'), slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), sect('Genal angle'), slider('genalSpine'), slider('headRearArc'), sect('Anterior prong'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
+ frame:()=>[slider('length'), slider('width'), slider('relief'), slider('segCount'), slider('cephFrac'), slider('pygFrac')],
+ b1:()=>[glyph('glab','0 0 340 125'), slider('glabInflate'), slider('glabRise'), slider('glabLobes'), slider('glabFront'), slider('headOutlineExp'), slider('headDomeExp'), slider('cephParallel')],
+ a1:()=>[slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('genalSpine'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
  b2:()=>[slider('axisFrac'), slider('axisRise'), slider('furrowDepth')],
  a2:()=>[glyph('pleura','0 0 340 110'), slider('fulcrum'), slider('pleuralSlope'), slider('overlap'), slider('spineBase')],
  b3:()=>[slider('pygRings'), slider('tailRelief'), slider('tailDomeExp')],
- a3:()=>[slider('pygWidth'), slider('pygSpine'), slider('pygMarginal'), sect('Posterior prong'), slider('tailProngs'), slider('tailProngLen'), slider('tailProngSplay'), slider('tailProngStem'), slider('tailProngCenter'), slider('tailProngCurl')],
+ a3:()=>[slider('pygWidth'), slider('pygSpine'), slider('pygMarginal'), slider('tailProngs'), slider('tailProngLen'), slider('tailProngSplay'), slider('tailProngStem'), slider('tailProngCenter'), slider('tailProngCurl')],
  ruler:()=>[slider('maxAngle'), slider('clearance'), slider('nKnuckles')],
 };
-function render(){ const c=S.cells[sel]; $('cellname').textContent=c.label; $('doc').textContent=c.doc;
+function render(){ const c=S.cells[sel]; $('cellname').textContent=c.label;
   C.innerHTML=''; VISUAL[sel]().forEach(e=>C.appendChild(e));
   const used=new Set([...C.querySelectorAll('.ctrl[data-k]')].map(e=>e.dataset.k));
-  if(showMore){ const rest=[...c.primary,...c.more].filter(k=>!used.has(k)); if(rest.length){C.appendChild(sect('More')); rest.forEach(k=>C.appendChild(slider(k)));} }
+  if(showMore) [...c.primary,...c.more].filter(k=>!used.has(k)).forEach(k=>C.appendChild(slider(k)));
   $('more').textContent=showMore?'less':'more'; redraw(); }
 $('more').onclick=()=>{showMore=!showMore;render();};
 function dirty(){ status('edited',false); }
