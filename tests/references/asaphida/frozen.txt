@@ -1,0 +1,2 @@
+2026-09-10 23:12 instrument 2.1 BREP builder; 105 s
+asaphida: bevel 45.0 (asked 45.0) probe {45.0: 1} build 92.7s unsane ['seg7'] | theta None total None gap None invalid censored s_tail None by [] rest_max 9.0 print False ['seg7: 3 solids']

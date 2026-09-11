@@ -1,8 +1,0 @@
-corynexochida: bound 45.0 probe {45.0: 1} build 85s unsane [] | theta 22.59 total 203.3 gap 0.0 closed by [(0, 9, 20.6)] print True []
-proetida: bound 45.0 | theta 22.76 total 227.6 gap 0.15 closed by [(0, 10, 9.7)] print True [] unsane []
-asaphida: bound 45.0 | theta 19.51 total 175.6 gap 22.63 anatomy by [(7, 9, 0.5)] print True [] unsane []
-harpetida: bound 45.0 | theta 30.32 total 303.2 gap 0.0 closed by [(0, 10, 1.3)] print False ['knuckle 2.0 mm < 3.0'] unsane []
-ptychopariida: bound 45.0 | theta 19.78 total 257.1 gap 0.36 closed by [(12, 13, 0.5)] print True [] unsane []
-redlichiida: bound 45.0 | theta 21.62 total 324.3 gap 0.97 closed by [(0, 13, 1.0)] print False ['knuckle 2.2 mm < 3.0'] unsane []
-phacopida: bound 45.0 | theta None total None gap None unknown by [] print True [] unsane ['seg0', 'seg7']
-phacopida: bound 45.0 | theta None total None gap None unknown by [] print True [] unsane ['seg0', 'seg7']

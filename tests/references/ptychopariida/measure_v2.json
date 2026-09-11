@@ -1,0 +1,75 @@
+{
+ "instrument": "2.1",
+ "params": "9f7259cf3f",
+ "bound_deg": 45.0,
+ "bevel_built_deg": 45.0,
+ "scan_step_deg": 2.5,
+ "res_deg": 0.1,
+ "rest_budget_mm3": 1.0,
+ "joints": 13,
+ "printed_stop_deg": 18.0,
+ "collision_rule": "overlap - overlap_at_rest > 0.5 mm3",
+ "theta_joint_deg": null,
+ "total_deg": null,
+ "closure_gap_mm": null,
+ "gap_over_L": null,
+ "stopped_by": [],
+ "stop_recommended_deg": null,
+ "v1_equivalent_e_max": null,
+ "s_tail": null,
+ "tail_margin_xyz": null,
+ "enroll_class": "censored",
+ "scan_trace": [],
+ "measure_timed_out": false,
+ "limited_by": "invalid",
+ "reason": "unsane_parts:seg9",
+ "rest_max_mm3": null,
+ "rest_over_budget": [],
+ "seconds": 0.0,
+ "print_valid": true,
+ "violations": [],
+ "pitch": 8.07,
+ "hinge_z": 10.96,
+ "hinge_width": 10.33,
+ "knuckle": 3.14,
+ "pin_wall": 1.62,
+ "preset": "ptychopariida",
+ "order": "ptychopariida",
+ "blurb": "Ptychopariida \u2014 Gon p. __. Generalist: 12 segments, small tail, backward-tapering glabella.",
+ "bevel_probe": {
+  "45.0": 1
+ },
+ "unsane_parts": [
+  "seg9"
+ ],
+ "build_notes": [
+  [
+   "seg2",
+   "rebuilt",
+   "grid jitter +4"
+  ],
+  [
+   "seg3",
+   "rebuilt",
+   "grid jitter +2"
+  ],
+  [
+   "seg4",
+   "rebuilt",
+   "grid jitter -2"
+  ],
+  [
+   "seg9",
+   "UNSANE after retries",
+   ""
+  ]
+ ],
+ "build_seconds": 177.0,
+ "schema_notes": [],
+ "closure_ref": "head body",
+ "wedge": {
+  "reach": 0.15,
+  "reach_wide": 0.5
+ },
+ "gap_curve": null
+}

@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trilobite Morphospace</title>
+<style>
+  :root{--bg:#000000;--ink:#ffffff;--mid:#9a9a9a;--line:#262626;--soft:#141414}
+  body.model{--bg:#ffffff;--ink:#000000;--mid:#666666;--line:#e5e5e5;--soft:#f5f5f5}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;overflow:hidden;font-size:12px}
+  #app{display:grid;grid-template-columns:300px 1fr;height:100vh}
+  .panel{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .controls{overflow-y:auto;padding:18px 20px;flex:1}
+  h1{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:normal;margin:0 0 14px}
+  .sect{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mid);margin:22px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+  .ctrl{margin:9px 0}
+  .ctrl .lab{display:flex;justify-content:space-between;margin-bottom:2px}
+  .ctrl .lab span:last-child{color:var(--mid);font-variant-numeric:tabular-nums}
+  input[type=range]{-webkit-appearance:none;width:100%;height:1px;background:var(--ink);outline:none;margin:6px 0}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--ink);cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--ink);border:none;cursor:pointer}
+  input[type=text]{width:100%;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--line);padding:3px 0;font:inherit}
+  input[type=text]:focus{outline:none;border-bottom-color:var(--ink)}
+  select{width:100%;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--ink);padding:6px 0;font:inherit;border-radius:0}
+  .tabs{display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--ink);margin-top:22px}
+  .tabs div{padding:7px 0;text-align:center;cursor:pointer;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mid)}
+  .tabs div.on{color:var(--ink);border-bottom:2px solid var(--ink);margin-bottom:-1px}
+  .hint{color:var(--mid);font-size:11px;margin:6px 0 0}
+  .ruler{margin-top:22px}
+  .ruler .sect{display:flex;justify-content:space-between;cursor:pointer;color:var(--ink)}
+  .ruler.locked .body{display:none}
+  .actions{padding:14px 20px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  button{background:var(--bg);color:var(--ink);border:1px solid var(--ink);border-radius:0;padding:8px 6px;font:inherit;cursor:pointer}
+  button.primary{background:var(--ink);color:var(--bg)}
+  button:hover{background:var(--soft)} button.primary:hover{opacity:.85} button:disabled{opacity:.35;cursor:default}
+  .stage{position:relative;min-width:0;background:#000}
+  canvas{display:block}
+  img.sheet{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+  .stage3d{position:absolute;inset:0}
+  /* #view3d lives inside the sheet's own blank title-block space by default (positioned by JS, which
+     knows the sheet's fixed layout); positionView3DButton()/setView() move it into a small corner
+     toggle (.corner) once the 3D view is active, since there's no sheet showing to overlay then. */
+  #view3d{position:absolute;z-index:5;display:none;align-items:center;justify-content:center;background:rgba(255,255,255,.05);color:var(--ink);border:1px solid rgba(255,255,255,.5);font:inherit;letter-spacing:.1em;text-transform:uppercase;font-size:10px;cursor:pointer;transition:background .15s,border-color .15s}
+  #view3d:hover{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  #view3d.corner{background:var(--bg);border:1px solid var(--ink);font-size:11px;letter-spacing:.06em;padding:8px 14px;right:16px;top:16px;left:auto!important;bottom:auto!important;width:auto!important;height:auto!important}
+  .readout{position:absolute;left:16px;top:14px;line-height:1.6;pointer-events:none;font-variant-numeric:tabular-nums;text-shadow:0 0 6px #000, 0 0 6px #000}
+  .readout b{font-weight:normal;border-bottom:1px solid var(--ink)}
+  .readout .warn{text-decoration:underline}
+  .status{position:absolute;right:16px;top:14px;color:var(--mid);text-shadow:0 0 6px #000} .status.busy{color:var(--ink)}
+  .look{position:absolute;right:16px;top:36px;color:var(--mid);font-size:11px;letter-spacing:.06em;text-transform:uppercase;user-select:none}
+  .look span{cursor:pointer} .look span.on{color:var(--ink);border-bottom:1px solid var(--ink)}
+  .rollbar{position:absolute;left:16px;right:16px;bottom:16px;display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center}
+  .rollbar input[type=range]{height:1px} .rollbar input[type=range]::-webkit-slider-thumb{width:16px;height:16px}
+  .rollbar .val{min-width:120px;text-align:right;font-variant-numeric:tabular-nums}
+  svg.arm{width:100%;height:150px;display:block;margin:6px 0 2px;border:1px solid var(--line);touch-action:none}
+  svg.arm .body{fill:var(--soft);stroke:var(--ink);stroke-width:1}
+  svg.arm .seg{fill:none;stroke:var(--line)}
+  svg.arm .path{fill:none;stroke:var(--ink);stroke-width:1.5}
+  svg.arm .h{fill:var(--bg);stroke:var(--ink);stroke-width:1.2;cursor:grab}
+  svg.arm .h.fixed{fill:var(--ink);cursor:default}
+  svg.arm .eye{fill:none;stroke:var(--line);stroke-width:1;stroke-dasharray:2,2}
+  svg.arm .eyearc{fill:none;stroke:var(--ink);stroke-width:2}
+  svg.arm .axis{stroke:var(--line);stroke-dasharray:2,2}
+  svg.arm .gauge{stroke:var(--line);stroke-width:3}
+  svg.arm .gauge-fill{stroke:var(--ink);stroke-width:3}
+  /* ---- phones and narrow windows: viewer on top, controls as a scrolling sheet underneath ---- */
+  @media (max-width: 720px), (pointer: coarse) and (max-width: 1024px) {
+    html,body{overflow:auto;font-size:14px}
+    #app{display:flex;flex-direction:column;height:auto;min-height:100vh}
+    .stage{order:0;height:52vh;min-height:300px;border-bottom:1px solid var(--line)}
+    .panel{order:1;border-right:none}
+    .controls{overflow:visible;padding:16px}
+    .actions{position:sticky;bottom:0;background:var(--bg)}
+    input[type=range]{height:2px;margin:12px 0}
+    input[type=range]::-webkit-slider-thumb{width:22px;height:22px}
+    input[type=range]::-moz-range-thumb{width:22px;height:22px}
+    button{padding:12px 8px}
+    .tabs div{padding:11px 0}
+    .readout{font-size:12px;left:12px;top:10px;max-width:70%}
+    .rollbar{left:12px;right:12px;bottom:12px;gap:10px}
+    .rollbar .val{min-width:96px;font-size:12px}
+    svg.arm{height:190px}
+    svg.arm .h{r:8}
+  }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+               "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div id="app">
+  <div class="panel">
+    <div class="controls" id="controls">
+      <h1>Trilobite morphospace</h1>
+      <select id="preset"></select>
+      <div class="sect">Shape</div>
+      <div id="dials"></div>
+      <div class="tabs" id="tabs"></div>
+      <div id="part"></div>
+      <div class="hint">Click a part of the animal to edit it.</div>
+      <div class="ruler locked" id="ruler">
+        <div class="sect"><span>Ruler — hinge</span><span id="lock">locked</span></div>
+        <div class="body">
+          <div class="hint">The joint is the measuring instrument. Change it and enrollment numbers stop being comparable between animals.</div>
+          <div id="rulerknobs"></div>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="primary" id="build" disabled>Build</button>
+      <button id="download" disabled>Download STL</button>
+    </div>
+  </div>
+  <div class="stage" id="stage">
+    <img class="sheet" id="sheetImg" alt="">
+    <button id="view3d">View 3D</button>
+    <div class="stage3d" id="stage3d" style="display:none">
+      <div class="rollbar">
+        <input type="range" id="enroll" min="0" max="1" step="0.005" value="0">
+        <div class="val" id="enrollval">0% · 0°</div>
+        <button id="play">Roll</button>
+      </div>
+    </div>
+    <div class="readout" id="readout"></div>
+    <div class="status" id="status"></div>
+    <div class="look" id="look" style="display:none"><span class="on" data-look="blueprint">blueprint</span> · <span data-look="model">model</span></div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+
+const $ = id => document.getElementById(id);
+let CFG, P = {}, INT = new Set(), KNOB = {};
+let built = null;                                    // latest /api/status/<key> snapshot once a build has started
+const fmt = (k, v) => INT.has(k) ? String(Math.round(v)) : (+v).toFixed(3).replace(/\.?0+$/, '');
+
+// ---------------- controls
+async function init(){
+  try {
+    const resp = await fetch('/api/config');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} from /api/config`);
+    CFG = await resp.json();
+    INT = new Set(CFG.int_keys); P = {...CFG.defaults};
+    for (const k of CFG.knobs) KNOB[k[0]] = {key:k[0], label:k[1], lo:k[2], hi:k[3], step:k[4], group:k[5], kind:k[6], help:k[7]};
+    const sel = $('preset');
+    for (const name of Object.keys(CFG.presets)) { const o = document.createElement('option'); o.textContent = name; if (name === 'textured') o.selected = true; sel.appendChild(o); }
+    sel.onchange = () => { P = {...CFG.defaults, ...CFG.presets[sel.value]}; renderAll(); };
+    for (const [mk, label, def, maps] of CFG.macros.filter(m => CFG.ui.dials.includes(m[0]))) {
+      row('dials', mk, label, 0, 1, 0.01, def, v => { for (const [k, lo, hi] of maps) P[k] = INT.has(k) ? Math.round(lo + (hi - lo) * v) : lo + (hi - lo) * v; renderPart(); refreshDerived(); });
+    }
+    for (const name of Object.keys(CFG.ui.parts)) { const d = document.createElement('div'); d.textContent = name; d.dataset.name = name; d.onclick = () => selectTab(name); $('tabs').appendChild(d); }
+    for (const k of CFG.ui.ruler) knob('rulerknobs', k);
+    $('ruler').querySelector('.sect').onclick = () => { const r = $('ruler'); r.classList.toggle('locked'); $('lock').textContent = r.classList.contains('locked') ? 'locked' : 'unlocked'; };
+    selectTab('Head'); refreshDerived();
+    $('build').disabled = false;
+  } catch (e) {
+    setStatus('init failed: ' + e.message + ' — reload the page', false);
+  }
+}
+function row(host, id, label, lo, hi, step, val, onv, help){
+  const c = document.createElement('div'); c.className = 'ctrl'; if (help) c.title = help;
+  c.innerHTML = `<div class="lab"><span>${label}</span><span id="v-${id}">${fmt(id, val)}</span></div><input type="range" id="s-${id}" min="${lo}" max="${hi}" step="${step}" value="${val}">`;
+  $(host).appendChild(c);
+  const s = c.querySelector('input'); s.addEventListener('input', () => { $('v-'+id).textContent = fmt(id, s.value); onv(parseFloat(s.value)); });
+  return c;
+}
+function knob(host, key){
+  const p = KNOB[key]; if (!p) return;
+  if (p.kind === 'expr') {
+    const c = document.createElement('div'); c.className = 'ctrl'; c.title = p.help;
+    c.innerHTML = `<div class="lab"><span>${p.label}</span></div><input type="text" id="t-${key}" value="${P[key]}" title="${p.help}">`;
+    $(host).appendChild(c); c.querySelector('input').addEventListener('change', e => { P[key] = e.target.value; drawArm(); refreshDerived(); });
+    return;
+  }
+  row(host, key, p.label, p.lo, p.hi, p.step, P[key], v => setP(key, v), p.help);
+}
+function setP(key, v){
+  if (INT.has(key)) { v = Math.round(v); if (key === 'nKnuckles' && v % 2 === 0) v += 1; }
+  P[key] = v; const e = $('v-'+key); if (e) e.textContent = fmt(key, v);
+  if (['genalSpine','genalWidthMM','genalCurve','genalTaper','cephFrac','headRearArc','headOutlineExp'].includes(key)) drawArm();
+  if (['eyeSize','eyeArc','eyeHeight','eyePos','eyeLat','axisFrac','glabInflate','width','cephFrac','headOutlineExp','lensD'].includes(key)) drawEye();
+  refreshDerived();
+}
+function selectTab(name){ tab = name; for (const d of $('tabs').children) d.classList.toggle('on', d.dataset.name === name); renderPart(); }
+let tab = 'Head';
+function renderPart(){ const host = $('part'); host.innerHTML = ''; for (const k of CFG.ui.parts[tab]) knob('part', k); if (tab === 'Head') { eyeEditor(host); armEditor(host); } }
+function renderAll(){ for (const k of Object.keys(KNOB)) { const s = $('s-'+k); if (s) { s.value = P[k]; $('v-'+k).textContent = fmt(k, P[k]); } } renderPart(); refreshDerived(); }
+
+// ---------------- eye shape: a circle you place, resize, and set the visual arc of, plus a height gauge —
+// same direct-manipulation idea as the genal arm below, so both parts of the head that are otherwise just
+// numbers get a picture. Approximates eyes.eye_geometry() in JS (wh here is width/2, like the arm diagram
+// already assumes, not the exact head_halfwidth()) — a drawing aid, not a substitute for the built sheet.
+function syncKnob(key){ const s = $('s-'+key); if (s) s.value = P[key]; const v = $('v-'+key); if (v) v.textContent = fmt(key, P[key]); }
+function eyeGeom(){
+  const Lc = P.cephFrac * P.length, wh = P.width / 2, a = P.axisFrac * wh;
+  const f = Math.min(Math.max(P.eyePos, 0), 1), glab = a * (1 + (P.glabInflate - 1) * f);
+  const eR = P.eyeSize * wh, ye = -P.eyePos * Lc;
+  const xe = P.eyeLat > 0.01 ? P.eyeLat * wh : glab + eR + 1.0;
+  return {Lc, wh, a, eR, ye, xe};
+}
+function eyeEditor(host){
+  const wrap = document.createElement('div'); wrap.className = 'ctrl';
+  wrap.innerHTML = `<div class="lab"><span>Eye shape</span><span id="eyelab"></span></div>
+    <svg class="arm" id="eyesvg" viewBox="0 0 300 150"></svg>
+    <div class="hint">Drag the eye to place it, its outer handle to resize, the two edge handles to set how much of the circle is visual surface (the arc), and the H bar on the right for eye height.</div>`;
+  host.appendChild(wrap);
+  drawEye();
+  // packing factor = D/pitch (1 = lenses touching/holochroal, the blueprint's own eye panels show this same
+  // pitch = D(1+gap) relationship), presented the intuitive way round from the raw lensGap parameter it drives.
+  const glo = KNOB.lensGap.lo, ghi = KNOB.lensGap.hi, pLo = 1 / (1 + ghi), pHi = 1 / (1 + glo);
+  const packWrap = document.createElement('div'); packWrap.className = 'ctrl';
+  const initPacking = 1 / (1 + P.lensGap);
+  packWrap.innerHTML = `<div class="lab"><span>Lens packing</span><span id="v-lensPacking">${initPacking.toFixed(3)}</span></div>
+    <input type="range" id="s-lensPacking" min="${pLo}" max="${pHi}" step="0.005" value="${initPacking}">
+    <div class="hint" id="packhint"></div>`;
+  host.appendChild(packWrap);
+  packWrap.querySelector('input').addEventListener('input', e => {
+    const v = parseFloat(e.target.value);
+    P.lensGap = Math.max(glo, Math.min(ghi, 1 / v - 1));
+    $('v-lensPacking').textContent = v.toFixed(3);
+    updatePackHint(); refreshDerived();
+  });
+  updatePackHint();
+}
+function updatePackHint(){
+  const el = $('packhint'); if (!el) return;
+  const {eR} = eyeGeom(), D = P.lensD * eR, pitch = D * (1 + P.lensGap);
+  el.textContent = `pitch ${pitch.toFixed(2)} mm = Ø${D.toFixed(2)} mm lens × (1 + gap ${P.lensGap.toFixed(2)})`;
+}
+function drawEye(){
+  const svg = $('eyesvg'); if (!svg) return;
+  const {Lc, wh, a, eR, ye, xe} = eyeGeom();
+  const S = Math.min(125 / Math.max(Lc, 1), 95 / Math.max(wh * 1.35, 1));
+  const ox = 108, oy = 8 + Lc * S; const X = x => ox + x * S, Y = y => oy + y * S;
+  const n = 30; let d = '';
+  for (let i = 0; i <= n; i++) { const t = i / n, y = -Lc * Math.pow(Math.max(0, 1 - Math.pow(t, P.headOutlineExp)), 1 / P.headOutlineExp); d += (i ? 'L' : 'M') + X(wh * t) + ',' + Y(y); }
+  d += ' L' + X(wh) + ',' + Y(0) + ' L' + X(0) + ',' + Y(0);
+  const rDraw = Math.max(eR, 0.035 * wh);                              // stays grabbable even when eyeSize is 0 (blind)
+  const half = P.eyeArc / 2 * Math.PI / 180, nA = 20; let ad = '';
+  for (let i = 0; i <= nA; i++) { const ang = -half + (2 * half) * i / nA; ad += (i ? 'L' : 'M') + X(xe + rDraw * Math.cos(ang)) + ',' + Y(ye + rDraw * Math.sin(ang)); }
+  const a1 = [xe + rDraw * Math.cos(-half), ye + rDraw * Math.sin(-half)], a2 = [xe + rDraw * Math.cos(half), ye + rDraw * Math.sin(half)];
+  const gx = 268, gy0 = 10, gy1 = 10 + Lc * S;                         // height gauge, alongside the plan
+  const hFrac = (P.eyeHeight - KNOB.eyeHeight.lo) / (KNOB.eyeHeight.hi - KNOB.eyeHeight.lo), ghy = gy1 - hFrac * (gy1 - gy0);
+  svg.innerHTML = `<path class="body" d="${d}"/><line class="axis" x1="${X(a)}" y1="${Y(-Lc)}" x2="${X(a)}" y2="${Y(0)}"/>
+    <circle class="eye" cx="${X(xe)}" cy="${Y(ye)}" r="${rDraw * S}"/><path class="eyearc" d="${ad}"/>
+    <line class="gauge" x1="${gx}" y1="${gy0}" x2="${gx}" y2="${gy1}"/><line class="gauge-fill" x1="${gx}" y1="${ghy}" x2="${gx}" y2="${gy1}"/>
+    <text x="${gx}" y="${gy0 - 3}" fill="var(--mid)" font-size="9" text-anchor="middle" font-family="monospace">H</text>
+    <circle class="h" id="eyeCenter" cx="${X(xe)}" cy="${Y(ye)}" r="4"/><circle class="h" id="eyeResize" cx="${X(xe + rDraw)}" cy="${Y(ye)}" r="3.5"/>
+    <circle class="h" id="eyeArc1" cx="${X(a1[0])}" cy="${Y(a1[1])}" r="3.5"/><circle class="h" id="eyeArc2" cx="${X(a2[0])}" cy="${Y(a2[1])}" r="3.5"/>
+    <circle class="h" id="eyeH" cx="${gx}" cy="${ghy}" r="4"/>`;
+  $('eyelab').textContent = P.eyeSize <= 0.005 ? 'blind' : `arc ${Math.round(P.eyeArc)}° · H ${P.eyeHeight.toFixed(2)} R`;
+  updatePackHint();
+  const drag = (id, onmove) => {
+    const h = svg.querySelector('#' + id); let on = false;
+    h.onpointerdown = e => { on = true; h.setPointerCapture(e.pointerId); };
+    h.onpointerup = () => { on = false; };
+    h.onpointermove = e => {
+      if (!on) return;
+      const r = svg.getBoundingClientRect();
+      onmove((e.clientX - r.left) * 300 / r.width, (e.clientY - r.top) * 150 / r.height);
+      drawEye();
+      const h2 = svg.querySelector('#' + id); if (h2) { h2.setPointerCapture(e.pointerId); h2.onpointermove = h.onpointermove; h2.onpointerup = h.onpointerup; }
+    };
+  };
+  const clamp = (key, v) => Math.max(KNOB[key].lo, Math.min(KNOB[key].hi, v));
+  drag('eyeCenter', (px, py) => {
+    P.eyeLat = clamp('eyeLat', ((px - ox) / S) / wh);
+    P.eyePos = clamp('eyePos', -((py - oy) / S) / Lc);
+    syncKnob('eyeLat'); syncKnob('eyePos'); refreshDerived();
+  });
+  drag('eyeResize', (px, py) => {
+    const r = Math.hypot((px - ox) / S - xe, (py - oy) / S - ye);
+    P.eyeSize = clamp('eyeSize', r / wh); syncKnob('eyeSize'); refreshDerived();
+  });
+  const arcDrag = (px, py) => {
+    const ang = Math.abs(Math.atan2((py - oy) / S - ye, (px - ox) / S - xe)) * 180 / Math.PI;
+    P.eyeArc = clamp('eyeArc', 2 * ang); syncKnob('eyeArc'); refreshDerived();
+  };
+  drag('eyeArc1', arcDrag); drag('eyeArc2', arcDrag);
+  drag('eyeH', (px, py) => {
+    const frac = Math.max(0, Math.min(1, (gy1 - py) / (gy1 - gy0)));
+    P.eyeHeight = clamp('eyeHeight', KNOB.eyeHeight.lo + frac * (KNOB.eyeHeight.hi - KNOB.eyeHeight.lo));
+    syncKnob('eyeHeight'); refreshDerived();
+  });
+}
+
+// ---------------- genal arm: two draggable handles → a quadratic path formula (or type any formula)
+let H = {mid: 0.25, tip: 1.0};                      // sideways offset at s = 0.5 and s = 1, in [-1, 1], + = outward
+function armEditor(host){
+  const a = CFG.ui.arm;
+  const wrap = document.createElement('div'); wrap.className = 'ctrl';
+  wrap.innerHTML = `<div class="lab"><span>Genal arm path</span><span id="armlab"></span></div>
+    <svg class="arm" id="armsvg" viewBox="0 0 300 150"></svg>
+    <div class="hint">Drag the open handles; inward is toward the thorax. Or type a formula in s below.</div>
+    <div id="armformula"></div>`;
+  host.appendChild(wrap);
+  knob('armformula', a.path); knob('part', a.taper);
+  drawArm();
+}
+function armFromP(){
+  const m = /^2\*\(1-s\)\*s\*\(?(-?[\d.]+)\)?\+s\*\*2\*\(?(-?[\d.]+)\)?$/.exec(String(P.genalPath).replace(/\s+/g, ''));
+  if (m) { H.mid = parseFloat(m[1]); H.tip = parseFloat(m[2]); }
+}
+function armToP(){
+  const mid = +H.mid.toFixed(3), tip = +H.tip.toFixed(3);
+  P.genalPath = `2*(1-s)*s*(${mid})+s**2*(${tip})`;
+  const t = $('t-genalPath'); if (t) t.value = P.genalPath;
+  const amp = Math.max(Math.abs(mid), Math.abs(tip), 0.05);
+  P.genalCurve = Math.round(Math.max(-60, Math.min(60, 50 * amp)));
+}
+function drawArm(){
+  const svg = $('armsvg'); if (!svg) return; armFromP();
+  const Lc = P.cephFrac * P.length, wh = P.width / 2, Lg = P.genalSpine * Lc, rear = P.headRearArc * Lc;
+  const S = 140 / Math.max(Lc + Lg + rear, 1) * 0.92;                 // mm → px, everything fits vertically
+  const oy = 6 + Lc * S, ox = 150; const X = x => ox + x * S, Y = y => oy + y * S;
+  const n = 30; let d = '';
+  for (let i = 0; i <= n; i++) { const t = i / n, y = -Lc * Math.pow(Math.max(0, 1 - Math.pow(t, P.headOutlineExp)), 1 / P.headOutlineExp); d += (i ? 'L' : 'M') + X(wh * t) + ',' + Y(y); }
+  d += ' L' + X(wh) + ',' + Y(rear) + ' L' + X(0) + ',' + Y(0) + ' Z';
+  const W = P.genalWidthMM > 0.05 ? P.genalWidthMM : P.genalWidth * wh, cx = wh - W / 2;
+  const amp = Math.tan(P.genalCurve * Math.PI / 180) * Lg, nrm = Math.max(Math.abs(H.mid), Math.abs(H.tip), 0.05);
+  const pt = s => [cx + amp * (2 * (1 - s) * s * H.mid + s * s * H.tip) / nrm, rear + Lg * s];
+  let pd = ''; for (let i = 0; i <= 40; i++) { const [x, y] = pt(i / 40); pd += (i ? 'L' : 'M') + X(x) + ',' + Y(y); }
+  const pitch = (P.length * (1 - P.cephFrac - P.pygFrac)) / P.segCount; let segs = '';
+  for (let i = 0; i < Math.min(P.segCount, 8); i++) segs += `<rect class="seg" x="${X(-wh * 0.9)}" y="${Y(i * pitch)}" width="${2 * wh * 0.9 * S}" height="${pitch * 0.85 * S}"/>`;
+  const [mx, my] = pt(0.5), [tx, ty] = pt(1);
+  svg.innerHTML = `<g transform="translate(300,0) scale(-1,1)"><path class="body" d="${d}"/><path class="path" d="${pd}" stroke-width="${W * S}" opacity="0.25"/><path class="path" d="${pd}"/></g>` +
+    `${segs}<path class="body" d="${d}"/><path class="path" d="${pd}" stroke-width="${W * S}" opacity="0.25"/><path class="path" d="${pd}"/>` +
+    `<circle class="h fixed" cx="${X(cx)}" cy="${Y(rear)}" r="3.5"/><circle class="h" id="hmid" cx="${X(mx)}" cy="${Y(my)}" r="6"/><circle class="h" id="htip" cx="${X(tx)}" cy="${Y(ty)}" r="6"/>`;
+  $('armlab').textContent = `${P.genalCurve}° · ${Lg.toFixed(0)} mm · ${W.toFixed(0)} mm wide`;
+  for (const [id, key] of [['hmid', 'mid'], ['htip', 'tip']]) {
+    const h = svg.querySelector('#' + id); let drag = false;
+    h.onpointerdown = e => { drag = true; h.setPointerCapture(e.pointerId); };
+    h.onpointerup = () => { if (!drag) return; drag = false; armToP(); drawArm(); refreshDerived(); };
+    h.onpointermove = e => { if (!drag) return; const r = svg.getBoundingClientRect(); const x = ((e.clientX - r.left) * 300 / r.width - ox) / S;
+      H[key] = Math.max(-1.5, Math.min(1.5, (x - cx) / Math.max(Lg * 0.8, 1))); armToP(); drawArm(); const h2 = svg.querySelector('#' + id); h2.setPointerCapture(e.pointerId); h2.onpointermove = h.onpointermove; h2.onpointerup = h.onpointerup; };
+  }
+}
+
+// ---------------- readout: proportions instantly, the instrument after a build
+let dTimer = null;
+function refreshDerived(){
+  clearTimeout(dTimer);
+  dTimer = setTimeout(async () => { const d = await (await fetch('/api/derived', {method:'POST', body: JSON.stringify({P})})).json(); renderReadout(d, built && built.measure); }, 80);
+}
+function renderReadout(d, m){
+  let h = `${d.head_mm} · ${d.thorax_mm} · ${d.tail_mm} mm &nbsp; ${d.joints} joints × ${P.maxAngle}° = ${d.total_curl}°`;
+  if (m && m.measure_timed_out) h += `<br><span class="warn">enrollment check timed out — not verified this build</span>`;
+  else if (m) h += `<br><b>free curl at printed stop ${m.e_max}</b> <span style='opacity:.6'>(instrument 1.0, not the morphospace reading)</span> &nbsp; closure gap ${m.closure_gap_mm} mm &nbsp; ${m.enroll_class}` + (m.stopped_by && m.stopped_by.length ? ` &nbsp; stopped by ${m.stopped_by.map(s => s.slice(0,2).join('–')).join(', ')}` : '');
+  h += `<br>` + (d.warnings.length ? d.warnings.map(w => `<span class="warn">${w}</span>`).join(' · ') : (m ? (m.print_valid ? 'print-valid' : 'not print-valid') : 'not built yet'));
+  $('readout').innerHTML = h;
+}
+function setStatus(t, busy){ const s = $('status'); s.textContent = t; s.className = 'status' + (busy ? ' busy' : ''); }
+
+// ---------------- three.js (lazy: only initialised the first time "View 3D" is clicked)
+let renderer, scene, camera, controls, root, grid, ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
+let look = 'blueprint', view = 'sheet', scene3DReady = false, groups = [], meshes = [], enroll = 0, playing = false, flip = 1, lastLoadedKey = null;
+function resize3D(){
+  if (!renderer) return;
+  const stage = $('stage3d'); const w = stage.clientWidth, h = stage.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+function initScene(){
+  if (scene3DReady) return; scene3DReady = true;
+  const stage = $('stage3d');
+  renderer = new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(devicePixelRatio);
+  stage.prepend(renderer.domElement); renderer.domElement.style.touchAction = 'none';
+  scene = new THREE.Scene(); scene.background = new THREE.Color(0x000000);
+  camera = new THREE.PerspectiveCamera(40, 1, 1, 5000); camera.position.set(140, 110, 190);
+  controls = new OrbitControls(camera, renderer.domElement); controls.target.set(0, 10, 0);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1.2); keyLight.position.set(80, 160, 120); scene.add(keyLight);
+  grid = new THREE.GridHelper(400, 40, 0x2a2a2a, 0x161616); grid.position.y = -0.5; scene.add(grid);
+  root = new THREE.Group(); root.rotation.x = -Math.PI / 2; scene.add(root);
+  applyLook();                        // must run after root exists: it unconditionally calls root.traverse()
+  new ResizeObserver(resize3D).observe(stage);
+  let down = null;
+  renderer.domElement.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener('pointerup', e => {
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4 || !meshes.length) return;
+    const r = renderer.domElement.getBoundingClientRect();
+    mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(mouse, camera); const hit = ray.intersectObjects(meshes, false)[0];
+    if (hit) { const i = meshes.indexOf(hit.object); selectTab(i === 0 ? 'Head' : (i === meshes.length - 1 ? 'Tail' : 'Thorax')); }
+  });
+  (function loop(t){ requestAnimationFrame(loop); if (playing){ const u = (t % 3200) / 3200; setEnroll(0.5 - 0.5 * Math.cos(u * 2 * Math.PI)); } if (view === '3d') { controls.update(); renderer.render(scene, camera); } })(0);
+}
+const fill = new THREE.MeshBasicMaterial({color: 0x000000, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1});
+const inkLine = new THREE.LineBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.9});
+const faintLine = new THREE.LineBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.18});
+const shaded = new THREE.MeshStandardMaterial({color: 0xbfbfbf, roughness: 0.8, metalness: 0.0});
+function blueprintPart(geo){
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(geo, look === 'blueprint' ? fill : shaded); g.add(m);
+  const e1 = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 24), inkLine); e1.name = 'edges'; g.add(e1);      // feature edges
+  const e2 = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 8), faintLine); e2.name = 'edges'; g.add(e2);      // surface flow, faint
+  e1.visible = e2.visible = (look === 'blueprint');
+  return [g, m];
+}
+function applyLook(){
+  document.body.classList.toggle('model', look === 'model');
+  for (const s of document.querySelectorAll('#look span')) s.classList.toggle('on', s.dataset.look === look);
+  if (!scene || !root) return;        // called once from initScene() before any parts are loaded, and from the
+  scene.background.set(look === 'blueprint' ? 0x000000 : 0xffffff);         // #look click handler afterward
+  if (grid) { scene.remove(grid); grid = look === 'blueprint' ? new THREE.GridHelper(400, 40, 0x2a2a2a, 0x161616) : new THREE.GridHelper(400, 40, 0xdddddd, 0xeeeeee); grid.position.y = -0.5; scene.add(grid); }
+  for (const m of meshes) m.material = (look === 'blueprint' ? fill : shaded);
+  root.traverse(o => { if (o.name === 'edges') o.visible = (look === 'blueprint'); });
+}
+document.querySelectorAll('#look span').forEach(s => s.onclick = () => { look = s.dataset.look; applyLook(); });
+const loader = new STLLoader();
+const loadSTLOnce = url => new Promise((res, rej) => loader.load(url + '?t=' + Date.now(), res, undefined, e => rej(new Error('mesh fetch failed: ' + url))));
+// Render's free tier (and plain network hiccups) occasionally drop one of the several sequential mesh
+// fetches a 3D load makes; retrying beats failing the whole view over a single transient blip.
+async function loadSTL(url, tries = 4){
+  for (let i = 0; i < tries; i++){
+    try { return await loadSTLOnce(url); }
+    catch (e) { if (i === tries - 1) throw e; setStatus(`loading 3D… retry ${i + 1}/${tries - 1}`, true); await new Promise(r => setTimeout(r, 500 * (i + 1))); }
+  }
+}
+// The <img> itself never retries a failed load on its own, unlike loadSTL() above - a single transient
+// blip (same class of Render-free-tier/network hiccup that motivated loadSTL's retries) left the sheet
+// silently blank with no visible error, which read as "the blueprint sometimes doesn't appear".
+function loadSheetImage(url, tries = 4){
+  const img = $('sheetImg'); let attempt = 0;
+  const tryLoad = () => {
+    img.onerror = () => {
+      attempt++;
+      if (attempt >= tries) { img.onerror = null; setStatus('sheet image failed to load - press Build to retry', false); return; }
+      setStatus(`loading sheet… retry ${attempt}/${tries - 1}`, true);
+      setTimeout(tryLoad, 500 * attempt);
+    };
+    img.onload = () => { img.onerror = null; };
+    img.src = url + '?t=' + Date.now() + '-' + attempt;
+  };
+  tryLoad();
+}
+async function loadAllParts(){
+  root.clear(); groups = []; meshes = [];
+  root.position.set(0, built.hinge_z, 0);
+  const names = built.part_names;
+  for (let i = 0; i < names.length; i++){
+    setStatus(`loading 3D… ${i + 1} of ${names.length} parts`, true);
+    const geo = await loadSTL(`/api/mesh/${built.key}/${names[i]}.stl`);
+    const g = new THREE.Group(); g.position.set(0, i === 0 ? 0 : built.offsets[i - 1], 0);
+    const [part, mesh] = blueprintPart(geo); part.position.set(0, 0, -built.hinge_z); g.add(part); meshes.push(mesh);
+    (i === 0 ? root : groups[i - 1]).add(g); groups.push(g);
+  }
+  setEnroll(enroll);
+  frame();
+}
+function setEnroll(e){
+  enroll = e; $('enroll').value = e;
+  const th = e * (built ? built.maxAngle : P.maxAngle);
+  $('enrollval').textContent = `${Math.round(e * 100)}% · ${th.toFixed(1)}° / joint`;
+  groups.forEach((g, i) => { if (i > 0) g.rotation.x = -flip * THREE.MathUtils.degToRad(th); });
+}
+function frame(){
+  const box = new THREE.Box3().setFromObject(root); if (box.isEmpty()) return;
+  const c = box.getCenter(new THREE.Vector3()); const s = box.getSize(new THREE.Vector3()).length(); if (!isFinite(s) || s === 0) return;
+  controls.target.copy(c); camera.position.copy(c).add(new THREE.Vector3(0.6, 0.55, 0.95).multiplyScalar(s * 0.9)); camera.near = s / 100; camera.far = s * 10; camera.updateProjectionMatrix();
+}
+// The sheet is a fixed-layout image (blueprint.py: figsize=(16.5,11.7) @ dpi=110), so its blank
+// title-block area (below the drawing's text, inside the bordered box on the right) is always at the
+// same fraction of the sheet, regardless of window size. #view3d overlays that space directly instead
+// of living in the button row — positioned in real pixels here (accounting for the letterboxing
+// object-fit:contain can add) rather than with a CSS percentage, since the stage's aspect ratio rarely
+// matches the sheet's.
+const SHEET_W = 1815, SHEET_H = 1287;
+// A small, landscape (wider-than-tall) button reads more like an actual button and less like a shape
+// pasted into the sheet. cx=0.883 unchanged; cy raised again, this time by ~one button height
+// (0.625 -> 0.55), still well inside the blank title-block box (y in [0.44, 0.91]).
+const TITLE_BLANK = {x: 0.808, y: 0.5125, w: 0.15, h: 0.075};
+function positionView3DButton(){
+  const btn = $('view3d'); if (btn.classList.contains('corner')) return;
+  const stage = $('stage'); const cw = stage.clientWidth, ch = stage.clientHeight;
+  if (!cw || !ch) return;
+  const scale = Math.min(cw / SHEET_W, ch / SHEET_H);
+  const rw = SHEET_W * scale, rh = SHEET_H * scale, ox = (cw - rw) / 2, oy = (ch - rh) / 2;
+  btn.style.left = (ox + TITLE_BLANK.x * rw) + 'px'; btn.style.top = (oy + TITLE_BLANK.y * rh) + 'px';
+  btn.style.width = (TITLE_BLANK.w * rw) + 'px'; btn.style.height = (TITLE_BLANK.h * rh) + 'px';
+}
+new ResizeObserver(() => { if (view === 'sheet') positionView3DButton(); }).observe($('stage'));
+function setView(v){
+  view = v;
+  $('sheetImg').style.display = v === 'sheet' ? 'block' : 'none';
+  $('stage3d').style.display = v === '3d' ? 'block' : 'none';
+  $('look').style.display = v === '3d' ? '' : 'none';
+  document.body.classList.toggle('model', v === '3d' && look === 'model');   // sheet view always stays dark
+  const btn = $('view3d');
+  btn.textContent = v === '3d' ? 'View Sheet' : 'View 3D';
+  btn.classList.toggle('corner', v === '3d');
+  if (v === 'sheet') positionView3DButton();
+}
+$('view3d').onclick = async () => {
+  if (!built || built.status !== 'done') return;
+  if (view === '3d') { setView('sheet'); return; }
+  try {
+    setView('3d'); initScene(); resize3D();
+    if (built.key !== lastLoadedKey) {
+      setStatus('loading 3D…', true);
+      await loadAllParts(); lastLoadedKey = built.key; setStatus(`built in ${built.seconds}s`, false);
+    } else { frame(); }
+  } catch (e) { setStatus('3D view error: ' + e.message, false); }
+};
+$('enroll').addEventListener('input', e => { playing = false; $('play').textContent = 'Roll'; setEnroll(parseFloat(e.target.value)); });
+$('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Roll'; };
+$('download').onclick = () => { if (built && built.stl_url) window.location.href = built.stl_url; };
+document.addEventListener('keydown', e => { if (e.key === 'f') { flip = -flip; setEnroll(enroll); } });
+
+// ---------------- build: submit params, poll a single status endpoint, show the sheet when done
+let buildGen = 0;
+async function build(){
+  const myGen = ++buildGen;
+  built = null; lastLoadedKey = null;
+  setView('sheet'); $('sheetImg').removeAttribute('src');
+  $('download').disabled = true; $('view3d').style.display = 'none';
+  setStatus('building…', true); $('build').disabled = true;
+  try {
+    let r = await (await fetch('/api/build', {method:'POST', body: JSON.stringify({P})})).json();
+    if (myGen !== buildGen) return;
+    if (r.error) throw new Error(r.error);
+    while (r.status !== 'done' && r.status !== 'error') {
+      if (r.status === 'building') setStatus(`building… ${r.done_parts} of ${r.total_parts} parts`, true);
+      else if (r.status === 'measuring') setStatus('measuring…', true);
+      await new Promise(res => setTimeout(res, 1200));
+      r = await (await fetch('/api/status/' + r.key)).json();
+      if (myGen !== buildGen) return;
+    }
+    if (r.status === 'error') throw new Error(r.error || 'build failed');
+    built = r;
+    renderReadout(r.derived, r.measure);
+    $('download').disabled = !r.stl_url;
+    $('view3d').style.display = 'flex'; positionView3DButton();
+    let msg = `built in ${r.seconds}s`;
+    if (r.sheet_url) loadSheetImage(r.sheet_url);
+    else msg += ' — sheet unavailable' + (r.error ? ': ' + r.error : '');
+    setStatus(msg, false);
+  } catch (e) {
+    if (myGen === buildGen) setStatus('error: ' + e.message, false);
+  }
+  if (myGen === buildGen) $('build').disabled = false;
+}
+$('build').onclick = build;
+// Best-effort cleanup: tell the server it can delete this build's files now rather than waiting for its
+// own count/disk-size eviction. sendBeacon fires even as the page is torn down (unlike a normal fetch,
+// which the browser may cancel), but delivery still isn't guaranteed - the server's own eviction (see
+// trilobite_web.py's MAX_CACHED_BUILDS/MAX_WEB_OUT_MB) is what actually bounds disk use regardless.
+window.addEventListener('pagehide', () => {
+  if (built && built.key && navigator.sendBeacon) navigator.sendBeacon('/api/release', JSON.stringify({key: built.key}));
+});
+init();
+</script>
+</body>
+</html>

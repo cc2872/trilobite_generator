@@ -285,7 +285,7 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None):
             ax3.text(ey0, ez0 - 6, f"closure gap {float(gap):.1f} mm", color=INK, fontsize=7, family="monospace")
         elif gap not in (None, "—"):
             ax3.text(en.bounds[0][1], en.bounds[0][2] - 6, "closed", color=INK, fontsize=7, family="monospace")
-    ax3.set_title(f"ENROLLED · e_max {meas.get('e_max', '—')} · {free:.0f}° of {tot:.0f}° · flat dimmed", color=INK, fontsize=8, family="monospace", loc="left")
+    ax3.set_title(f"ENROLLED · e@stop {meas.get('e_max', '—')} · {free:.0f}° of {tot:.0f}° · flat dimmed", color=INK, fontsize=8, family="monospace", loc="left")
     # ---- the six dials, drawn as they are on the site: a line and a dot. This animal is one point in the space they span.
     ax4 = fig.add_subplot(gs[3:4, 4:7]); ax4.set_facecolor(BG); ax4.axis("off")
     dials = [("SCULPT", P.get("furrowDepth", 0) / 1.2), ("HEAD", (P["cephFrac"] - 0.22) / 0.2), ("TAIL", (P["pygFrac"] - 0.05) / 0.33),
@@ -305,13 +305,13 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None):
     for s in ["    " + title, "", f"DRAWING  {meas.get('params', '—')}", f"SCHEMA   {P.get('_schema', '5.0')}", "",
               f"LENGTH   {L:.1f} mm", f"WIDTH    {W:.1f} mm", f"RELIEF   {z1 - z0:.1f} mm", f"SEGMENTS {int(P['segCount'])}", f"PITCH    {pitch:.2f} mm", "",
               f"HINGE    z {meas.get('hinge_z', '—')}   Ø {P.get('boreDia', '—')} bore", f"KNUCKLE  {meas.get('knuckle', '—')} mm × {int(P.get('nKnuckles', 3))}", f"STOP     {P['maxAngle']}° / joint", "",
-              f"E_MAX    {meas.get('e_max', '—')}", f"GAP      {meas.get('closure_gap_mm', '—')} mm", f"CLASS    {str(meas.get('enroll_class', '—')).upper()}", f"PRINT    {'VALID' if meas.get('print_valid') else 'CHECK'}", "",
+              f"E@STOP   {meas.get('e_max', '—')}", f"GAP      {meas.get('closure_gap_mm', '—')} mm", f"CLASS    {str(meas.get('enroll_class', '—')).upper()}", f"PRINT    {'VALID' if meas.get('print_valid') else 'CHECK'}", "",
               "GENAL PATH", f"  {P.get('genalPath', '—')}", f"  {P.get('genalCurve', 0)}°  {P.get('genalWidthMM', 0)} mm", "", "SHEET 1 / 1     REV A"]:
         pass
     lines = ["    " + title, "", f"DRAWING  {meas.get('params', '—')}", "",
              f"LENGTH   {L:.1f} mm", f"WIDTH    {W:.1f} mm", f"RELIEF   {z1 - z0:.1f} mm", f"SEGMENTS {int(P['segCount'])}", f"PITCH    {pitch:.2f} mm", "",
              f"HINGE z  {meas.get('hinge_z', '—')} mm", f"KNUCKLE  {meas.get('knuckle', '—')} mm × {int(P.get('nKnuckles', 3))}", f"STOP     {P['maxAngle']}° / joint", "",
-             f"E_MAX    {meas.get('e_max', '—')}", f"GAP      {meas.get('closure_gap_mm', '—')} mm", f"CLASS    {str(meas.get('enroll_class', '—')).upper()}", f"PRINT    {'VALID' if meas.get('print_valid') else 'CHECK'}", "",
+             f"E@STOP   {meas.get('e_max', '—')}", f"GAP      {meas.get('closure_gap_mm', '—')} mm", f"CLASS    {str(meas.get('enroll_class', '—')).upper()}", f"PRINT    {'VALID' if meas.get('print_valid') else 'CHECK'}", "",
              "GENAL PATH", f"  {P.get('genalPath', '—')}", f"  {P.get('genalCurve', 0)}° · {P.get('genalWidthMM', 0)} mm", "", "SHEET 1 / 1   REV A"]
     ax5.text(0.02, 0.98, "\n".join(lines), color=INK, fontsize=8, family="monospace", va="top", ha="left", linespacing=1.55)
     for s in ax5.spines.values(): s.set_visible(True); s.set_color(INK); s.set_linewidth(0.8)
@@ -319,9 +319,49 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None):
     fig.text(0.98, 0.018, "Claire Choi · Cornell", color=INK, fontsize=8, ha="right", va="bottom", family="monospace")
     fig.savefig(path, dpi=110, facecolor=BG); plt.close(fig); return path
 
-if __name__ == "__main__":
+if __name__ == "__main__" and len(__import__("sys").argv) > 1 and __import__("sys").argv[1] != "gallery":
     import sys, json
     m = trimesh.load(sys.argv[1]); P = json.load(open(sys.argv[2])) if len(sys.argv) > 2 else {}
     meas = json.load(open(sys.argv[3])) if len(sys.argv) > 3 else {}
     en = trimesh.load(sys.argv[5]) if len(sys.argv) > 5 else None
     sheet(m, P, meas, sys.argv[4] if len(sys.argv) > 4 else "sheet.png", enrolled=en)
+
+
+# ---------------------------------------------------------------- gallery mode (prompt 8: absorbs legacy/sheet10.py)
+def gallery(out_dir="out", path=None, title="TEN ORDERS — instrument 2.1"):
+    """One sheet for every order in out_dir/<name>/ (written by `python sweep.py presets`): dorsal silhouette of the
+    flat animal, the reading (theta/joint, total, class, limiter) and the closure curve when the reading exists.
+    Returns the PNG path."""
+    import glob as _glob, json as _json, os as _os
+    names = sorted(_os.path.basename(d) for d in _glob.glob(_os.path.join(out_dir, "*")) if _os.path.exists(_os.path.join(d, "measure.json")))
+    if not names: raise FileNotFoundError(f"no out_dir/<name>/measure.json under {out_dir}")
+    n = len(names); cols = min(5, n); rows = -(-n // cols)
+    fig = plt.figure(figsize=(3.4 * cols, 4.2 * rows), facecolor="#0b0b0b")
+    gs = fig.add_gridspec(rows * 2, cols, height_ratios=[3, 1.2] * rows, hspace=0.35, wspace=0.15)
+    for k, name in enumerate(names):
+        r, c = divmod(k, cols); meas = _json.load(open(_os.path.join(out_dir, name, "measure.json")))
+        ax = fig.add_subplot(gs[2 * r, c]); ax.set_facecolor("#0b0b0b"); ax.set_aspect("equal"); ax.axis("off")
+        fp = _os.path.join(out_dir, name, "flat.stl")
+        if _os.path.exists(fp):
+            m = trimesh.load(fp)
+            v = m.vertices; ax.scatter(v[::7, 0], -v[::7, 1], s=0.15, c="#a09d92", linewidths=0)
+        th, cls, lim = meas.get("theta_joint_deg"), meas.get("enroll_class", "—"), meas.get("limited_by", "—")
+        sb = meas.get("stopped_by") or []; limpair = f"{sb[0][0]}–{sb[0][1]}" if sb else ""
+        head = f"{name}\n{th if th is not None else '—'}°/joint · {meas.get('total_deg') or '—'}° · {cls}"
+        ax.set_title(head + (f"\n{lim} {limpair}" if th is not None else f"\n{lim}: {meas.get('reason','')}"), color="#e8e6df", fontsize=9, loc="left")
+        ax2 = fig.add_subplot(gs[2 * r + 1, c]); ax2.set_facecolor("#0b0b0b")
+        for sp in ax2.spines.values(): sp.set_color("#2c2c2a")
+        ax2.tick_params(colors="#8a897f", labelsize=7)
+        gc = meas.get("gap_curve")
+        if gc:
+            xs = [g[0] for g in gc]; ys = [g[1] for g in gc]; ax2.plot(xs, ys, color="#f0b040", lw=1.2); ax2.axvline(th, color="#5a5952", lw=0.8, ls="--")
+            ax2.set_xlabel("deg / joint", color="#8a897f", fontsize=7); ax2.set_ylabel("head–tail gap mm", color="#8a897f", fontsize=7)
+        else:
+            ax2.text(0.5, 0.5, "censored", color="#5a5952", ha="center", va="center", transform=ax2.transAxes); ax2.set_xticks([]); ax2.set_yticks([])
+    fig.suptitle(title, color="#8a897f", fontsize=11, x=0.02, ha="left")
+    path = path or _os.path.join(out_dir, "gallery.png"); fig.savefig(path, dpi=110, facecolor="#0b0b0b", bbox_inches="tight"); plt.close(fig)
+    return path
+
+if __name__ == "__main__" and (len(__import__("sys").argv) < 2 or __import__("sys").argv[1] == "gallery"):
+    import sys as _sys                                   # python blueprint.py gallery [out_dir]
+    print(gallery(_sys.argv[2] if len(_sys.argv) > 2 else "out"))

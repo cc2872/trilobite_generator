@@ -1,0 +1,2 @@
+2026-09-10 23:16 instrument 2.1 BREP builder; 129 s
+harpetida: bevel 45.0 (asked 45.0) probe {45.0: 1} build 102.4s unsane [] | theta 30.31 total 303.1 gap 0.0 closed double s_tail 0.9058 by [(0, 10, 1.3)] rest_max 0.0 print False ['knuckle 2.0 mm < 3.0']

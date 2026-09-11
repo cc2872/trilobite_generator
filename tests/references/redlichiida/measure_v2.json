@@ -1,0 +1,160 @@
+{
+ "instrument": "2.1",
+ "params": "54e4afa1c8",
+ "bound_deg": 45.0,
+ "bevel_built_deg": 45.0,
+ "scan_step_deg": 2.5,
+ "res_deg": 0.1,
+ "rest_budget_mm3": 1.0,
+ "joints": 15,
+ "printed_stop_deg": 18.0,
+ "collision_rule": "overlap - overlap_at_rest > 0.5 mm3",
+ "measure_timed_out": false,
+ "limited_by": "invalid",
+ "reason": "unsane_parts:seg2",
+ "rest_max_mm3": 0.0,
+ "rest_over_budget": [],
+ "theta_joint_deg": null,
+ "total_deg": null,
+ "closure_gap_mm": null,
+ "gap_over_L": null,
+ "enroll_class": "censored",
+ "s_tail": null,
+ "tail_margin_xyz": [
+  0.0,
+  -5.92,
+  3.87
+ ],
+ "stopped_by": [],
+ "scan_trace": [
+  [
+   2.5,
+   0
+  ],
+  [
+   5.0,
+   0
+  ],
+  [
+   7.5,
+   0
+  ],
+  [
+   10.0,
+   0
+  ],
+  [
+   12.5,
+   0
+  ],
+  [
+   15.0,
+   0
+  ],
+  [
+   17.5,
+   0
+  ],
+  [
+   20.0,
+   0
+  ],
+  [
+   22.5,
+   3
+  ]
+ ],
+ "stop_recommended_deg": 21.6,
+ "v1_equivalent_e_max": 1.0,
+ "seconds": 22.3,
+ "print_valid": false,
+ "violations": [
+  "knuckle 2.2 mm < 3.0",
+  "seg2: volume 1216 mm3 < 40 % of expected ~5132 (part lost in a boolean?)"
+ ],
+ "pitch": 8.05,
+ "hinge_z": 10.96,
+ "hinge_width": 7.46,
+ "knuckle": 2.19,
+ "pin_wall": 1.62,
+ "preset": "redlichiida",
+ "order": "redlichiida",
+ "blurb": "Redlichiida (olenellid) \u2014 Gon p. __. Long genal horns, 14 segments, macropleural spine, tiny tail.",
+ "bevel_probe": {
+  "45.0": 1
+ },
+ "unsane_parts": [
+  "seg2"
+ ],
+ "build_notes": [
+  [
+   "head",
+   "rebuilt",
+   "grid jitter +2"
+  ],
+  [
+   "seg2",
+   "UNSANE after retries",
+   ""
+  ],
+  [
+   "seg8",
+   "rebuilt",
+   "grid jitter -2"
+  ]
+ ],
+ "build_seconds": 242.9,
+ "schema_notes": [],
+ "closure_ref": "head body",
+ "wedge": {
+  "reach": 0.15,
+  "reach_wide": 0.5
+ },
+ "gap_curve": [
+  [
+   0.0,
+   107.45
+  ],
+  [
+   5.0,
+   95.34
+  ],
+  [
+   10.0,
+   69.18
+  ],
+  [
+   15.0,
+   34.05
+  ],
+  [
+   18.0,
+   17.44
+  ],
+  [
+   20.0,
+   7.54
+  ],
+  [
+   25.0,
+   0.0
+  ],
+  [
+   30.0,
+   7.54
+  ],
+  [
+   35.0,
+   6.14
+  ],
+  [
+   40.0,
+   2.44
+  ],
+  [
+   45.0,
+   0.0
+  ]
+ ],
+ "note": "re-frozen after gate fix: seg2 lost 60% volume in a boolean (UNSANE after retries); the 22.81-deg 'closed double' reading before the fix was on a broken part"
+}

@@ -1,0 +1,169 @@
+{
+ "instrument": "2.1",
+ "params": "50a8155641",
+ "bound_deg": 45.0,
+ "bevel_built_deg": 45.0,
+ "scan_step_deg": 2.5,
+ "res_deg": 0.1,
+ "rest_budget_mm3": 1.0,
+ "joints": 9,
+ "printed_stop_deg": 18.0,
+ "collision_rule": "overlap - overlap_at_rest > 0.5 mm3",
+ "measure_timed_out": false,
+ "limited_by": "closed",
+ "reason": "",
+ "rest_max_mm3": 0.0,
+ "rest_over_budget": [],
+ "theta_joint_deg": 22.58,
+ "total_deg": 203.2,
+ "closure_gap_mm": 0.0,
+ "gap_over_L": 0.0,
+ "enroll_class": "sphaeroidal",
+ "s_tail": -0.0162,
+ "tail_margin_xyz": [
+  0.0,
+  -49.08,
+  -1.41
+ ],
+ "stopped_by": [
+  [
+   0,
+   9,
+   18.4
+  ]
+ ],
+ "scan_trace": [
+  [
+   2.5,
+   0
+  ],
+  [
+   5.0,
+   0
+  ],
+  [
+   7.5,
+   0
+  ],
+  [
+   10.0,
+   0
+  ],
+  [
+   12.5,
+   0
+  ],
+  [
+   15.0,
+   0
+  ],
+  [
+   17.5,
+   0
+  ],
+  [
+   20.0,
+   0
+  ],
+  [
+   22.5,
+   0
+  ],
+  [
+   25.0,
+   1
+  ]
+ ],
+ "stop_recommended_deg": 22.6,
+ "v1_equivalent_e_max": 1.0,
+ "seconds": 16.3,
+ "print_valid": true,
+ "violations": [],
+ "pitch": 8.05,
+ "hinge_z": 11.49,
+ "hinge_width": 10.38,
+ "knuckle": 3.16,
+ "pin_wall": 1.62,
+ "preset": "corynexochida",
+ "order": "corynexochida",
+ "blurb": "Corynexochida \u2014 Gon p. __. Forward-expanding glabella, effaced, large tail, 8 segments.",
+ "bevel_probe": {
+  "45.0": 1
+ },
+ "unsane_parts": [],
+ "build_notes": [
+  [
+   "seg1",
+   "rebuilt",
+   "grid jitter +2"
+  ],
+  [
+   "seg6",
+   "rebuilt",
+   "grid jitter +2"
+  ],
+  [
+   "tail",
+   1,
+   57.7
+  ],
+  [
+   "tail",
+   "rebuilt",
+   "grid jitter +2"
+  ]
+ ],
+ "build_seconds": 98.9,
+ "schema_notes": [],
+ "closure_ref": "head body",
+ "wedge": {
+  "reach": 0.15,
+  "reach_wide": 0.5
+ },
+ "gap_curve": [
+  [
+   0.0,
+   59.21
+  ],
+  [
+   5.0,
+   56.12
+  ],
+  [
+   10.0,
+   45.69
+  ],
+  [
+   15.0,
+   35.66
+  ],
+  [
+   18.0,
+   28.95
+  ],
+  [
+   20.0,
+   22.83
+  ],
+  [
+   25.0,
+   0.0
+  ],
+  [
+   30.0,
+   0.0
+  ],
+  [
+   35.0,
+   0.0
+  ],
+  [
+   40.0,
+   0.0
+  ],
+  [
+   45.0,
+   0.0
+  ]
+ ]
+}

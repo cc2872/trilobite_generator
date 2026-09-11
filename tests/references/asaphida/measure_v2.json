@@ -1,0 +1,78 @@
+{
+ "instrument": "2.1",
+ "params": "d494ce0b89",
+ "bound_deg": 45.0,
+ "bevel_built_deg": 45.0,
+ "scan_step_deg": 2.5,
+ "res_deg": 0.1,
+ "rest_budget_mm3": 1.0,
+ "joints": 9,
+ "printed_stop_deg": 18.0,
+ "collision_rule": "overlap - overlap_at_rest > 0.5 mm3",
+ "theta_joint_deg": null,
+ "total_deg": null,
+ "closure_gap_mm": null,
+ "gap_over_L": null,
+ "stopped_by": [],
+ "stop_recommended_deg": null,
+ "v1_equivalent_e_max": null,
+ "s_tail": null,
+ "tail_margin_xyz": null,
+ "enroll_class": "censored",
+ "scan_trace": [],
+ "measure_timed_out": false,
+ "limited_by": "invalid",
+ "reason": "rest_interference",
+ "rest_max_mm3": 9.0,
+ "rest_over_budget": [
+  [
+   8,
+   9,
+   9.0
+  ]
+ ],
+ "seconds": 0.3,
+ "print_valid": false,
+ "violations": [
+  "seg7: 3 solids"
+ ],
+ "pitch": 8.05,
+ "hinge_z": 11.73,
+ "hinge_width": 13.7,
+ "knuckle": 4.27,
+ "pin_wall": 1.62,
+ "preset": "asaphida",
+ "order": "asaphida",
+ "blurb": "Asaphida \u2014 Gon p. __. Effaced, broad, 8 segments, isopygous.",
+ "bevel_probe": {
+  "45.0": 1
+ },
+ "unsane_parts": [
+  "seg7"
+ ],
+ "build_notes": [
+  [
+   "head",
+   "eye solid",
+   "0 lenses/eye"
+  ],
+  [
+   "seg1",
+   "rebuilt",
+   "grid jitter +2"
+  ],
+  [
+   "seg7",
+   "UNSANE after retries",
+   ""
+  ]
+ ],
+ "build_seconds": 92.7,
+ "schema_notes": [],
+ "closure_ref": "head",
+ "wedge": {
+  "reach": 0.15,
+  "reach_wide": 0.5
+ },
+ "gap_curve": null
+}

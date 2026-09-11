@@ -1,1 +1,0 @@
-agnostida: bound 35.0 probe {45.0: 3, 35.0: 1} build 25s unsane [] | theta 0.0 total 0.0 gap 11.02 anatomy by [(2, 3, 10.7)] print True []
