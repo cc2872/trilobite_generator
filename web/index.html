@@ -62,6 +62,7 @@
   svg.map .hit{fill:none;stroke:#000;stroke-opacity:0;stroke-width:12;cursor:pointer;pointer-events:stroke}
   svg.map .h{fill:var(--bg);stroke:var(--ink);stroke-width:1.2;cursor:grab}
   svg.map .h:hover{fill:var(--ink)}
+  svg.map .h.two{cursor:move}
   svg.map .step{fill:var(--bg);stroke:var(--line);cursor:pointer}
   svg.map .step:hover{stroke:var(--ink)}
   svg.map .steplab{fill:var(--ink);font-size:12px;pointer-events:none}
@@ -128,6 +129,7 @@ function fmt(v,m){return (m.kind==='int'||m.kind==='odd_int')?String(Math.round(
 function clampP(k,v){ const m=META[k]; v=Math.min(Math.max(+v,m.lo),m.hi); if(m.kind==='int') v=Math.round(v);
   if(m.kind==='odd_int'){ v=Math.round(v); if(v%2===0) v=Math.min(v+1,m.hi); } return v; }
 function setP(k,v){ P[k]=clampP(k,v); lastMeas=null; drawMap(); syncPanel(k); }
+function setP2(k1,v1,k2,v2){ P[k1]=clampP(k1,v1); P[k2]=clampP(k2,v2); lastMeas=null; drawMap(); syncPanel(k1); syncPanel(k2); }
 function set(k,v){P[k]=v; lastMeas=null; redraw(); dirty();}
 function syncPanel(k){ const el=C.querySelector('.ctrl[data-k="'+k+'"]'); if(!el) return;
   const inp=el.querySelector('input[type=range]'); if(inp) inp.value=P[k];
@@ -157,6 +159,9 @@ const MAPW=300, MAPH=400;
 let HND=[], drag=null;
 const F=v=>(+v).toFixed(1);
 function hnd(k,x,y,inv){ const i=HND.length; HND.push({k,inv}); return `<circle class="h" data-i="${i}" cx="${F(x)}" cy="${F(y)}" r="3.2"><title>${META[k].label}</title></circle>`; }
+function hnd2(kx,ky,x,y,invx,invy){       // one grip, two axes: across sets kx, along sets ky
+  const i=HND.length; HND.push({kx,ky,invx,invy});
+  return `<circle class="h two" data-i="${i}" cx="${F(x)}" cy="${F(y)}" r="4"><title>${META[ky].label} · ${META[kx].label}</title></circle>`; }
 function reg(c,d){ return `<path class="reg${sel===c?' on':''}" data-c="${c}" d="${d}"/>`; }
 function mt(x,y,s,anchor){ return `<text x="${F(x)}" y="${F(y)}"${anchor?` text-anchor="${anchor}"`:''}>${s}</text>`; }
 function geom(){
@@ -234,16 +239,21 @@ function drawMap(){
     o.push(`<circle class="ghost" cx="${F(xe)}" cy="${F(ye)}" r="4"/>`, `<circle class="hit" data-c="a1" cx="${F(xe)}" cy="${F(ye)}" r="4" stroke-width="8"/>`,
            hnd('eyeSize',xe+4,ye,q=>(q.x-xe)/hw));
   }
-  // genal spine: the long horn sweeping back off the cheek
-  const Lg=P.genalSpine*hL*g.scGenal, cur=Math.tan(P.genalCurve*Math.PI/180), gx=hw*0.96, gyr=headY(g,0.96,'rear');
+  // genal spine: the long horn sweeping back off the cheek. The tip grip carries both of its numbers —
+  // drag along the body for length, across it for curve (signed: out past the pleurae, or in over them).
+  const Lg=P.genalSpine*hL*g.scGenal, gx=hw*0.96, gyr=headY(g,0.96,'rear');
+  const outRoom=MAPW-16-(cx+gx), inRoom=Math.max(gx-a-6,8);
+  const curPx=q=>0.30*Math.max(q,12)*Math.tan(P.genalCurve*Math.PI/180);   // sideways reach of the tip, signed
+  const invCurve=(q,len)=>Math.atan((q.x-(cx+gx))/(0.30*Math.max(len,12)))*180/Math.PI;
   if(Lg>3){
-    const dx=Math.min(0.30*Lg*Math.max(cur,0)+5, MAPW-16-(cx+gx));
+    const dx=Math.max(Math.min(curPx(Lg), outRoom), -inRoom);
     const horn=s=>`M${F(cx+s*gx)} ${F(gyr)} Q${F(cx+s*(gx+0.35*dx))} ${F(gyr+0.60*Lg)} ${F(cx+s*(gx+dx))} ${F(gyr+Lg)}`;
     o.push(`<path class="mir" d="${horn(-1)}"/>`, `<path class="ink" d="${horn(1)}"/>`, `<path class="hit" data-c="a1" d="${horn(1)}"/>`);
-    o.push(mt(cx+gx+dx+3, gyr+Lg,'length'), hnd('genalSpine',cx+gx+dx,gyr+Lg,q=>(q.y-gyr)/(hL*g.scGenal)));
+    o.push(mt(cx+gx+dx+4, gyr+Lg,'length · curve'),
+           hnd2('genalCurve','genalSpine',cx+gx+dx,gyr+Lg,q=>invCurve(q,Lg),q=>(q.y-gyr)/(hL*g.scGenal)));
   } else {
     o.push(`<path class="ghost" d="M${F(cx+gx)} ${F(gyr)} L${F(cx+gx+7)} ${F(gyr+9)}"/>`,
-           hnd('genalSpine',cx+gx+7,gyr+9,q=>(q.y-gyr)/(hL*g.scGenal)));
+           hnd2('genalCurve','genalSpine',cx+gx+7,gyr+9,q=>invCurve(q,12),q=>(q.y-gyr)/(hL*g.scGenal)));
   }
   // pleural spine: the outward arrow the sketch labels "spine length"
   const im=Math.floor(seg/2), ym=yH+im*p+p*0.42, wm=wAt(g,im), Ls=P.spineBase*hw*g.scSpine, sa=P.spineSweep*Math.PI/180;
@@ -284,7 +294,7 @@ const mapEl=$('map');
 function mpt(e){ const b=mapEl.getBoundingClientRect(); return {x:(e.clientX-b.left)*MAPW/b.width, y:(e.clientY-b.top)*MAPH/b.height}; }
 mapEl.addEventListener('pointerdown',e=>{
   const h=e.target.closest('.h');
-  if(h){ const H=HND[+h.dataset.i]; drag={k:H.k, inv:H.inv, v0:P[H.k], p0:mpt(e)}; mapEl.setPointerCapture(e.pointerId); e.preventDefault(); return; }
+  if(h){ const H=HND[+h.dataset.i]; drag={H, v0:H.k?P[H.k]:0, p0:mpt(e)}; mapEl.setPointerCapture(e.pointerId); e.preventDefault(); return; }
   const cyc=e.target.closest('[data-cyc]');
   if(cyc){ const k=cyc.dataset.cyc; setP(k,(Math.round(P[k]||0)+1)%(META[k].hi+1)); sel=cyc.dataset.c||sel; render(); dirty(); return; }
   const st=e.target.closest('[data-seg]');
@@ -293,7 +303,8 @@ mapEl.addEventListener('pointerdown',e=>{
   if(r){ sel=r.dataset.c; render(); }
 });
 mapEl.addEventListener('pointermove',e=>{
-  if(drag){ const q=mpt(e); q.dx=q.x-drag.p0.x; q.dy=q.y-drag.p0.y; q.v0=drag.v0; setP(drag.k, drag.inv(q)); return; }
+  if(drag){ const q=mpt(e); q.dx=q.x-drag.p0.x; q.dy=q.y-drag.p0.y; q.v0=drag.v0; const H=drag.H;
+    if(H.k) setP(H.k,H.inv(q)); else setP2(H.kx,H.invx(q),H.ky,H.invy(q)); return; }
   const r=e.target.closest('[data-c]'); highlight(r&&ROWOF[r.dataset.c]?ROWOF[r.dataset.c]:null);
 });
 mapEl.addEventListener('pointerup',()=>{ if(drag){ drag=null; dirty(); } });
@@ -302,7 +313,7 @@ mapEl.addEventListener('pointerleave',()=>highlight(null));
 const VISUAL={
  frame:()=>[slider('length'), slider('width'), slider('relief'), slider('segCount'), slider('cephFrac'), slider('pygFrac')],
  b1:()=>[glyph('glab','0 0 340 125'), slider('glabInflate'), slider('glabRise'), slider('glabLobes'), slider('glabFront'), slider('headOutlineExp'), slider('headDomeExp'), slider('cephParallel')],
- a1:()=>[slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('genalSpine'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
+ a1:()=>[slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('genalSpine'), slider('genalCurve'), slider('genalPath'), slider('genalTaper'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
  b2:()=>[slider('axisFrac'), slider('axisRise'), slider('furrowDepth')],
  a2:()=>[glyph('pleura','0 0 340 110'), slider('fulcrum'), slider('pleuralSlope'), slider('overlap'), slider('spineBase')],
  b3:()=>[slider('pygRings'), slider('tailRelief'), slider('tailDomeExp')],
