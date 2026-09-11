@@ -80,7 +80,7 @@ def api_build():
                 out.append(dict(name=name, error=str(ex)[:120]))
         man = dict(key=key, parts=out, kinematics=_kinematics(P), print=I.print_validity(P), schema_notes=notes, build_notes=bnotes,
                    build_seconds=round(time.time() - t0, 1), schema=schema.SCHEMA_VERSION)
-        json.dump(man, open(manifest, "w")); _evict()
+        json.dump(P, open(os.path.join(folder, "params.json"), "w")); json.dump(man, open(manifest, "w")); _evict()
         return jsonify(man)
 
 @app.post("/api/measure")
@@ -109,7 +109,9 @@ def api_sheet():
     with LOCK:
         names = [p["name"] for p in man["parts"] if "error" not in p]
         meshes = [trimesh.load(os.path.join(folder, f"{n}.stl")) for n in names]
-        flat = trimesh.util.concatenate(meshes)
+        # parts are built in their own frames (front hinge at y = 0): place them at rest before drawing
+        mats0 = I.transforms_deg(P, 0.0)
+        flat = trimesh.util.concatenate([mm.copy().apply_transform(T) for mm, T in zip(meshes, mats0)])
         m = dict(meas or {}); m.setdefault("limited_by", "not measured"); m.setdefault("enroll_class", "—")
         m.update(hinge_z=round(parts.hinge_z(P), 2), pitch=round(parts.pitch(P), 2), knuckle=round(parts.hinge_width(P) / int(P["nKnuckles"]) - P["clearance"], 2),
                  e_max=m.get("v1_equivalent_e_max", "—"), params=key, print_valid=man["print"]["print_valid"])
@@ -127,7 +129,10 @@ def api_stl(key):
     folder = os.path.join(CACHE, key); man = json.load(open(os.path.join(folder, "manifest.json")))
     out = os.path.join(folder, "flat.stl")
     if not os.path.exists(out):
-        trimesh.util.concatenate([trimesh.load(os.path.join(folder, f"{p['name']}.stl")) for p in man["parts"] if "error" not in p]).export(out)
+        P = schema.coerce(json.load(open(os.path.join(folder, "params.json")))) if os.path.exists(os.path.join(folder, "params.json")) else None
+        meshes = [trimesh.load(os.path.join(folder, f"{p['name']}.stl")) for p in man["parts"] if "error" not in p]
+        mats0 = I.transforms_deg(P, 0.0) if P is not None else [__import__("numpy").eye(4)] * len(meshes)
+        trimesh.util.concatenate([mm.copy().apply_transform(T) for mm, T in zip(meshes, mats0)]).export(out)
     return send_file(out, as_attachment=True, download_name=f"trilobite_{key}.stl")
 
 @app.get("/files/<key>/<path:name>")
