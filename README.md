@@ -1,14 +1,15 @@
 # trilobite generator 6.0 · instrument 2.1
 
-A parametric generator for articulated dorsal plate chains — trilobites first — with a fixed-ruler enrolment
+A parametric generator for articulated dorsal plate chains trilobites first with a fixed-ruler enrolment
 instrument, a printable animal, a labeled blueprint sheet, and a website. No OpenCascade: numpy height fields and
 Manifold booleans, mirror-symmetric by construction.
 
     pip install -r requirements.txt flask
-    python -m pytest tests -q                 # ~8 min; the reading regressions build whole animals
-    python sweep.py presets                   # the ten orders -> out/<name>/ + out/presets.csv
-    python blueprint.py gallery out           # out/gallery.png
-    python web/app.py                         # http://localhost:8765  (PORT env overrides; trilomorph.org runs this image)
+    python -m pytest tests -q              animals
+    python sweep.py presets 
+    out/presets.csv
+    python blueprint.py gallery out           
+    python web/app.py                        
 
 ## Layout (95 parameters, 8 modules)
 | file | what |
