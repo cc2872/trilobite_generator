@@ -6,7 +6,7 @@ validation, UI sliders, dataset columns, JSON round-trip, the parameter hash on 
 artifact — derives from this table. Add a parameter here and it exists everywhere.
 """
 from dataclasses import dataclass, asdict
-import json, hashlib
+import json, hashlib, warnings
 
 SCHEMA_VERSION = "6.0"      # 11 Sep 2026: ornament, skins, seed and eyeElong removed; prongs added; CELLS is the UI contract
 
@@ -254,10 +254,15 @@ PRESETS = {
     "reference": dict(_FORM, **_sculpt(0.0)),
     # the default animal (6 Sep 2026 evening): the reference form with our sculpt, re-proportioned to read as a classic
     # trilobite — 9 segments at 150 mm (pitch 8.5 ≥ 8), short forks, small formula genal spines, slight crescent rear.
+    # 13 Sep 2026: eyeSolid=1 by default — the revolved eye with its lens lattice (parts.eye_solid), not the
+    # height-field bump. The default animal now shows the eye the builder can actually make; ~87 lenses on this
+    # head, a second or two of Manifold booleans. eyeSolid=0 is still there for a quick build.
     "textured":  dict(dict(_FORM, **_sculpt(1.0)), eyeArc=150,
                       length=150, width=72, segCount=9, cephFrac=0.30, pygFrac=0.22, pygSpine=0.35, pygSplay=16, pygRings=4,
                       genalSpine=0.32, genalCurve=12, genalPath="s**2", genalWidthMM=5, genalTaper=2.2, headRearArc=0.12, headRearExp=2.0,
-                      eyeSize=0.16, eyeHeight=0.85, eyePos=0.62, glabInflate=1.35, widthThoraxRear=0.62, widthTail=0.55, tipTaper=0.8),
+                      eyeSize=0.16, eyeHeight=0.85, eyePos=0.62, eyeSolid=1, eyeSlope=15, eyeProfile=4.0,
+                      lensD=0.14, lensGap=0.25, lensRise=0.35,
+                      glabInflate=1.35, widthThoraxRear=0.62, widthTail=0.55, tipTaper=0.8),
 }
 # ---- species presets fitted from scans (6 Sep 2026). Each is the sculpted default plus measured form; nothing here
 #      changes _FORM or "textured".
@@ -267,7 +272,8 @@ PRESETS["harpetid"] = dict(PRESETS["textured"],
     cephFrac=0.42, pygFrac=0.10, segCount=9, width=72, headDomeExp=1.42, headDomeFill=0.61, headOutlineExp=1.89,
     marginHeight=0.33, genalSpine=1.2, genalCurve=2, genalWidth=0.30, genalTaper=0.6, genalSweep=0.05, cephParallel=0.02,
     widthThoraxFront=0.58,          # harpid thorax is narrow inside the horseshoe: 55 / 96 mm on the scan
-    eyeSize=0.05, eyeHeight=1.0, eyePos=0.45, glabRise=0.12, borderWidth=0.0, pygSpine=0.0, pygRings=2,
+    eyeSize=0.05, eyeHeight=1.0, eyePos=0.45, eyeSolid=0,   # 0.05 wh is below the lens threshold; keep the scan's bump eye
+    glabRise=0.12, borderWidth=0.0, pygSpine=0.0, pygRings=2,
     spineBase=0.0, widthMaxPos=0.12, widthThoraxRear=0.42, widthTail=0.30, tipTaper=0.7)
 PRESETS["phacopid"] = dict(PRESETS["textured"],
     # Phacops sp. scan (25 × 15 mm, matrix masked): eyes at 0.55 ± 0.1 of half-width, 0.75 Lc from the front,
@@ -288,11 +294,24 @@ def preset(name):
 def defaults():
     return preset(DEFAULT_PRESET)
 
-def coerce(P, base=None):
-    """Fill missing keys with defaults, clamp to range, enforce int/odd-int kinds. Unknown keys are dropped."""
+def unwrap(P):
+    """A preset FILE is {"schema": ..., "params": {...}}; only the inner dict holds parameters. Passing the file
+    root used to match zero keys and coerce silently to the DEFAULT animal — a whole sweep could run on the wrong
+    geometry without a word (13 Sep 2026). Accept either shape, and report which one was given."""
+    P = P or {}
+    if isinstance(P, dict) and isinstance(P.get("params"), dict) and not any(k in BY_KEY for k in P):
+        return P["params"], True
+    return P, False
+
+def coerce(P, base=None, quiet=False):
+    """Fill missing keys with defaults, clamp to range, enforce int/odd-int kinds. Unknown keys are dropped.
+    A dict that carries no parameter at all warns: that case is almost always a caller mistake, not an empty edit."""
+    P, _ = unwrap(P)
     Q = dict(base) if base is not None else table_defaults()   # 8 Sep 2026: was defaults() (= textured), which leaked its crescent into every JSON preset
-    for k, v in (P or {}).items():
+    hits = 0
+    for k, v in P.items():
         if k in BY_KEY:
+            hits += 1
             p = BY_KEY[k]
             if p.kind == "expr":
                 Q[k] = str(v)[:120]; continue
@@ -302,13 +321,22 @@ def coerce(P, base=None):
                 v = int(round(v))
                 if p.kind == "odd_int" and v % 2 == 0: v = min(v + 1, int(p.hi))
             Q[k] = v
+    if P and hits == 0 and not quiet:
+        warnings.warn(f"schema.coerce: none of the {len(P)} given keys is a parameter "
+                      f"({', '.join(sorted(map(str, P))[:4])}) — the animal is the base/default one, not yours. "
+                      "A preset file is {'schema': ..., 'params': {...}}: pass its 'params'.",
+                      RuntimeWarning, stacklevel=2)
     return Q
 
 def coerce_report(P, base=None):
     """coerce() plus a list of what it silently did: keys clamped to range, int-rounded, or dropped as unknown.
     The sweep records these per row (pre-registration gate 6) so a preset that leaned on a clamp is visible."""
     notes = []
-    for k, v in (P or {}).items():
+    P, unwrapped = unwrap(P)
+    if unwrapped: notes.append("params: read from the preset file's 'params' block")
+    if P and not any(k in BY_KEY for k in P):
+        notes.append(f"no parameter keys among {len(P)} given ({', '.join(sorted(map(str, P))[:4])}): built the base animal")
+    for k, v in P.items():
         if k not in BY_KEY:
             notes.append(f"{k}: unknown key dropped"); continue
         p = BY_KEY[k]
@@ -319,7 +347,7 @@ def coerce_report(P, base=None):
         if f < p.lo or f > p.hi: notes.append(f"{k}: {f} clamped to [{p.lo}, {p.hi}]")
         elif p.kind in ("int", "odd_int") and abs(f - round(f)) > 1e-9: notes.append(f"{k}: {f} rounded to int")
         elif p.kind == "odd_int" and int(round(f)) % 2 == 0: notes.append(f"{k}: {f} bumped to odd")
-    return coerce(P, base=base), notes
+    return coerce(P, base=base, quiet=True), notes      # the note above already says it; no duplicate warning
 
 def to_json(P):
     return json.dumps({"schema": SCHEMA_VERSION, "params": coerce(P)}, sort_keys=True)
