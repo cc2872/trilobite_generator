@@ -95,7 +95,7 @@
     <div class="controls">
       <h1>Trilobite Morphospace</h1>
       <div class="ctrl"><div class="lab"><span>Order</span></div><select id="preset"></select></div>
-      <svg class="map" id="map" viewBox="0 0 384 372" xmlns="http://www.w3.org/2000/svg"></svg>
+      <svg class="map" id="map" viewBox="0 0 384 396" xmlns="http://www.w3.org/2000/svg"></svg>
       <div class="sect" id="cellname"></div>
       <div id="C"></div>
       <div class="more" id="more">more</div>
@@ -160,7 +160,7 @@ const DRAW={
 // Filled regions pick a cell. The callouts the sketch labels — prong, eye R and arc, genal and
 // pleural spine length, the w arrow, the head / thorax / tail brackets — are live handles, so the
 // annotations ARE the controls. Sliders under the map stay for numeric precision.
-const PLANW=300, MAPH=372, EX0=306;   // plan occupies 0..PLANW; the elevation strip starts at EX0
+const PLANW=300, MAPH=396, EX0=306;   // plan occupies 0..PLANW; the elevation strip starts at EX0
 let MAPW=384;                         // total width, set per redraw from how far the strip actually reaches
 let HND=[], drag=null;
 const F=v=>(+v).toFixed(1);
@@ -316,13 +316,13 @@ function drawMap(){
          mt(PLANW-42,sy0+26,seg+' seg'));
   // lens packing: the lattice the eye is actually built with, three rows of it, with a dial for the gap —
   // swept left (lenses touching, holochroal) to right (wide sclera between them).
-  const eRp=Math.max(P.eyeSize*P.width/2,0.1), pp=11, lr=pp/(2*(1+P.lensGap)), lx=12, ly=MAPH-26;
+  const eRp=Math.max(P.eyeSize*P.width/2,0.1), pp=11, lr=pp/(2*(1+P.lensGap)), lx=12, ly=MAPH-34;
   for(let r0=0;r0<3;r0++) for(let c0=0;c0<6;c0++){
     const ox2=lx+(c0+0.5*(r0%2))*pp, oy2=ly+r0*0.87*pp;
     if(ox2>lx+6.5*pp) continue;
     o.push(`<circle class="lens" cx="${F(ox2)}" cy="${F(oy2)}" r="${F(lr)}"/>`);
   }
-  o.push(mt(lx,ly-8,(P.lensD*eRp).toFixed(2)+' mm lens'));
+  o.push(mt(lx,ly-9,'eye packing · '+(P.lensD*eRp).toFixed(2)+' mm'));
   o.push(`<rect class="hit" data-c="a1" x="${F(lx-4)}" y="${F(ly-14)}" width="${F(7*pp)}" height="${F(3*pp)}" stroke-width="0" fill="#000" fill-opacity="0.001" style="pointer-events:all"/>`);
   const gm=META.lensGap, dcx=lx+7*pp+16, dcy=ly+pp, dr=12;                      // the gap dial
   const gt=Math.PI*(1-(P.lensGap-gm.lo)/(gm.hi-gm.lo));                         // pi at the low end, 0 at the high
