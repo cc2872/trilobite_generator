@@ -340,10 +340,21 @@ function drawMap(){
   o.push(hnd('tailRelief',zx(R*P.tailRelief*0.9),yT+0.45*tL,q=>zmm(q)/(0.9*R)));
   o.push(hnd('glabRise',zx(R*(1+P.glabRise)),y0+0.25*hL,q=>zmm(q)/R-1));
   o.push(hnd('eyeHeight',zx(ebase)+barW,ye,q=>(zmm(q)-ebase)/eRmm));
+  // dorsal spines: they leave the plan entirely, so this is the only view that can show them. Drawn at the
+  // pitch the builder gives them (axial 60° off the body line, occipital 55°), dotted and grabbable at zero.
+  const spine=(k,len,zc,yc,pitch)=>{
+    const s=Math.sin(pitch), c=Math.cos(pitch), px=Math.max(len*pxmm,0);
+    const tipx=zx(zc)+px*s, tipy=yc+px*c, gx2=Math.max(tipx,zx(zc)+9);
+    o.push(`<path class="${len>0.3?'ink':'ghost'}" d="M${F(zx(zc))} ${F(yc)} L${F(len>0.3?tipx:zx(zc)+9*s)} ${F(len>0.3?tipy:yc+9*c)}"/>`);
+    o.push(hnd(k,gx2,len>0.3?tipy:yc+9*c,q=>(zmm(q)-zc)/Math.max(s,0.2)));
+  };
+  spine('axialSpine', P.axialSpine*R, R*(1+P.axisRise), yH+(Math.floor(seg/2)+0.5)*p, Math.PI/3);
+  spine('occipitalSpine', P.occipitalSpine*(P.cephFrac*P.length), R*(1+P.axisRise), yH-0.07*hL, 55*Math.PI/180);
   if(Math.round(P.headProngs)>0)
     o.push(`<path class="dim" d="M${F(zx(R*0.3))} ${F(y0-8)} L${F(zx(R*0.3)+0.4*P.headProngCurl)} ${F(y0-8)}"/>`,
            hnd('headProngCurl',zx(R*0.3)+0.4*P.headProngCurl,y0-8,q=>(q.x-zx(R*0.3))/0.4));
-  MAPW=EX0+Math.max(16+pxmm*Math.max(R*(1+P.axisRise), R*P.headRelief, R*(1+P.glabRise), ebase+P.eyeHeight*eRmm), 60);
+  MAPW=EX0+Math.max(16+pxmm*Math.max(R*(1+P.axisRise)+0.87*Math.max(P.axialSpine*R,P.occipitalSpine*P.cephFrac*P.length),
+                                     R*P.headRelief, R*(1+P.glabRise), ebase+P.eyeHeight*eRmm), 60);
   $('map').setAttribute('viewBox',`0 0 ${F(MAPW)} ${MAPH}`);
   $('map').innerHTML=o.join('');
 }
@@ -385,9 +396,9 @@ function packing(){ const d=document.createElement('div'); d.className='pack';
   return d; }
 const VISUAL={
  frame:()=>[slider('length'), slider('width'), slider('relief'), slider('segCount'), slider('cephFrac'), slider('pygFrac')],
- b1:()=>[glyph('glab','0 0 340 125'), slider('glabInflate'), slider('glabRise'), slider('glabLobes'), slider('glabFront'), slider('headOutlineExp'), slider('headDomeExp'), slider('cephParallel')],
+ b1:()=>[glyph('glab','0 0 340 125'), slider('glabInflate'), slider('glabRise'), slider('glabLobes'), slider('glabFront'), slider('headOutlineExp'), slider('headDomeExp'), slider('cephParallel'), slider('occipitalSpine')],
  a1:()=>[packing(), slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('eyePos'), slider('eyeLat'), slider('eyeStalk'), slider('eyeStalkR'), slider('eyeSolid'), slider('eyeSlope'), slider('eyeShade'), slider('eyeProfile'), slider('lensD'), slider('lensGap'), slider('lensRise'), slider('genalSpine'), slider('genalCurve'), slider('genalPath'), slider('genalTaper'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
- b2:()=>[slider('axisFrac'), slider('axisRise'), slider('furrowDepth')],
+ b2:()=>[slider('axisFrac'), slider('axisRise'), slider('furrowDepth'), slider('ringArch'), slider('axialSpine')],
  a2:()=>[glyph('pleura','0 0 340 110'), slider('fulcrum'), slider('pleuralSlope'), slider('overlap'), slider('spineBase'), slider('spineSweep')],
  b3:()=>[slider('pygRings'), slider('tailRelief'), slider('tailDomeExp')],
  a3:()=>[slider('pygWidth'), slider('pygSpine'), slider('pygSplay'), slider('pygMarginal'), slider('tailProngs'), slider('tailProngLen'), slider('tailProngSplay'), slider('tailProngStem'), slider('tailProngCenter'), slider('tailProngCurl')],
