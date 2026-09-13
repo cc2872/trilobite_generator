@@ -8,7 +8,8 @@ artifact — derives from this table. Add a parameter here and it exists everywh
 from dataclasses import dataclass, asdict
 import json, hashlib, warnings
 
-SCHEMA_VERSION = "6.0"      # 11 Sep 2026: ornament, skins, seed and eyeElong removed; prongs added; CELLS is the UI contract
+SCHEMA_VERSION = "6.1"      # 13 Sep 2026: eyeStalk / eyeStalkR added (pedunculate eyes). 6.0: ornament, skins, seed
+                            # and eyeElong removed; prongs added; CELLS is the UI contract
 
 @dataclass(frozen=True)
 class Param:
@@ -79,6 +80,8 @@ PARAMS = [
     Param("lensD", "Lens diameter", 0.16, 0.02, 0.4, 0.01, "Head", "Lens diameter / R (holochroal ~0.05, schizochroal 0.1–0.2)"),
     Param("lensGap", "Lens gap", 0.3, 0.0, 0.6, 0.05, "Head", "Sclera between lenses / lens diameter (0 = holochroal)"),
     Param("lensRise", "Lens rise", 0.35, 0.0, 1.0, 0.05, "Head", "Lens cap height / lens radius"),
+    Param("eyeStalk", "Eye stalk", 0.0, 0.0, 4.0, 0.05, "Head", "Pedunculate eye: stalk length / eye radius (0 = sessile, sitting on the cheek)"),
+    Param("eyeStalkR", "Eye stalk width", 0.45, 0.15, 1.0, 0.05, "Head", "Stalk radius / eye radius"),
     Param("genalSweep", "Cheek sweep", 0.8, 0.0, 2.5, 0.05, "Head", "How far the cheeks sweep back along the shoulder / segment pitch"),
     Param("borderWidth", "Border width", 0.10, 0.0, 0.30, 0.01, "Head", "Raised border / head half-width (0 = none)"),
     Param("genalSpine", "Genal spine length", 0.35, 0.0, 1.5, 0.01, "Head", "Genal spine length / head length (0 = none)"),
@@ -194,6 +197,7 @@ CELLS = {
                more=["glabFront", "headDomeExp", "headDomeFill", "headOutlineExp", "cephParallel", "headRelief", "headWall", "occipitalSpine"]),
     "a1": dict(label="Cheek + genal angle", doc="the side of the head: eye, border, genal spine or prolongation", primary=["eyeSize", "genalSpine", "headRearArc"],
                more=["eyePos", "eyeArc", "eyeHeight", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade", "lensD", "lensGap", "lensRise",
+                     "eyeStalk", "eyeStalkR",
                      "borderWidth", "genalSweep", "genalCurve", "genalPath", "genalWidth", "genalWidthMM", "genalTaper", "headRearExp",
                      "headProngs", "headProngLen", "headProngSplay", "headProngStem", "headProngCenter", "headProngWidth", "headProngCurl"]),
     "b2": dict(label="Axial rings", doc="the ring chain over the hinges", primary=["axisFrac", "axisRise", "furrowDepth"],

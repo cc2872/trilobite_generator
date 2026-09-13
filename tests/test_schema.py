@@ -7,13 +7,13 @@ import schema, parts, mesh as M
 REF = os.path.join(ROOT, "tests", "references")
 
 def test_version_and_coverage():
-    assert schema.SCHEMA_VERSION == "6.0"
+    assert schema.SCHEMA_VERSION == "6.1"
     missing, dup = schema.cells_check(); assert missing == [] and dup == []
     for c, d in schema.CELLS.items(): assert len(d["primary"]) == 3, c
 
 def test_presets_are_v6():
     for f in glob.glob(os.path.join(ROOT, "presets", "*.json")):
-        d = json.load(open(f)); assert d.get("schema") == "6.0", f
+        d = json.load(open(f)); assert d.get("schema", "").startswith("6."), f    # 6.1 only adds keys; 6.0 files still load
         assert not (set(d["params"]) & schema.DEAD_KEYS), f
         Q, notes = schema.coerce_report(d["params"], base=schema.table_defaults())
         assert not any("unknown key" in n for n in notes), (f, notes)

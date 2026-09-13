@@ -464,7 +464,7 @@ def cephalon_plan(P, notes=None):
     return dict(outline=outline, zfun=zfun, xmax=xmax, arm_outline=arm_outline, arm_z=arm_z, Lg=Lg, t=t, c=c, h=h, Lc=Lc,
                 wh=wh, a=a, margin=margin, u_a=a / X_tip, eye=G)
 
-def eye_solid(R, H, slope_deg, shade, arc_deg, lensD, lensGap, lensRise, embed=1.0, max_lenses=400, clip_x=None):
+def eye_solid(R, H, slope_deg, shade, arc_deg, lensD, lensGap, lensRise, stalk=0.0, stalk_r=0.45, embed=1.0, max_lenses=400, clip_x=None):
     """The eye as its own solid (eye_solid.py on Manifold): revolved drum over the visual arc, a palpebral lobe inward,
     spherical-cap lenses on a hex lattice within +-arc/2 of the outward (+x) direction. Frame: axis z, outward +x,
     base at z = -embed. Returns (mesh, n_lenses)."""
@@ -503,6 +503,9 @@ def eye_solid(R, H, slope_deg, shade, arc_deg, lensD, lensGap, lensRise, embed=1
         c = ((r - depth * nx) * math.cos(th), (r - depth * nx) * math.sin(th), s + depth * nz)
         spheres.append(M.to_manifold(sph.copy().apply_translation(c)))
     if spheres: body = body + Manifold.batch_boolean(spheres, __import__("manifold3d").OpType.Add)
+    if stalk > 0.05:                                                  # pedunculate eye: a tapered stalk under the drum,
+        r0 = stalk_r * R                                              # planted where the sessile eye's base would sit
+        body = body + M.to_manifold(M.frustum(r0, 0.7 * r0, stalk + embed)).translate((0, 0, -embed - stalk))
     return M.from_manifold(body), len(cs)
 
 def lens_centres(R, H, slope, arc, lensD, lensGap):
@@ -519,7 +522,8 @@ def lens_centres(R, H, slope, arc, lensD, lensGap):
 
 def eye_params(P, eR):
     return dict(R=eR, H=P.get("eyeHeight", 1.7) * eR, slope_deg=P.get("eyeSlope", 15.0), shade=P.get("eyeShade", 0.0),
-                arc_deg=P.get("eyeArc", 110.0), lensD=P.get("lensD", 0.16), lensGap=P.get("lensGap", 0.3), lensRise=P.get("lensRise", 0.35))
+                arc_deg=P.get("eyeArc", 110.0), lensD=P.get("lensD", 0.16), lensGap=P.get("lensGap", 0.3), lensRise=P.get("lensRise", 0.35),
+                stalk=P.get("eyeStalk", 0.0) * eR, stalk_r=P.get("eyeStalkR", 0.45))
 
 def cephalon(P, bevel_deg=None, grid=(121, 61), notes=None):
     """The head as ONE solid: shell, rear hinge (wide), crescent arms, solid eyes (if eyeSolid), occipital spine."""
@@ -533,8 +537,8 @@ def cephalon(P, bevel_deg=None, grid=(121, 61), notes=None):
     if P.get("eyeSolid", 0) > 0.5 and P["eyeSize"] > 0.01:
         G = S["eye"]; EP = eye_params(P, G["eR"])
         xm = float(S["xmax"](np.array([G["ye"]]))[0]) - 0.4
-        eye, n_lens = eye_solid(**EP, clip_x=xm - G["xe"])
-        zb = float(S["zfun"](np.array([G["xe"]]), np.array([G["ye"]]))[0]) - 0.3
+        eye, n_lens = eye_solid(**EP, clip_x=None if EP["stalk"] > 0.05 else xm - G["xe"])   # a stalked eye may overhang
+        zb = float(S["zfun"](np.array([G["xe"]]), np.array([G["ye"]]))[0]) - 0.3 + EP["stalk"]
         e = eye.copy().apply_translation((G["xe"], G["ye"], zb))
         # union the RIGHT eye only, cut the head at the sagittal plane, mirror, weld: symmetric by construction.
         # (union(head, e, mirror(e)) left a ~1 mm asymmetric patch under the left eye's base — a Manifold artifact on
