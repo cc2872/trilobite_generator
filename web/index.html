@@ -338,15 +338,16 @@ function drawMap(){
          + `<rect class="mir" x="${F(zx(bz))}" y="${F(by-0.5*barH)}" width="${F(barPx)}" height="${F(barH)}"/>`
          + hndBox('eyeStalk',zx(bz),by-0.5*barH,barPx,barH,q=>(zmm(q)-eb-0.5*barL*lc)/Math.max(lc,0.25)/eRmm)
          + `</g>`);
-  if(stk>0.05){                                   // a protractor at the stalk root: quadrant, ticks, grip on the arc
-    const rr=Math.max((stk+barL)*pxmm*0.78,24), cxp=zx(eb), cyp=ye;
-    o.push(`<path class="dim" d="M${F(cxp+rr)} ${F(cyp)} A${F(rr)} ${F(rr)} 0 0 0 ${F(cxp)} ${F(cyp-rr)}"/>`);
-    for(const d0 of [0,30,60,90]){ const t0=d0*Math.PI/180;
-      o.push(`<path class="dim" d="M${F(cxp+rr*Math.cos(t0))} ${F(cyp-rr*Math.sin(t0))} L${F(cxp+(rr+(d0%90?3:5))*Math.cos(t0))} ${F(cyp-(rr+(d0%90?3:5))*Math.sin(t0))}"/>`); }
-    o.push(`<path class="dim" d="M${F(cxp)} ${F(cyp)} L${F(cxp+rr*lc)} ${F(cyp-rr*ls)}"/>`);
-    o.push(hnd('eyeLean',cxp+rr*lc,cyp-rr*ls,
-               q=>Math.atan2(Math.max((ye-q.y)/pxmm,0), Math.max(zmm(q)-eb,0.001))*180/Math.PI));
-  }
+  // the lean protractor: a quadrant at the eye's root, always there — a sessile eye tips about its base on the
+  // cheek, a stalked one about the foot of its stalk, and the builder does the same.
+  const cxp=zx(eb), cyp=ye, rr=Math.max(Math.min((stk+barL)*pxmm*0.78, cyp-10), 22);
+  o.push(`<path class="dim" d="M${F(cxp+rr)} ${F(cyp)} A${F(rr)} ${F(rr)} 0 0 0 ${F(cxp)} ${F(cyp-rr)}"/>`);
+  for(const d0 of [0,30,60,90]){ const t0=d0*Math.PI/180, ex=rr+(d0%90?3:5);
+    o.push(`<path class="dim" d="M${F(cxp+rr*Math.cos(t0))} ${F(cyp-rr*Math.sin(t0))} L${F(cxp+ex*Math.cos(t0))} ${F(cyp-ex*Math.sin(t0))}"/>`); }
+  o.push(`<path class="ghost" d="M${F(cxp)} ${F(cyp)} L${F(cxp+rr*lc)} ${F(cyp-rr*ls)}"/>`);
+  o.push(hnd('eyeLean',cxp+rr*lc,cyp-rr*ls,
+             q=>Math.atan2(Math.max((ye-q.y)/pxmm,0), Math.max(zmm(q)-eb,0.001))*180/Math.PI));
+  const protRight=eb+rr/pxmm;                   // the arc must fit in the strip, or it is simply not on screen
   o.push(hnd('relief',zx(R*(1+P.axisRise)),yH+0.5*thL,q=>zmm(q)/(1+P.axisRise)));
   o.push(hnd('marginHeight',zx(mg),yH+0.78*thL,q=>zmm(q)/R));
   o.push(hnd('headRelief',zx(R*P.headRelief*0.85+R*0.075),y0+0.5*hL,q=>(zmm(q)-R*0.075)/(0.85*R)));
@@ -369,7 +370,7 @@ function drawMap(){
     o.push(`<path class="dim" d="M${F(zx(R*0.3))} ${F(y0-8)} L${F(zx(R*0.3)+0.4*P.headProngCurl)} ${F(y0-8)}"/>`,
            hnd('headProngCurl',zx(R*0.3)+0.4*P.headProngCurl,y0-8,q=>(q.x-zx(R*0.3))/0.4));
   MAPW=EX0+Math.max(16+pxmm*Math.max(R*(1+P.axisRise)+0.87*Math.max(P.axialSpine*R,P.occipitalSpine*P.cephFrac*P.length),
-                                     R*P.headRelief, R*(1+P.glabRise), bz+barL*lc), 60);
+                                     R*P.headRelief, R*(1+P.glabRise), bz+barL*lc, protRight), 60);
   $('map').setAttribute('viewBox',`0 0 ${F(MAPW)} ${MAPH}`);
   $('map').innerHTML=o.join('');
 }

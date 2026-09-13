@@ -507,9 +507,9 @@ def eye_solid(R, H, slope_deg, shade, arc_deg, lensD, lensGap, lensRise, stalk=0
         r0 = stalk_r * R                                              # planted where the sessile eye's base would sit
         body = body + M.to_manifold(M.frustum(r0, 0.7 * r0, stalk + embed)).translate((0, 0, -embed - stalk))
     out = M.from_manifold(body)
-    if stalk > 0.05 and abs(lean) > 0.5:                              # tip the whole eye forward about the stalk root;
-        import trimesh                                                # the head frame runs front = -y, so +x rotation
-        piv = (0, 0, -embed - stalk)                                  # carries the eye over the front margin at 90 deg
+    if abs(lean) > 0.5:                       # tip the eye forward about its root — the foot of the stalk if there is
+        import trimesh                        # one, else the base on the cheek. Head frame is front = -y, so +x turns
+        piv = (0, 0, -embed - stalk)          # it forward; at 90 deg it looks straight out over the front margin.
         out.apply_transform(trimesh.transformations.rotation_matrix(math.radians(lean), (1, 0, 0), piv))
     return out, len(cs)
 
