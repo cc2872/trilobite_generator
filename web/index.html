@@ -196,17 +196,23 @@ function headPath(g,s){
 function wAt(g,i){ return g.hw*(P.widthThoraxFront+(P.widthThoraxRear-P.widthThoraxFront)*(g.seg>1?i/(g.seg-1):0)); }
 function prong(g,which,x0,yr,dir,sc,base){   // dir: -1 forward off the head, +1 rearward off the tail
   const d=Math.round(P[which+'Prongs']||0), key=which+'ProngLen', cell=(which==='head'?'a1':'a3'), unit=base*sc;
-  const Lp=P[key]*unit, st=P[which+'ProngStem']*Lp, sp=P[which+'ProngSplay'], inv=p=>(dir<0?(yr-p.y):(p.y-yr))/unit;
+  const Lp=P[key]*unit, st=P[which+'ProngStem']*Lp, sp=P[which+'ProngSplay'];
+  const along=q=>dir<0?(yr-q.y):(q.y-yr);                      // distance out along the prong axis, px
+  const invLen=q=>along(q)/unit, invStem=q=>along(q)/Math.max(Lp,1e-6);
+  const invSplay=q=>2*Math.atan2(Math.abs(q.x-x0), Math.max(along(q)-st,1))*180/Math.PI;
   if(d===0) return [`<path class="ghost" d="M${F(x0)} ${F(yr)} L${F(x0)} ${F(yr+dir*15)}"/>`+mt(x0+5,yr+dir*12,'prong'),
                     `<path class="hit" data-cyc="${which}Prongs" data-c="${cell}" d="M${F(x0)} ${F(yr)} L${F(x0)} ${F(yr+dir*15)}"/>`, ''];
-  let ink=`<path class="ink" d="M${F(x0)} ${F(yr)} L${F(x0)} ${F(yr+dir*st)}"/>`, tx=x0, ty=yr+dir*Lp;
+  const ys=yr+dir*st;                                          // the split: end of the shaft, root of the tines
+  let ink=`<path class="ink" d="M${F(x0)} ${F(yr)} L${F(x0)} ${F(ys)}"/>`, tx=x0, ty=yr+dir*Lp;
   for(let k=0;k<d;k++){
     const off=(d===1?0:sp*(k/(d-1)-0.5))*Math.PI/180, len=(Lp-st)*((d%2===1&&k===(d-1)/2)?P[which+'ProngCenter']:1);
-    const x=x0+len*Math.sin(off), y=yr+dir*(st+len*Math.cos(off));
-    ink+=`<path class="ink" d="M${F(x0)} ${F(yr+dir*st)} L${F(x)} ${F(y)}"/>`;
+    const x=x0+len*Math.sin(off), y=ys+dir*len*Math.cos(off);
+    ink+=`<path class="ink" d="M${F(x0)} ${F(ys)} L${F(x)} ${F(y)}"/>`;
     if(k===0){ tx=x; ty=y; }
   }
-  return [ink, `<path class="hit" data-cyc="${which}Prongs" data-c="${cell}" d="M${F(x0)} ${F(yr)} L${F(x0)} ${F(yr+dir*Lp)}"/>`, hnd(key,tx,ty,inv)];
+  if(st>2) ink+=`<circle class="dim" cx="${F(x0)}" cy="${F(ys)}" r="2.2"/>`;      // the knot, where the shaft splits
+  return [ink, `<path class="hit" data-cyc="${which}Prongs" data-c="${cell}" d="M${F(x0)} ${F(yr)} L${F(x0)} ${F(yr+dir*Lp)}"/>`,
+          hnd(which+'ProngStem',x0,ys,invStem) + hnd2(which+'ProngSplay',key,tx,ty,invSplay,invLen)];
 }
 function drawMap(){
   const g=geom(), {cx,y0,L,y1,hw,hL,thL,tL,yH,yT,seg,a}=g; HND=[];
