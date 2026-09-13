@@ -64,6 +64,7 @@
   svg.map .h:hover{fill:var(--ink)}
   svg.map .h.two{cursor:move}
   svg.map .h.grab{fill:var(--ink);fill-opacity:.001;stroke:none;cursor:ew-resize}
+  svg.map .lens{fill:none;stroke:var(--line);stroke-width:.7;pointer-events:none}
   svg.map .step{fill:var(--bg);stroke:var(--line);cursor:pointer}
   svg.map .step:hover{stroke:var(--ink)}
   svg.map .steplab{fill:var(--ink);font-size:12px;pointer-events:none}
@@ -313,6 +314,16 @@ function drawMap(){
   o.push(`<rect class="step" data-seg="-1" x="${F(PLANW-42)}" y="${F(sy0)}" width="16" height="16"/><text class="steplab" x="${F(PLANW-34)}" y="${F(sy0+12)}" text-anchor="middle">–</text>`,
          `<rect class="step" data-seg="1" x="${F(PLANW-22)}" y="${F(sy0)}" width="16" height="16"/><text class="steplab" x="${F(PLANW-14)}" y="${F(sy0+12)}" text-anchor="middle">+</text>`,
          mt(PLANW-42,sy0+26,seg+' seg'));
+  // lens packing, light: the lattice the eye is actually built with — diameter and gap to scale against each
+  // other, six across, enlarged so it reads. Not a handle; the panel's selector and sliders set it.
+  const eRp=Math.max(P.eyeSize*P.width/2,0.1), pp=11, lr=pp/(2*(1+P.lensGap)), lx=12, ly=MAPH-40;
+  for(let r0=0;r0<3;r0++) for(let c0=0;c0<6;c0++){
+    const ox2=lx+(c0+0.5*(r0%2))*pp, oy2=ly+r0*0.87*pp;
+    if(ox2>lx+6.5*pp) continue;
+    o.push(`<circle class="lens" cx="${F(ox2)}" cy="${F(oy2)}" r="${F(lr)}"/>`);
+  }
+  o.push(mt(lx,ly-8,(P.lensD*eRp).toFixed(2)+' mm lens'));
+  o.push(`<rect class="hit" data-c="a1" x="${F(lx-4)}" y="${F(ly-14)}" width="${F(7*pp)}" height="${F(3*pp)}" stroke-width="0" fill="#000" fill-opacity="0.001" style="pointer-events:all"/>`);
   // ---- elevation strip (sketch_controls.py, ported): same y and the same px/mm as the plan, z running right,
   // no z-exaggeration. It owns the heights the plan cannot show, and its grips drag horizontally only.
   const R=P.relief, pxmm=L/P.length, zx=z=>EX0+z*pxmm, eRmm=Math.max(P.eyeSize*P.width/2,0.1), eb=R*0.9;
