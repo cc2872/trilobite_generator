@@ -66,6 +66,9 @@
   svg.map .step{fill:var(--bg);stroke:var(--line);cursor:pointer}
   svg.map .step:hover{stroke:var(--ink)}
   svg.map .steplab{fill:var(--ink);font-size:12px;pointer-events:none}
+  .pack{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin:2px 0 10px}
+  .pack div{background:var(--bg);color:var(--mid);text-align:center;padding:7px 2px;font-size:9px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+  .pack div.on{color:var(--ink);background:var(--soft)}
   @media (max-width: 720px), (pointer: coarse) and (max-width: 1024px) {
     html,body{overflow:auto;font-size:14px}
     #app{display:flex;flex-direction:column;height:auto;min-height:100vh}
@@ -90,7 +93,7 @@
     <div class="controls">
       <h1>Trilobite Morphospace</h1>
       <div class="ctrl"><div class="lab"><span>Order</span></div><select id="preset"></select></div>
-      <svg class="map" id="map" viewBox="0 0 300 372" xmlns="http://www.w3.org/2000/svg"></svg>
+      <svg class="map" id="map" viewBox="0 0 384 372" xmlns="http://www.w3.org/2000/svg"></svg>
       <div class="sect" id="cellname"></div>
       <div id="C"></div>
       <div class="more" id="more">more</div>
@@ -155,7 +158,8 @@ const DRAW={
 // Filled regions pick a cell. The callouts the sketch labels — prong, eye R and arc, genal and
 // pleural spine length, the w arrow, the head / thorax / tail brackets — are live handles, so the
 // annotations ARE the controls. Sliders under the map stay for numeric precision.
-const MAPW=300, MAPH=372;
+const PLANW=300, MAPH=372, EX0=306;   // plan occupies 0..PLANW; the elevation strip starts at EX0
+let MAPW=384;                         // total width, set per redraw from how far the strip actually reaches
 let HND=[], drag=null;
 const F=v=>(+v).toFixed(1);
 function hnd(k,x,y,inv){ const i=HND.length; HND.push({k,inv}); return `<circle class="h" data-i="${i}" cx="${F(x)}" cy="${F(y)}" r="3.2"><title>${META[k].label}</title></circle>`; }
@@ -172,7 +176,7 @@ function geom(){
   // drawing scales: a parameter at its schema maximum just reaches the space it has, never past the sheet
   return {cx,y0,L,y1,hw,hL,thL,tL,yH,yT,seg,a,
           scProng:44/(META.headProngLen.hi*hL), scGenal:(0.92*thL)/(META.genalSpine.hi*hL),
-          scSpine:(MAPW-12-(cx+hw))/(META.spineBase.hi*hw), scFork:34/(META.pygSpine.hi*tL),
+          scSpine:(PLANW-12-(cx+hw))/(META.spineBase.hi*hw), scFork:34/(META.pygSpine.hi*tL),
           scTailProng:26/(META.tailProngLen.hi*tL)};
 }
 // the head outline IS its exponents: superellipse front (headOutlineExp) over a parallel-sided rear
@@ -242,7 +246,7 @@ function drawMap(){
   // genal spine: the long horn sweeping back off the cheek. The tip grip carries both of its numbers —
   // drag along the body for length, across it for curve (signed: out past the pleurae, or in over them).
   const Lg=P.genalSpine*hL*g.scGenal, gx=hw*0.96, gyr=headY(g,0.96,'rear');
-  const outRoom=MAPW-16-(cx+gx), inRoom=Math.max(gx-a-6,8);
+  const outRoom=PLANW-16-(cx+gx), inRoom=Math.max(gx-a-6,8);
   const curPx=q=>0.30*Math.max(q,12)*Math.tan(P.genalCurve*Math.PI/180);   // sideways reach of the tip, signed
   const invCurve=(q,len)=>Math.atan((q.x-(cx+gx))/(0.30*Math.max(len,12)))*180/Math.PI;
   if(Lg>3){
@@ -290,14 +294,42 @@ function drawMap(){
   o.push(`<text x="${F(ox)}" y="${F(y0-16)}" text-anchor="middle">${Math.round(P.length)} mm</text>`, hnd('length',ox,y1,q=>q.v0+q.dy*0.9));
   // segment count: the sketch's ring stack, one tap per ring
   const sy0=yH+26;                         // below the width caliper, which now crosses the shoulder
-  o.push(`<rect class="step" data-seg="-1" x="${F(MAPW-42)}" y="${F(sy0)}" width="16" height="16"/><text class="steplab" x="${F(MAPW-34)}" y="${F(sy0+12)}" text-anchor="middle">–</text>`,
-         `<rect class="step" data-seg="1" x="${F(MAPW-22)}" y="${F(sy0)}" width="16" height="16"/><text class="steplab" x="${F(MAPW-14)}" y="${F(sy0+12)}" text-anchor="middle">+</text>`,
-         mt(MAPW-42,sy0+26,seg+' seg'));
+  o.push(`<rect class="step" data-seg="-1" x="${F(PLANW-42)}" y="${F(sy0)}" width="16" height="16"/><text class="steplab" x="${F(PLANW-34)}" y="${F(sy0+12)}" text-anchor="middle">–</text>`,
+         `<rect class="step" data-seg="1" x="${F(PLANW-22)}" y="${F(sy0)}" width="16" height="16"/><text class="steplab" x="${F(PLANW-14)}" y="${F(sy0+12)}" text-anchor="middle">+</text>`,
+         mt(PLANW-42,sy0+26,seg+' seg'));
+  // ---- elevation strip (sketch_controls.py, ported): same y and the same px/mm as the plan, z running right,
+  // no z-exaggeration. It owns the heights the plan cannot show, and its grips drag horizontally only.
+  const R=P.relief, pxmm=L/P.length, zx=z=>EX0+z*pxmm, eRmm=Math.max(P.eyeSize*P.width/2,0.1), eb=R*0.9;
+  o.push(`<path class="dim" d="M${F(EX0)} ${F(y0-10)} L${F(EX0)} ${F(y1+10)}"/>`);            // z = 0
+  const ap=[];
+  for(let j=20;j>=0;j--){ const t=j/20; ap.push([zx(R*P.headRelief*Math.sqrt(Math.max(1-t*t,0))*0.85+R*0.15*(1-t)), yH-t*hL]); }
+  for(let i=0;i<seg;i++){ const ya=yH+i*p, yb2=yH+(i+1)*p, base=R*(1+P.axisRise), arch=P.ringArch*R;
+    ap.push([zx(base-arch),ya],[zx(base),0.5*(ya+yb2)],[zx(base-arch),yb2]); }
+  for(let j=0;j<=20;j++){ const t=j/20; ap.push([zx(R*P.tailRelief*Math.sqrt(Math.max(1-Math.pow(t,2.2),0))), yT+t*tL]); }
+  o.push(`<path class="ink" d="M${ap.map(q=>F(q[0])+' '+F(q[1])).join(' L')}"/>`);
+  const mg=R*P.marginHeight;                                                                  // pleural margin, dashed
+  o.push(`<path class="ghost" d="M${F(zx(mg*0.6))} ${F(y0+0.1*hL)} L${F(zx(mg))} ${F(yH)} L${F(zx(mg))} ${F(yT)} L${F(zx(mg*0.5))} ${F(y1-0.1*tL)}"/>`);
+  o.push(`<path class="dim" d="M${F(EX0)} ${F(yH)} L${F(zx(R*0.55))} ${F(yH)}"/>`);            // hinge z, read-only
+  o.push(`<path class="dim" d="M${F(zx(R))} ${F(y0+0.25*hL)} L${F(zx(R*(1+P.glabRise)))} ${F(y0+0.25*hL)}"/>`);
+  o.push(`<rect class="mir" x="${F(zx(eb))}" y="${F(ye-0.35*eR)}" width="${F(Math.max(P.eyeHeight*eRmm*pxmm,1))}" height="${F(Math.max(0.7*eR,2))}"/>`);
+  const zmm=q=>(q.x-EX0)/pxmm;
+  o.push(hnd('relief',zx(R*(1+P.axisRise)),yH+0.5*thL,q=>zmm(q)/(1+P.axisRise)));
+  o.push(hnd('marginHeight',zx(mg),yH+0.78*thL,q=>zmm(q)/R));
+  o.push(hnd('headRelief',zx(R*P.headRelief*0.85+R*0.075),y0+0.5*hL,q=>(zmm(q)-R*0.075)/(0.85*R)));
+  o.push(hnd('tailRelief',zx(R*P.tailRelief*0.9),yT+0.45*tL,q=>zmm(q)/(0.9*R)));
+  o.push(hnd('glabRise',zx(R*(1+P.glabRise)),y0+0.25*hL,q=>zmm(q)/R-1));
+  o.push(hnd('eyeHeight',zx(eb+P.eyeHeight*eRmm),ye,q=>(zmm(q)-eb)/eRmm));
+  if(Math.round(P.headProngs)>0)
+    o.push(`<path class="dim" d="M${F(zx(R*0.3))} ${F(y0-8)} L${F(zx(R*0.3)+0.4*P.headProngCurl)} ${F(y0-8)}"/>`,
+           hnd('headProngCurl',zx(R*0.3)+0.4*P.headProngCurl,y0-8,q=>(q.x-zx(R*0.3))/0.4));
+  MAPW=EX0+Math.max(16+pxmm*Math.max(R*(1+P.axisRise), R*P.headRelief, R*(1+P.glabRise), eb+P.eyeHeight*eRmm), 60);
+  $('map').setAttribute('viewBox',`0 0 ${F(MAPW)} ${MAPH}`);
   $('map').innerHTML=o.join('');
 }
 // map input: tap a region to pick a cell, tap a prong to add a tine, drag a mark to set a value
 const mapEl=$('map');
-function mpt(e){ const b=mapEl.getBoundingClientRect(); return {x:(e.clientX-b.left)*MAPW/b.width, y:(e.clientY-b.top)*MAPH/b.height}; }
+function mpt(e){ const b=mapEl.getBoundingClientRect(), vb=mapEl.viewBox.baseVal;   // the box grows with the strip
+  return {x:(e.clientX-b.left)*vb.width/b.width, y:(e.clientY-b.top)*vb.height/b.height}; }
 mapEl.addEventListener('pointerdown',e=>{
   const h=e.target.closest('.h');
   if(h){ const H=HND[+h.dataset.i]; drag={H, v0:H.k?P[H.k]:0, p0:mpt(e)}; mapEl.setPointerCapture(e.pointerId); e.preventDefault(); return; }
@@ -316,10 +348,22 @@ mapEl.addEventListener('pointermove',e=>{
 mapEl.addEventListener('pointerup',()=>{ if(drag){ drag=null; dirty(); } });
 mapEl.addEventListener('pointerleave',()=>highlight(null));
 // ================================================================ cell panels
+// Lens packing as one tap (sketch_controls.PACKING). Style and lattice are not here: eye_solid builds a
+// raised hex lattice only, so offering them would promise shape the builder cannot make until eyes2 is wired.
+const PACKING={holochroal:{lensD:0.06,lensGap:0.05,lensRise:0.30},
+               schizochroal:{lensD:0.11,lensGap:0.50,lensRise:0.50},
+               abathochroal:{lensD:0.09,lensGap:0.35,lensRise:0.40}};
+function packing(){ const d=document.createElement('div'); d.className='pack';
+  for(const [name,v] of Object.entries(PACKING)){
+    const b=document.createElement('div'); b.textContent=name;
+    if(Object.entries(v).every(([k,x])=>Math.abs(P[k]-x)<1e-6)) b.className='on';
+    b.onclick=()=>{ for(const [k,x] of Object.entries(v)) P[k]=clampP(k,x); lastMeas=null; render(); dirty(); };
+    d.appendChild(b); }
+  return d; }
 const VISUAL={
  frame:()=>[slider('length'), slider('width'), slider('relief'), slider('segCount'), slider('cephFrac'), slider('pygFrac')],
  b1:()=>[glyph('glab','0 0 340 125'), slider('glabInflate'), slider('glabRise'), slider('glabLobes'), slider('glabFront'), slider('headOutlineExp'), slider('headDomeExp'), slider('cephParallel')],
- a1:()=>[slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('eyePos'), slider('eyeLat'), slider('eyeSolid'), slider('eyeSlope'), slider('eyeShade'), slider('eyeProfile'), slider('lensD'), slider('lensGap'), slider('lensRise'), slider('genalSpine'), slider('genalCurve'), slider('genalPath'), slider('genalTaper'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
+ a1:()=>[packing(), slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('eyePos'), slider('eyeLat'), slider('eyeSolid'), slider('eyeSlope'), slider('eyeShade'), slider('eyeProfile'), slider('lensD'), slider('lensGap'), slider('lensRise'), slider('genalSpine'), slider('genalCurve'), slider('genalPath'), slider('genalTaper'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
  b2:()=>[slider('axisFrac'), slider('axisRise'), slider('furrowDepth')],
  a2:()=>[glyph('pleura','0 0 340 110'), slider('fulcrum'), slider('pleuralSlope'), slider('overlap'), slider('spineBase'), slider('spineSweep')],
  b3:()=>[slider('pygRings'), slider('tailRelief'), slider('tailDomeExp')],
