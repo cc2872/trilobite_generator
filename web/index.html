@@ -328,19 +328,24 @@ function drawMap(){
   o.push(`<path class="ghost" d="M${F(zx(mg*0.6))} ${F(y0+0.1*hL)} L${F(zx(mg))} ${F(yH)} L${F(zx(mg))} ${F(yT)} L${F(zx(mg*0.5))} ${F(y1-0.1*tL)}"/>`);
   o.push(`<path class="dim" d="M${F(EX0)} ${F(yH)} L${F(zx(R*0.55))} ${F(yH)}"/>`);            // hinge z, read-only
   o.push(`<path class="dim" d="M${F(zx(R))} ${F(y0+0.25*hL)} L${F(zx(R*(1+P.glabRise)))} ${F(y0+0.25*hL)}"/>`);
-  // the eye bar and its stalk: the bar IS the stalk grip, so raising the eye means dragging the eye
-  const stk=(P.eyeStalk||0)*eRmm, ebase=eb+stk, barW=Math.max(P.eyeHeight*eRmm*pxmm,3), barH=Math.max(0.7*eR,6);
-  o.push(stk>0.05 ? `<path class="ink" d="M${F(zx(eb))} ${F(ye)} L${F(zx(ebase))} ${F(ye)}"/>`
-                  : `<path class="ghost" d="M${F(zx(eb))} ${F(ye)} L${F(zx(ebase))} ${F(ye)}"/>`);
-  o.push(`<rect class="mir" x="${F(zx(ebase))}" y="${F(ye-0.5*barH)}" width="${F(barW)}" height="${F(barH)}"/>`);
-  const zmm=q=>(q.x-EX0)/pxmm;
-  o.push(hndBox('eyeStalk',zx(ebase),ye-0.5*barH,barW,barH,q=>(zmm(q)-eb-0.5*P.eyeHeight*eRmm)/eRmm));
+  // the eye, its stalk and its lean. The stalk leaves the cheek at eyeLean off vertical (90° = looking straight
+  // ahead over the front margin), the bar IS the stalk grip, and a second grip at the far end swings the lean.
+  const zmm=q=>(q.x-EX0)/pxmm, lean=(P.eyeLean||0)*Math.PI/180, lc=Math.cos(lean), ls=Math.sin(lean);
+  const stk=(P.eyeStalk||0)*eRmm, barL=P.eyeHeight*eRmm, barH=Math.max(0.7*eR,6), barPx=Math.max(barL*pxmm,3);
+  const bz=eb+stk*lc, by=ye-stk*ls*pxmm;                       // where the eye sits once the stalk has leaned
+  o.push(`<path class="${stk>0.05?'ink':'ghost'}" d="M${F(zx(eb))} ${F(ye)} L${F(zx(bz))} ${F(by)}"/>`);
+  o.push(`<g transform="rotate(${F(-(P.eyeLean||0))} ${F(zx(bz))} ${F(by)})">`
+         + `<rect class="mir" x="${F(zx(bz))}" y="${F(by-0.5*barH)}" width="${F(barPx)}" height="${F(barH)}"/>`
+         + hndBox('eyeStalk',zx(bz),by-0.5*barH,barPx,barH,q=>(zmm(q)-eb-0.5*barL*lc)/Math.max(lc,0.25)/eRmm)
+         + `</g>`);
+  o.push(hnd('eyeLean',zx(bz+barL*lc),by-barL*ls*pxmm,
+             q=>Math.atan2(Math.max((ye-q.y)/pxmm,0), Math.max(zmm(q)-eb,0.001))*180/Math.PI));
   o.push(hnd('relief',zx(R*(1+P.axisRise)),yH+0.5*thL,q=>zmm(q)/(1+P.axisRise)));
   o.push(hnd('marginHeight',zx(mg),yH+0.78*thL,q=>zmm(q)/R));
   o.push(hnd('headRelief',zx(R*P.headRelief*0.85+R*0.075),y0+0.5*hL,q=>(zmm(q)-R*0.075)/(0.85*R)));
   o.push(hnd('tailRelief',zx(R*P.tailRelief*0.9),yT+0.45*tL,q=>zmm(q)/(0.9*R)));
   o.push(hnd('glabRise',zx(R*(1+P.glabRise)),y0+0.25*hL,q=>zmm(q)/R-1));
-  o.push(hnd('eyeHeight',zx(ebase)+barW,ye,q=>(zmm(q)-ebase)/eRmm));
+  o.push(hnd('eyeHeight',zx(bz)+barPx*lc,by-barPx*ls,q=>(zmm(q)-bz)/Math.max(lc,0.25)/eRmm));
   // dorsal spines: they stand out of the plan, so this is the only view that can show them. Drawn at the pitch
   // the builder uses (axial 60° off the body line, occipital 55°). `unit` converts the drag back into the key's
   // own units — axialSpine is a fraction of relief, occipitalSpine a fraction of head length.
@@ -357,7 +362,7 @@ function drawMap(){
     o.push(`<path class="dim" d="M${F(zx(R*0.3))} ${F(y0-8)} L${F(zx(R*0.3)+0.4*P.headProngCurl)} ${F(y0-8)}"/>`,
            hnd('headProngCurl',zx(R*0.3)+0.4*P.headProngCurl,y0-8,q=>(q.x-zx(R*0.3))/0.4));
   MAPW=EX0+Math.max(16+pxmm*Math.max(R*(1+P.axisRise)+0.87*Math.max(P.axialSpine*R,P.occipitalSpine*P.cephFrac*P.length),
-                                     R*P.headRelief, R*(1+P.glabRise), ebase+P.eyeHeight*eRmm), 60);
+                                     R*P.headRelief, R*(1+P.glabRise), bz+barL*lc), 60);
   $('map').setAttribute('viewBox',`0 0 ${F(MAPW)} ${MAPH}`);
   $('map').innerHTML=o.join('');
 }
@@ -400,7 +405,7 @@ function packing(){ const d=document.createElement('div'); d.className='pack';
 const VISUAL={
  frame:()=>[slider('length'), slider('width'), slider('relief'), slider('segCount'), slider('cephFrac'), slider('pygFrac')],
  b1:()=>[glyph('glab','0 0 340 125'), slider('glabInflate'), slider('glabRise'), slider('glabLobes'), slider('glabFront'), slider('headOutlineExp'), slider('headDomeExp'), slider('cephParallel'), slider('occipitalSpine')],
- a1:()=>[packing(), slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('eyePos'), slider('eyeLat'), slider('eyeStalk'), slider('eyeStalkR'), slider('eyeSolid'), slider('eyeSlope'), slider('eyeShade'), slider('eyeProfile'), slider('lensD'), slider('lensGap'), slider('lensRise'), slider('genalSpine'), slider('genalCurve'), slider('genalPath'), slider('genalTaper'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
+ a1:()=>[packing(), slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('eyePos'), slider('eyeLat'), slider('eyeStalk'), slider('eyeStalkR'), slider('eyeLean'), slider('eyeSolid'), slider('eyeSlope'), slider('eyeShade'), slider('eyeProfile'), slider('lensD'), slider('lensGap'), slider('lensRise'), slider('genalSpine'), slider('genalCurve'), slider('genalPath'), slider('genalTaper'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
  b2:()=>[slider('axisFrac'), slider('axisRise'), slider('furrowDepth'), slider('ringArch'), slider('axialSpine')],
  a2:()=>[glyph('pleura','0 0 340 110'), slider('fulcrum'), slider('pleuralSlope'), slider('overlap'), slider('spineBase'), slider('spineSweep')],
  b3:()=>[slider('pygRings'), slider('tailRelief'), slider('tailDomeExp')],
