@@ -1,0 +1,24 @@
+<svg viewBox="0 0 560 520" xmlns="http://www.w3.org/2000/svg" style="background:#000;font-family:monospace;font-size:11px">
+<g fill="none" stroke="#B4B2A9" stroke-width="1.2">
+<path d="M290 60 L 290 40"/><path d="M200 210 C 200 120, 250 70, 290 60 C 330 70, 380 120, 380 210 Z"/>
+<path d="M262 210 L 262 100 C 262 82, 318 82, 318 100 L 318 210"/>
+<ellipse cx="230" cy="150" rx="12" ry="12" stroke-width="0.8"/><ellipse cx="350" cy="150" rx="12" ry="12" stroke-width="0.8"/>
+<path d="M200 210 L 190 230 M380 210 L 390 230"/>
+<path d="M205 220 L 375 220 L 372 240 L 208 240 Z M208 245 L 372 245 L 369 265 L 211 265 Z M211 270 L 369 270 L 366 290 L 214 290 Z M214 295 L 366 295 L 363 315 L 217 315 Z M217 320 L 363 320 L 360 340 L 220 340 Z M220 345 L 360 345 L 357 365 L 223 365 Z M223 370 L 357 370 L 354 390 L 226 390 Z" stroke-width="0.8"/>
+<path d="M226 400 C 226 450, 260 470, 290 470 C 320 470, 354 450, 354 400"/><path d="M290 470 L 290 495"/>
+</g>
+<g fill="#000" stroke="#fff" stroke-width="1.2"><circle cx="290" cy="40" r="4"/><circle cx="380" cy="210" r="4"/><circle cx="290" cy="495" r="4"/><circle cx="366" cy="290" r="4"/><circle cx="350" cy="138" r="4"/><circle cx="362" cy="150" r="4"/></g>
+<line x1="450" y1="30" x2="450" y2="505" stroke="#888780" stroke-width="0.6"/>
+<g fill="none" stroke="#B4B2A9" stroke-width="1.2">
+<path d="M450 40 L 458 44"/><path d="M450 60 C 480 80, 500 120, 502 210"/>
+<path d="M450 210 L 502 210 L 496 218 L 502 222 L 496 240 L 502 245 L 496 265 L 502 270 L 496 290 L 502 295 L 496 315 L 502 320 L 496 340 L 502 345 L 496 365 L 502 370 L 496 390 L 502 400"/>
+<path d="M502 400 C 500 440, 480 465, 450 470"/><path d="M450 470 L 450 495"/>
+<path d="M450 100 C 470 110, 476 160, 476 210 L 476 400 C 476 440, 464 462, 450 470" stroke-width="0.7" stroke-dasharray="2 2"/>
+<rect x="480" y="140" width="22" height="14" rx="2"/><line x1="480" y1="147" x2="466" y2="147"/>
+</g>
+<g fill="#000" stroke="#fff" stroke-width="1.2"><circle cx="502" cy="300" r="4"/><circle cx="492" cy="110" r="4"/><circle cx="494" cy="440" r="4"/><circle cx="458" cy="44" r="4"/><circle cx="476" cy="300" r="4"/><circle cx="502" cy="147" r="4"/><circle cx="466" cy="147" r="4"/></g>
+<line x1="450" y1="210" x2="480" y2="210" stroke="#888780" stroke-width="2"/>
+<path d="M480 210 A 26 26 0 0 1 474 236" fill="none" stroke="#888780" stroke-width="1" stroke-dasharray="3 2" opacity="0.5"/>
+<line x1="362" y1="147" x2="466" y2="147" stroke="#B4B2A9" stroke-width="0.6" stroke-dasharray="3 3"/>
+<text x="508" y="151" fill="#aaa">eye</text>
+</svg>
