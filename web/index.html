@@ -63,6 +63,7 @@
   svg.map .h{fill:var(--bg);stroke:var(--ink);stroke-width:1.2;cursor:grab}
   svg.map .h:hover{fill:var(--ink)}
   svg.map .h.two{cursor:move}
+  svg.map .h.grab{fill:var(--ink);fill-opacity:.001;stroke:none;cursor:ew-resize}
   svg.map .step{fill:var(--bg);stroke:var(--line);cursor:pointer}
   svg.map .step:hover{stroke:var(--ink)}
   svg.map .steplab{fill:var(--ink);font-size:12px;pointer-events:none}
@@ -166,6 +167,9 @@ function hnd(k,x,y,inv){ const i=HND.length; HND.push({k,inv}); return `<circle 
 function hnd2(kx,ky,x,y,invx,invy){       // one grip, two axes: across sets kx, along sets ky
   const i=HND.length; HND.push({kx,ky,invx,invy});
   return `<circle class="h two" data-i="${i}" cx="${F(x)}" cy="${F(y)}" r="4"><title>${META[ky].label} · ${META[kx].label}</title></circle>`; }
+function hndBox(k,x,y,w,h,inv){           // the shape itself is the grip — drag the body, not a dot beside it
+  const i=HND.length; HND.push({k,inv});
+  return `<rect class="h grab" data-i="${i}" x="${F(x)}" y="${F(y)}" width="${F(Math.max(w,4))}" height="${F(Math.max(h,6))}"><title>${META[k].label}</title></rect>`; }
 function reg(c,d){ return `<path class="reg${sel===c?' on':''}" data-c="${c}" d="${d}"/>`; }
 function mt(x,y,s,anchor){ return `<text x="${F(x)}" y="${F(y)}"${anchor?` text-anchor="${anchor}"`:''}>${s}</text>`; }
 function geom(){
@@ -323,18 +327,19 @@ function drawMap(){
   o.push(`<path class="ghost" d="M${F(zx(mg*0.6))} ${F(y0+0.1*hL)} L${F(zx(mg))} ${F(yH)} L${F(zx(mg))} ${F(yT)} L${F(zx(mg*0.5))} ${F(y1-0.1*tL)}"/>`);
   o.push(`<path class="dim" d="M${F(EX0)} ${F(yH)} L${F(zx(R*0.55))} ${F(yH)}"/>`);            // hinge z, read-only
   o.push(`<path class="dim" d="M${F(zx(R))} ${F(y0+0.25*hL)} L${F(zx(R*(1+P.glabRise)))} ${F(y0+0.25*hL)}"/>`);
-  const stk=(P.eyeStalk||0)*eRmm, ebase=eb+stk;        // a pedunculate eye rides above the cheek on its stalk
+  // the eye bar and its stalk: the bar IS the stalk grip, so raising the eye means dragging the eye
+  const stk=(P.eyeStalk||0)*eRmm, ebase=eb+stk, barW=Math.max(P.eyeHeight*eRmm*pxmm,3), barH=Math.max(0.7*eR,6);
   o.push(stk>0.05 ? `<path class="ink" d="M${F(zx(eb))} ${F(ye)} L${F(zx(ebase))} ${F(ye)}"/>`
-                  : `<path class="ghost" d="M${F(zx(eb))} ${F(ye)} L${F(zx(eb)+9)} ${F(ye)}"/>`);   // grabbable at zero
-  o.push(`<rect class="mir" x="${F(zx(ebase))}" y="${F(ye-0.35*eR)}" width="${F(Math.max(P.eyeHeight*eRmm*pxmm,1))}" height="${F(Math.max(0.7*eR,2))}"/>`);
+                  : `<path class="ghost" d="M${F(zx(eb))} ${F(ye)} L${F(zx(ebase))} ${F(ye)}"/>`);
+  o.push(`<rect class="mir" x="${F(zx(ebase))}" y="${F(ye-0.5*barH)}" width="${F(barW)}" height="${F(barH)}"/>`);
   const zmm=q=>(q.x-EX0)/pxmm;
-  o.push(hnd('eyeStalk',Math.max(zx(ebase),zx(eb)+9),ye,q=>(zmm(q)-eb)/eRmm));
+  o.push(hndBox('eyeStalk',zx(ebase),ye-0.5*barH,barW,barH,q=>(zmm(q)-eb-0.5*P.eyeHeight*eRmm)/eRmm));
   o.push(hnd('relief',zx(R*(1+P.axisRise)),yH+0.5*thL,q=>zmm(q)/(1+P.axisRise)));
   o.push(hnd('marginHeight',zx(mg),yH+0.78*thL,q=>zmm(q)/R));
   o.push(hnd('headRelief',zx(R*P.headRelief*0.85+R*0.075),y0+0.5*hL,q=>(zmm(q)-R*0.075)/(0.85*R)));
   o.push(hnd('tailRelief',zx(R*P.tailRelief*0.9),yT+0.45*tL,q=>zmm(q)/(0.9*R)));
   o.push(hnd('glabRise',zx(R*(1+P.glabRise)),y0+0.25*hL,q=>zmm(q)/R-1));
-  o.push(hnd('eyeHeight',zx(ebase+P.eyeHeight*eRmm),ye,q=>(zmm(q)-ebase)/eRmm));
+  o.push(hnd('eyeHeight',zx(ebase)+barW,ye,q=>(zmm(q)-ebase)/eRmm));
   if(Math.round(P.headProngs)>0)
     o.push(`<path class="dim" d="M${F(zx(R*0.3))} ${F(y0-8)} L${F(zx(R*0.3)+0.4*P.headProngCurl)} ${F(y0-8)}"/>`,
            hnd('headProngCurl',zx(R*0.3)+0.4*P.headProngCurl,y0-8,q=>(q.x-zx(R*0.3))/0.4));
