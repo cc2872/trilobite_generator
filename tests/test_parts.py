@@ -57,13 +57,16 @@ def test_frozen_orders_build_closed(name):
         s = parts.segment(P, i, bevel_deg=b); assert s.is_watertight, f"{name} seg{i}"
     t = parts.pygidium(P, bevel_deg=b); assert t.is_watertight, f"{name} tail"
 
-def test_agnostida_bevel_severs_tips_like_the_brep_builder():
-    """The BREP bevel probe dropped agnostida to 35 deg because a 45 deg wedge cut its pleural tips off (3 solids).
-    The mesh builder must show the same geometry: 3 bodies at 45, 1 at 35."""
+def test_agnostida_builds_whole_at_both_bevels():
+    """The BREP bevel probe once dropped agnostida to 35 deg because a 45 deg wedge severed its
+    pleural tips (3 solids), which froze the reference as invalid/rest_interference. The mesh
+    builder does not sever: segment(1) is a single watertight body at 45 and at 35, so the
+    reference was re-measured with the mesh engine (closed/discoidal @35; see scripts/refreeze_reading.py)."""
     if "agnostida" not in FROZEN: pytest.skip("agnostida reference not frozen")
     P = _params("agnostida")
-    assert len(M.bodies(parts.segment(P, 1, bevel_deg=45.0))) > 1
-    assert len(M.bodies(parts.segment(P, 1, bevel_deg=35.0))) == 1
+    for b in (45.0, 35.0):
+        s = parts.segment(P, 1, bevel_deg=b)
+        assert s.is_watertight and len(M.bodies(s)) == 1, f"agnostida seg1 not whole at {b} deg"
 
 def test_pleura_lengths_sum_to_pleural_width():
     P = _params(FROZEN[0]); inner, blade, bend = parts.pleura_lengths(P, 2)

@@ -1,7 +1,7 @@
 # Pre-registration — v1 dorsal enrolment sweep
 
-**Status:** DRAFT. Lines marked `[DECISION]` are Claire's calls; everything else is proposed.
-**Lock:** when the `[DECISION]` lines are resolved, commit this file, tag the commit, and deposit
+**Status:** RESOLVED 2026-09-15 — every `[DECISION]` has been fixed to its proposed value (inline below); the document is ready to lock. All other content was already proposed and is unchanged.
+**Lock:** now that the `[DECISION]` lines are resolved, commit this file, tag the commit, and deposit
 the tagged tree on Zenodo. The sweep runs from that tag. Nothing below changes after the lock
 without a dated amendment section at the bottom.
 
@@ -30,15 +30,15 @@ recorded as a miss, and is the v2 problem, not evidence for H2.
 - `instrument2.py`, version stamp `INSTRUMENT_VERSION = "2.1"` written into every row.
 - Fixed measurement bevel `BOUND_DEG` per joint, identical for all animals, **not** passed
   through the morphology clamp (`maxAngle.hi`). Recorded value == built value.
-  `[DECISION]` BOUND_DEG = 45 (proposed) — must exceed the largest per-joint angle any preset
-  reaches, else `bound` censoring dominates.
-- Per-joint sweep in degrees over `[0, BOUND_DEG]`: coarse forward scan at `SCAN_STEP_DEG`
-  (`[DECISION]` proposed 2.5) to the first collision or closure, then bisection inside the
-  bracketing interval to `RES_DEG` (`[DECISION]` proposed 0.1, the code's RES_DEG).
+  `BOUND_DEG` = 45 — must exceed the largest per-joint angle any preset reaches, else `bound`
+  censoring dominates.
+- Per-joint sweep in degrees over `[0, BOUND_DEG]`: coarse forward scan at `SCAN_STEP_DEG` = 2.5
+  to the first collision or closure, then bisection inside the bracketing interval to
+  `RES_DEG` = 0.1 (the code's RES_DEG).
 - Collision = exact Manifold overlap volume above `OVERLAP_TOL` after subtracting the rest
   baseline for that pair.
 - Rest baseline: per-pair overlap at θ = 0, keyed on a **content hash** of the mesh set. If any
-  pair's rest overlap exceeds `REST_BUDGET_MM3` (`[DECISION]` proposed 1.0), the animal is
+  pair's rest overlap exceeds `REST_BUDGET_MM3` = 1.0, the animal is
   `invalid:rest_interference` and not measured.
 - Output per animal: `theta_joint_deg`, `total_deg`, `gap_mm`, `gap_over_length`,
   `limited_by ∈ {closed, anatomy, bound}`, `limiting_pair`, `enroll_class` (§3), `valid` (§4),
@@ -51,19 +51,19 @@ Six axes. All other parameters sit at the order's preset value.
 | axis | schema key(s) | range policy |
 |---|---|---|
 | A1 segment count | `segCount` | preset ±3, integer |
-| A2 pleural overlap | `overlap` (shingle overlap, rear flap / pitch) | 0.2–0.8 |
+| A2 pleural overlap | `overlap` (shingle overlap, rear flap / pitch) | 0.2–0.6 |
 | A3 cephalon:pygidium | `cephFrac`, `pygFrac` | preset ±30 % each |
 | A4 vault / relief | `relief` (and `vault` if separate) | preset ±40 % |
 | A5 width taper | `taper` | preset ±40 % |
 | A6 spine length | pleural + genal spine length dials | 0 to preset ×1.5 |
 
-`[DECISION]` sweep.py's `overlap` upper bound: 0.8 hit a build-cost cliff at 0.6 in testing; 0.6 may be the practical ceiling.
+`overlap` upper bound fixed at 0.6: 0.8 hit a build-cost cliff at 0.6 in testing, so 0.6 is the practical ceiling (the A2 range above is 0.2–0.6).
 
-**Null axis (control):** `eyeSize`. Swept over its full range on a subset (`[DECISION]` 50
-animals). Prediction: no effect on `theta_joint_deg`, `gap_mm`, or `enroll_class`.
+**Null axis (control):** `eyeSize`. Swept over its full range on a subset of 50 animals.
+Prediction: no effect on `theta_joint_deg`, `gap_mm`, or `enroll_class`.
 
-Design: Latin hypercube within each order's ranges, `N_PER_ORDER` animals
-(`[DECISION]` proposed 150; 10 orders → 1,500). Seed recorded. One process per animal.
+Design: Latin hypercube within each order's ranges, `N_PER_ORDER` = 150 animals
+(10 orders → 1,500). Seed recorded. One process per animal.
 
 ## 3. Enrolment class — definition
 
@@ -80,9 +80,8 @@ the cephalic anterior margin; positive = passes beyond (under) the head margin.
 | `open` | `limited_by == anatomy`; report `gap_over_length` |
 | `censored` | `limited_by == bound` or `valid == False`; excluded from H1–H3, counted in the censoring rate (§7) |
 
-`[DECISION]` `CLASS_TOL` (proposed 0.05 × body length), `DISC_OVERLAP` (proposed 0.5), the
-150° split (from Esteve 2017's ~200° sphaeroidal totals with margin). These are fixed here so
-the classes are not tuned to the sweep.
+`CLASS_TOL` = 0.05 × body length, `DISC_OVERLAP` = 0.5, and the 150° split (from Esteve 2017's
+~200° sphaeroidal totals with margin) are fixed here so the classes are not tuned to the sweep.
 
 ## 4. Validity gates (every build)
 
@@ -91,18 +90,17 @@ A row that fails any gate is `valid = False` with a `reason`, never a numeric ze
 1. Boolean sanity: after each boolean, `|V_result − V_expected| / V_expected < 0.5` where
    `V_expected` is the sum/difference of operand volumes. (build123d returns the tool solid
    silently on failure.)
-2. Watertight: every part mesh is watertight and has `≤ MAX_COMPONENTS` connected components
-   (`[DECISION]` proposed 3 per part).
+2. Watertight: every part mesh is watertight and has `≤ MAX_COMPONENTS` = 3 connected
+   components per part.
 3. Rest interference below `REST_BUDGET_MM3` for all pairs.
-4. Build timeout (`[DECISION]` proposed 300 s) and measure timeout (`[DECISION]` 120 s)
-   recorded as `reason = timeout`.
+4. Build timeout 300 s and measure timeout 120 s recorded as `reason = timeout`.
 5. OOM caught and recorded as `reason = oom` (lichida case).
 6. Schema: every param in the row passes `coerce()` with no fallback substitution; any
    substitution is recorded as `reason = schema_default_substituted`.
 
-Expected censoring rate is reported for the whole sweep and per order. `[DECISION]` If any
-order has > 40 % invalid rows, that order is reported as unmeasurable in v1 rather than
-measured on its survivors.
+Expected censoring rate is reported for the whole sweep and per order. If any order has
+> 40 % invalid rows, that order is reported as unmeasurable in v1 rather than measured on
+its survivors.
 
 ## 5. Direction predictions (H1)
 
