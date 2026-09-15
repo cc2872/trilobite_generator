@@ -1,7 +1,7 @@
 numpy>=1.26
 scipy>=1.11
 trimesh>=4.4
-manifold3d>=3.0
+manifold3d==3.0.1
 python-fcl>=0.7
 rtree>=1.0
 matplotlib>=3.8
