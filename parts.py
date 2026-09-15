@@ -21,7 +21,9 @@ schema rewrite (prompt 5) exposes the a2 cell as those two lengths and the bend 
 
 No OpenCascade, no retries, no jitter. A part is a closed manifold or the build raises.
 """
+import ast
 import math
+import operator
 import numpy as np
 import mesh as M
 from fields import seg_halfwidth, tail_halfwidth, pleural_spine_field, furrow_amp
@@ -304,12 +306,58 @@ def pygidium_cells(P, lap=0.06, grid=GRID_TAIL):
 # ---------------------------------------------------------------- CEPHALON (prompt 4)
 from fields import head_halfwidth
 
+# genalPath is a user-supplied formula from the website; it MUST NOT be eval()'d.
+# Even eval() with an empty __builtins__ is remote code execution (a whitelisted
+# ufunc's __globals__ reaches os/import). Instead we parse to an AST and walk it,
+# permitting only numeric literals, the variables s/pi/e, arithmetic, comparisons,
+# and the whitelisted numpy functions below. Anything else raises -> fallback s**2.
+_SAFE_FUNCS = {k: getattr(np, k) for k in (
+    "sin", "cos", "tan", "exp", "log", "sqrt", "abs", "tanh", "arctan",
+    "minimum", "maximum", "clip", "where")}
+_SAFE_BINOPS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+                ast.Div: operator.truediv, ast.Pow: operator.pow, ast.Mod: operator.mod,
+                ast.FloorDiv: operator.floordiv}
+_SAFE_UNARYOPS = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+_SAFE_CMPOPS = {ast.Lt: operator.lt, ast.Gt: operator.gt, ast.LtE: operator.le,
+                ast.GtE: operator.ge, ast.Eq: operator.eq, ast.NotEq: operator.ne}
+
+def _eval_node(node, names):
+    if isinstance(node, ast.Expression):
+        return _eval_node(node.body, names)
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
+            raise ValueError("only numeric constants allowed")
+        return node.value
+    if isinstance(node, ast.Name):
+        if node.id in names:
+            return names[node.id]
+        raise ValueError(f"unknown name {node.id!r}")
+    if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_BINOPS:
+        return _SAFE_BINOPS[type(node.op)](_eval_node(node.left, names), _eval_node(node.right, names))
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _SAFE_UNARYOPS:
+        return _SAFE_UNARYOPS[type(node.op)](_eval_node(node.operand, names))
+    if isinstance(node, ast.Compare):
+        left = _eval_node(node.left, names); result = None
+        for op, right_node in zip(node.ops, node.comparators):
+            if type(op) not in _SAFE_CMPOPS:
+                raise ValueError("comparison operator not allowed")
+            right = _eval_node(right_node, names)
+            cmp = _SAFE_CMPOPS[type(op)](left, right)
+            result = cmp if result is None else (result & cmp)
+            left = right
+        return result
+    if isinstance(node, ast.Call):
+        if node.keywords or not isinstance(node.func, ast.Name) or node.func.id not in _SAFE_FUNCS:
+            raise ValueError("only positional calls to whitelisted functions")
+        return _SAFE_FUNCS[node.func.id](*[_eval_node(a, names) for a in node.args])
+    raise ValueError(f"disallowed expression element: {type(node).__name__}")
+
 def safe_expr(expr, s, notes=None):
-    """Evaluate a user formula in s with numpy math only. Bad input -> s**2 (trilobite.safe_expr)."""
-    ns = {k: getattr(np, k) for k in ("sin", "cos", "tan", "exp", "log", "sqrt", "abs", "tanh", "arctan", "minimum", "maximum", "clip", "where")}
-    ns.update(pi=np.pi, e=np.e, s=s)
+    """Evaluate a user formula in s with numpy math only, via an AST whitelist (no
+    eval/exec). Bad or unsafe input -> s**2 (trilobite.safe_expr)."""
+    names = dict(_SAFE_FUNCS); names.update(pi=np.pi, e=np.e, s=s)
     try:
-        v = eval(compile(str(expr), "<genalPath>", "eval"), {"__builtins__": {}}, ns)
+        v = _eval_node(ast.parse(str(expr), mode="eval"), names)
         v = np.broadcast_to(np.asarray(v, float), s.shape).copy()
         if not np.all(np.isfinite(v)): raise ValueError("non-finite")
         return v
