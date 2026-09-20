@@ -27,6 +27,11 @@
   button{background:var(--bg);color:var(--ink);border:1px solid var(--ink);border-radius:0;padding:8px 6px;font:inherit;cursor:pointer}
   button.primary{background:var(--ink);color:var(--bg)}
   button:hover{background:var(--soft)} button.primary:hover{opacity:.85} button:disabled{opacity:.35;cursor:default}
+  .printopt{grid-column:1/-1;display:flex;align-items:center;gap:10px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mid);user-select:none;flex-wrap:wrap}
+  .printopt .seg span{cursor:pointer;padding:0 1px} .printopt .seg span.on{color:var(--ink);border-bottom:1px solid var(--ink)}
+  .printopt .fillwrap{display:inline-flex;align-items:center;gap:5px} .printopt .fillwrap.off{opacity:.3;pointer-events:none}
+  .printopt input[type=number]{width:42px;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--line);padding:2px 0;font:inherit;text-align:right}
+  .printopt input[type=number]:focus{outline:none;border-bottom-color:var(--ink)}
   .stage{position:relative;min-width:0;background:#000}
   canvas{display:block}
   img.sheet{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
@@ -101,6 +106,11 @@
       <div class="more" id="more">more</div>
     </div>
     <div class="actions">
+      <div class="printopt">
+        <span>Joint</span>
+        <span class="seg" id="jointseg"><span class="on" data-joint="flexi">print · flexi</span> · <span data-joint="pin">measure · pin</span></span>
+        <span class="fillwrap off" id="fillwrap">· <input type="number" id="fill" min="0" max="3" step="0.5" value="0"> mm fill</span>
+      </div>
       <button class="primary" id="buildBtn">Build</button>
       <button id="dl">Download STL</button>
     </div>
@@ -451,12 +461,16 @@ function readout(){ const m=lastMeas; let h=`<b>${ps.value}</b> · ${Math.round(
 // fails in matplotlib); one retry covers the transient case, and the reason is put on the status line rather
 // than left as an unhandled rejection with the status stuck on 'building'.
 let building=false, pending=false;
+// print mode: the site builds and hands back the print-ready flexi joint by default; "pin" is the raw
+// measurement shell (the geometry the sheet and the instrument describe), with an optional fill (mm).
+let joint='flexi', fillMm=0;
+const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0});
 const why=ex=>String(ex&&ex.message||ex).slice(0,60);
 async function post(url,body){ const r=await fetch(url,{method:'POST',body:JSON.stringify(body)});
   if(!r.ok) throw new Error(r.status+' '+url.split('/').pop()); return r.json(); }
-async function retryPost(url,what,tries=2){    // covers a dropped connection or a box mid-restart, with a
-  for(let a=1;;a++){                           // widening gap; a request that fails on the geometry just fails
-    try{ return await post(url,{P}); }
+async function retryPost(url,what,tries=2,body=null){  // covers a dropped connection or a box mid-restart, with a
+  for(let a=1;;a++){                                   // widening gap; a request that fails on the geometry just fails
+    try{ return await post(url,body||{P}); }
     catch(ex){ if(a>=tries) throw ex;
       status(`${what} failed · retry ${a}/${tries-1}`,true); await new Promise(r=>setTimeout(r,900*a)); } } }
 // ---- loading: the parts land one at a time on the server, so poll its count while the stage is blank
@@ -470,7 +484,7 @@ function loadingOff(){ clearInterval(poll); poll=null; $('loading').classList.re
 async function build(){ if(building){pending=true;return;} building=true; status('building',true); loadingOn();
   try{
     let man;
-    try{ man=await retryPost('/api/build','build'); }
+    try{ man=await retryPost('/api/build','build',2,buildBody()); }
     catch(ex){ status('build failed · '+why(ex),false); return; }
     kin=man.kinematics; buildKey=man.key; readout();
     status(`built in ${man.build_seconds}s · ${man.print.print_valid?'printable':man.print.violations.join('; ')}`,false);
@@ -500,8 +514,18 @@ const sheetDone=ok=>{ if(sheetWait){ const r=sheetWait; sheetWait=null; r(ok); }
 $('sheet').onload=()=>{ $('view3d').style.display='flex'; placeView3D(); sheetDone(true); };   // the toggle appears with the sheet it sits on
 $('sheet').onerror=()=>sheetDone(false);                                                      // sheet() decides whether to try again
 $('dl').onclick=()=>{ if(buildKey) window.location='/api/stl/'+buildKey; };
+// print-mode toggle: flexi (default) hands back the print joint; pin exposes the fill field and builds the
+// measurement shell (optionally thickened). Either choice rebuilds so the preview and the download agree.
+function setJoint(j){ if(j!=='pin'&&j!=='flexi') return; joint=j;
+  [...$('jointseg').querySelectorAll('span[data-joint]')].forEach(s=>s.classList.toggle('on',s.dataset.joint===j));
+  $('fillwrap').classList.toggle('off',j!=='pin'); build(); }
+$('jointseg').onclick=e=>{ if(e.target.dataset.joint) setJoint(e.target.dataset.joint); };
+$('fill').onchange=e=>{ fillMm=Math.max(0,+e.target.value||0); if(joint==='pin') build(); };
 // ---- 3D — v1's model view: black fill with white feature edges (blueprint look) or shaded (model look), Z-up root, grid
 let scene,cam,ren,ctl,loader,root,grid,look='blueprint';
+// flexion pivot for the live pose: the instrument hinge for pin builds (y=0, z=hinge_z), the print
+// barrel for flexi builds (behind the joint plane, above the bed) — set per build in load3d/measure.
+let posePivotY=0, posePivotZ=null;
 const fillMat=new THREE.MeshBasicMaterial({color:0x000000,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
 const inkLine=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.9});
 const faintLine=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.18});
@@ -521,14 +545,16 @@ function setLook(l){ look=l; [...$('look').children].forEach(s=>s.classList.togg
   scene.remove(grid); grid=l==='blueprint'?new THREE.GridHelper(400,40,0x2a2a2a,0x161616):new THREE.GridHelper(400,40,0xdddddd,0xeeeeee); grid.position.y=-0.5; scene.add(grid); }
 $('look').onclick=e=>{ if(e.target.dataset.look) setLook(e.target.dataset.look); };
 async function load3d(man){ init3d(); root.clear(); partMeshes={};
-  if(!man){ try{ man=await post('/api/build',{P}); } catch(ex){ status('3D failed · '+why(ex),false); return; } }
+  if(!man){ try{ man=await post('/api/build',buildBody()); } catch(ex){ status('3D failed · '+why(ex),false); return; } }
   kin=man.kinematics;
+  if(man.joint==='flexi' && man.print_joint){ posePivotY=man.print_joint.pivot_y_beyond_joint; posePivotZ=man.print_joint.pivot_z; }
+  else { posePivotY=0; posePivotZ=null; }
   for(const p of man.parts){ if(p.error) continue; await new Promise(res=>loader.load(p.stl,geo=>{geo.computeVertexNormals(); const g=partGroup(geo); partMeshes[p.name]=g; root.add(g); res();},undefined,()=>res())); }
   pose(+$('roll').value); fit(); $('view3d').style.display='flex'; }
 function fit(){ const box=new THREE.Box3().setFromObject(root); if(box.isEmpty()) return; const c=box.getCenter(new THREE.Vector3()), s=box.getSize(new THREE.Vector3()).length();
   ctl.target.copy(c); cam.position.copy(c).add(new THREE.Vector3(0.6,0.55,0.95).multiplyScalar(s*0.9)); cam.near=s/100; cam.far=s*10; cam.updateProjectionMatrix(); }
-function pose(th){ if(!kin||!threeReady) return; const zh=kin.hinge_z, offs=kin.offsets; let M=new THREE.Matrix4(); const rot=new THREE.Matrix4().makeRotationX(-th*Math.PI/180);
-  kin.names.forEach((n,i)=>{ if(i>0){ M=M.clone().multiply(new THREE.Matrix4().makeTranslation(0,offs[i-1],0)).multiply(new THREE.Matrix4().makeTranslation(0,0,zh)).multiply(rot).multiply(new THREE.Matrix4().makeTranslation(0,0,-zh)); } const g=partMeshes[n]; if(g){g.matrixAutoUpdate=false; g.matrix.copy(M);} }); }
+function pose(th){ if(!kin||!threeReady) return; const pz=(posePivotZ!=null?posePivotZ:kin.hinge_z), py=posePivotY, offs=kin.offsets; let M=new THREE.Matrix4(); const rot=new THREE.Matrix4().makeRotationX(-th*Math.PI/180);
+  kin.names.forEach((n,i)=>{ if(i>0){ M=M.clone().multiply(new THREE.Matrix4().makeTranslation(0,offs[i-1],0)).multiply(new THREE.Matrix4().makeTranslation(0,py,pz)).multiply(rot).multiply(new THREE.Matrix4().makeTranslation(0,-py,-pz)); } const g=partMeshes[n]; if(g){g.matrixAutoUpdate=false; g.matrix.copy(M);} }); }
 function highlight(row){ if(!threeReady) return; for(const [n,g] of Object.entries(partMeshes)){ const on=row&&(row==='seg'?n.startsWith('seg'):n===row); const e=g.getObjectByName('edges'); if(e) e.material.opacity=on?1.0:(row?0.35:0.9); } }
 $('view3d').onclick=async()=>{ if(mode==='sheet'){ mode='3d'; $('sheet').style.display='none'; $('stage3d').style.display='block'; $('rollbar').style.display='grid'; $('look').style.display='block'; $('view3d').textContent='View sheet'; placeView3D(); await load3d(null); }
   else { mode='sheet'; $('stage3d').style.display='none'; $('rollbar').style.display='none'; $('look').style.display='none'; $('sheet').style.display='block'; $('view3d').textContent='View 3D'; placeView3D(); await sheet(); } };
@@ -536,7 +562,7 @@ function rollLabel(v){ const mx=+$('roll').max||1; return Math.round(100*v/mx)+'
 $('roll').oninput=e=>{ $('rollval').textContent=rollLabel(+e.target.value); pose(+e.target.value); };
 // ---- measure
 $('go').onclick=async()=>{ status('measuring',true); $('go').disabled=true;
-  try{ lastMeas=await post('/api/measure',{P}); kin=lastMeas.kinematics; readout(); status(`measured · ${lastMeas.limited_by}`,false);
+  try{ lastMeas=await post('/api/measure',{P}); kin=lastMeas.kinematics; posePivotY=0; posePivotZ=null; readout(); status(`measured · ${lastMeas.limited_by}`,false);
     const th=lastMeas.theta_joint_deg; if(th!=null){ $('roll').max=Math.max(th,1); $('roll').value=th; $('rollval').textContent=rollLabel(th); }
     if(th!=null){ let x=0; const step=()=>{x=Math.min(th,x+th/60); pose(x); if(x<th) requestAnimationFrame(step);}; step(); }
   } catch(ex){ status('measure failed · '+why(ex),false); }
