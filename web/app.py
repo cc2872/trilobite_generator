@@ -73,8 +73,12 @@ def _kinematics(P):
 @app.post("/api/build")
 def api_build():
     """Print geometry: every part at the printed stop bevel (P['maxAngle']), one GLB each, cached by parameter hash."""
-    P, notes = schema.coerce_report(request.get_json(force=True).get("P", {}), base=schema.table_defaults())
-    key = schema.param_hash(P); folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
+    body = request.get_json(force=True)
+    P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
+    joint = body.get("joint", "pin")                       # "pin" = tracked builder (the measured geometry); "flexi" = printjoint2
+    fill = float(body.get("fill", 0.0) or 0.0)              # pin builds only: thicken the shell for printing (mm), print-only
+    key = schema.param_hash(P) + ("-flexi" if joint == "flexi" else "") + (f"-fill{fill:g}" if fill > 0.05 and joint != "flexi" else "")
+    folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
     n_parts = int(P["segCount"]) + 2
     PROGRESS.update(done=0, total=n_parts)
     if os.path.exists(manifest):
@@ -83,7 +87,14 @@ def api_build():
         if os.path.exists(manifest):
             PROGRESS.update(done=n_parts); return send_file(manifest)
         t0 = time.time(); os.makedirs(folder, exist_ok=True); bnotes = []; out = []
-        builders = [("head", lambda: parts.cephalon(P, notes=bnotes))] + [(f"seg{i}", (lambda i=i: parts.segment(P, i))) for i in range(int(P["segCount"]))] + [("tail", lambda: parts.pygidium(P))]
+        if joint == "flexi":
+            import printjoint2 as J2
+            builders = [("head", lambda: J2.print_head(P))] + [(f"seg{i}", (lambda i=i: J2.print_segment(P, i, pocket_on_first=True))) for i in range(int(P["segCount"]))] + [("tail", lambda: J2.print_tail(P))]
+        elif fill > 0.05:
+            import printfill as F
+            builders = [("head", lambda: F.cephalon(P, fill))] + [(f"seg{i}", (lambda i=i: F.segment(P, i, fill))) for i in range(int(P["segCount"]))] + [("tail", lambda: F.pygidium(P, fill))]
+        else:
+            builders = [("head", lambda: parts.cephalon(P, notes=bnotes))] + [(f"seg{i}", (lambda i=i: parts.segment(P, i))) for i in range(int(P["segCount"]))] + [("tail", lambda: parts.pygidium(P))]
         for name, fn in builders:
             try:
                 m = fn(); m.export(os.path.join(folder, f"{name}.glb")); m.export(os.path.join(folder, f"{name}.stl"))
@@ -92,7 +103,10 @@ def api_build():
                 out.append(dict(name=name, error=str(ex)[:120]))
             PROGRESS.update(done=len(out))
         man = dict(key=key, parts=out, kinematics=_kinematics(P), print=I.print_validity(P), schema_notes=notes, build_notes=bnotes,
-                   build_seconds=round(time.time() - t0, 1), schema=schema.SCHEMA_VERSION)
+                   build_seconds=round(time.time() - t0, 1), schema=schema.SCHEMA_VERSION, joint=joint, fill_mm=fill)
+        if joint == "flexi":
+            import printjoint2 as J2
+            Jr, d, zj, y_piv = J2.geometry(P); man["print_joint"] = dict(pivot_z=round(zj, 2), pivot_y_beyond_joint=round(y_piv - d, 2), scale=Jr.get("scaled", 1.0), gaps={k: Jr[k] for k in ("gap_axial", "gap_vertical", "gap_lateral")})
         json.dump(P, open(os.path.join(folder, "params.json"), "w")); json.dump(man, open(manifest, "w")); _evict()
         return jsonify(man)
 
@@ -144,7 +158,10 @@ def api_stl(key):
     if not os.path.exists(out):
         P = schema.coerce(json.load(open(os.path.join(folder, "params.json")))) if os.path.exists(os.path.join(folder, "params.json")) else None
         meshes = [trimesh.load(os.path.join(folder, f"{p['name']}.stl")) for p in man["parts"] if "error" not in p]
-        mats0 = I.transforms_deg(P, 0.0) if P is not None else [__import__("numpy").eye(4)] * len(meshes)
+        if man.get("joint") == "flexi" and P is not None:
+            import printjoint2 as J2; mats0 = J2.transforms_deg(P, 0.0)
+        else:
+            mats0 = I.transforms_deg(P, 0.0) if P is not None else [__import__("numpy").eye(4)] * len(meshes)
         trimesh.util.concatenate([mm.copy().apply_transform(T) for mm, T in zip(meshes, mats0)]).export(out)
     return send_file(out, as_attachment=True, download_name=f"trilobite_{key}.stl")
 

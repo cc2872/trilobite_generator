@@ -30,7 +30,8 @@ RES_DEG = 0.1             # bisection resolution
 REST_BUDGET_MM3 = 1.0     # rest overlap above this on any pair = build defect (PREREG §1, §4)
 OVERLAP_TOL = 0.5         # mm^3 of overlap growth that counts as a collision
 CLASS_TOL = 0.05          # |s_tail| below this (fraction of head length) = margins meet = sphaeroidal (PREREG §3)
-DISC_DEG = 150.0          # closed with less total curl than this = discoidal
+DISC_DEG = 150.0          # closed with less total curl than this = discoidal (PREREG §3)
+DISC_OVERLAP = 0.5        # ... AND the pygidium overlaps the cephalon by at least this fraction of head length (PREREG §3, resolved 0.5)
 MEASURE_BUDGET_S = 600
 MEASURE_GRID = (121, 61)  # 11 Sep: 61x31 severed harpetid tips and arms at every bevel; measure on the print grid (~24 s/animal)
 PRINT_GRID = (121, 61)
@@ -156,8 +157,10 @@ def closure_geometry(P, theta_deg):
     return dict(tail_margin_xyz=[round(float(v), 2) for v in tip[:3]], s_tail=round(float((tip[1] + Lc) / Lc), 4), head_front_y=round(-Lc, 2))
 
 def classify(limited_by, total_deg, s_tail):
+    """PREREG §3 verbatim: discoidal needs BOTH the short curl AND head/tail overlap s_tail >= DISC_OVERLAP; a short-curl
+    closure without the overlap falls through to the s_tail rules (the overlap term had been dropped; restored 20 Sep)."""
     if limited_by == "closed":
-        if total_deg < DISC_DEG: return "discoidal"
+        if total_deg < DISC_DEG and s_tail >= DISC_OVERLAP: return "discoidal"
         if abs(s_tail) <= CLASS_TOL: return "sphaeroidal"
         return "double" if s_tail > 0 else "spiral"
     if limited_by == "anatomy": return "open"
@@ -195,7 +198,7 @@ def measure(P, meshes, bound_deg=BOUND_DEG, budget_s=MEASURE_BUDGET_S, head_body
     joints = int(P["segCount"]) + 1; L = float(P["length"]); names = part_names(P)
     base = dict(instrument=INSTRUMENT_VERSION, params=schema.param_hash(P), bound_deg=bound_deg,
                 bevel_built_deg=(bevel_built_deg if bevel_built_deg is not None else bound_deg), scan_step_deg=SCAN_STEP_DEG,
-                res_deg=RES_DEG, rest_budget_mm3=REST_BUDGET_MM3, joints=joints, printed_stop_deg=P["maxAngle"],
+                res_deg=RES_DEG, rest_budget_mm3=REST_BUDGET_MM3, disc_deg=DISC_DEG, disc_overlap=DISC_OVERLAP, class_tol=CLASS_TOL, joints=joints, printed_stop_deg=P["maxAngle"],
                 collision_rule=f"overlap - overlap_at_rest > {OVERLAP_TOL} mm3")
     empty = dict(theta_joint_deg=None, total_deg=None, closure_gap_mm=None, gap_over_L=None, stopped_by=[], stop_recommended_deg=None,
                  v1_equivalent_e_max=None, s_tail=None, tail_margin_xyz=None, enroll_class="censored", scan_trace=[])

@@ -1,0 +1,222 @@
+{
+ "proetida": {
+  "off": {
+   "theta_joint_deg": 22.81,
+   "total_deg": 228.1,
+   "limited_by": "closed",
+   "stopped_by": [
+    [
+     0,
+     10,
+     11.9
+    ]
+   ],
+   "enroll_class": "double",
+   "s_tail": 0.2578,
+   "closure_gap_mm": 0.03,
+   "bevel_built_deg": 45.0,
+   "unsane_parts": [],
+   "valid": null,
+   "reason": "",
+   "seconds": 46
+  },
+  "on": {
+   "theta_joint_deg": 22.73,
+   "total_deg": 227.3,
+   "limited_by": "closed",
+   "stopped_by": [
+    [
+     0,
+     10,
+     11.7
+    ]
+   ],
+   "enroll_class": "double",
+   "s_tail": 0.2517,
+   "closure_gap_mm": 0.1,
+   "bevel_built_deg": 45.0,
+   "unsane_parts": [],
+   "valid": null,
+   "reason": "",
+   "seconds": 48
+  },
+  "delta_deg": -0.08,
+  "load_bearing": false
+ },
+ "corynexochida": {
+  "off": {
+   "theta_joint_deg": 22.66,
+   "total_deg": 203.9,
+   "limited_by": "closed",
+   "stopped_by": [
+    [
+     0,
+     9,
+     37.5
+    ]
+   ],
+   "enroll_class": "sphaeroidal",
+   "s_tail": -0.0137,
+   "closure_gap_mm": 0.0,
+   "bevel_built_deg": 45.0,
+   "unsane_parts": [],
+   "valid": null,
+   "reason": "",
+   "seconds": 42
+  },
+  "on": {
+   "theta_joint_deg": 22.5,
+   "total_deg": 202.5,
+   "limited_by": "closed",
+   "stopped_by": [
+    [
+     0,
+     9,
+     24.2
+    ]
+   ],
+   "enroll_class": "sphaeroidal",
+   "s_tail": -0.0185,
+   "closure_gap_mm": 0.0,
+   "bevel_built_deg": 45.0,
+   "unsane_parts": [],
+   "valid": null,
+   "reason": "",
+   "seconds": 43
+  },
+  "delta_deg": -0.16,
+  "load_bearing": false
+ },
+ "harpetida": {
+  "off": {
+   "theta_joint_deg": 30.39,
+   "total_deg": 303.9,
+   "limited_by": "closed",
+   "stopped_by": [
+    [
+     0,
+     10,
+     1.6
+    ]
+   ],
+   "enroll_class": "double",
+   "s_tail": 0.9095,
+   "closure_gap_mm": 0.0,
+   "bevel_built_deg": 45.0,
+   "unsane_parts": [],
+   "valid": null,
+   "reason": "",
+   "seconds": 54
+  },
+  "on": {
+   "theta_joint_deg": 29.3,
+   "total_deg": 293.0,
+   "limited_by": "closed",
+   "stopped_by": [
+    [
+     0,
+     10,
+     3.8
+    ]
+   ],
+   "enroll_class": "double",
+   "s_tail": 0.8582,
+   "closure_gap_mm": 0.0,
+   "bevel_built_deg": 45.0,
+   "unsane_parts": [],
+   "valid": null,
+   "reason": "",
+   "seconds": 49
+  },
+  "delta_deg": -1.09,
+  "load_bearing": true
+ },
+ "asaphida": {
+  "off": {
+   "theta_joint_deg": 20.7,
+   "total_deg": 186.3,
+   "limited_by": "anatomy",
+   "stopped_by": [
+    [
+     7,
+     9,
+     0.6
+    ]
+   ],
+   "enroll_class": "open",
+   "s_tail": -0.0234,
+   "closure_gap_mm": 16.27,
+   "bevel_built_deg": 45.0,
+   "unsane_parts": [],
+   "valid": null,
+   "reason": "",
+   "seconds": 35
+  },
+  "on": {
+   "theta_joint_deg": 20.7,
+   "total_deg": 186.3,
+   "limited_by": "anatomy",
+   "stopped_by": [
+    [
+     7,
+     9,
+     0.6
+    ]
+   ],
+   "enroll_class": "open",
+   "s_tail": -0.0234,
+   "closure_gap_mm": 15.69,
+   "bevel_built_deg": 45.0,
+   "unsane_parts": [],
+   "valid": null,
+   "reason": "",
+   "seconds": 35
+  },
+  "delta_deg": 0.0,
+  "load_bearing": false
+ },
+ "agnostida": {
+  "off": {
+   "theta_joint_deg": 21.41,
+   "total_deg": 64.2,
+   "limited_by": "closed",
+   "stopped_by": [
+    [
+     1,
+     3,
+     0.6
+    ]
+   ],
+   "enroll_class": "discoidal",
+   "s_tail": 1.5589,
+   "closure_gap_mm": 2.86,
+   "bevel_built_deg": 45.0,
+   "unsane_parts": [],
+   "valid": null,
+   "reason": "",
+   "seconds": 11
+  },
+  "on": {
+   "theta_joint_deg": 21.41,
+   "total_deg": 64.2,
+   "limited_by": "closed",
+   "stopped_by": [
+    [
+     1,
+     3,
+     0.6
+    ]
+   ],
+   "enroll_class": "discoidal",
+   "s_tail": 1.5589,
+   "closure_gap_mm": 2.86,
+   "bevel_built_deg": 45.0,
+   "unsane_parts": [],
+   "valid": null,
+   "reason": "",
+   "seconds": 12
+  },
+  "delta_deg": 0.0,
+  "load_bearing": false
+ }
+}

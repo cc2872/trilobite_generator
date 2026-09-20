@@ -1,0 +1,110 @@
+{
+ "11:asaphida": {
+  "spines": {
+   "theta": 12.42,
+   "limited_by": "anatomy",
+   "pair": [
+    "seg7-tail"
+   ],
+   "enroll_class": "open",
+   "gap_mm": 28.61,
+   "bevel": 45.0,
+   "reason": "",
+   "seconds": 36
+  },
+  "nospine": {
+   "theta": 12.42,
+   "limited_by": "anatomy",
+   "pair": [
+    "seg7-tail"
+   ],
+   "enroll_class": "open",
+   "gap_mm": 28.61,
+   "bevel": 45.0,
+   "reason": "",
+   "seconds": 33
+  }
+ },
+ "20:corynexochida": {
+  "spines": {
+   "theta": 12.66,
+   "limited_by": "anatomy",
+   "pair": [
+    "seg1-seg2",
+    "seg2-seg3",
+    "seg3-seg4"
+   ],
+   "enroll_class": "open",
+   "gap_mm": 23.74,
+   "bevel": 45.0,
+   "reason": "",
+   "seconds": 53
+  },
+  "nospine": {
+   "theta": 12.66,
+   "limited_by": "anatomy",
+   "pair": [
+    "seg1-seg2",
+    "seg2-seg3",
+    "seg3-seg4"
+   ],
+   "enroll_class": "open",
+   "gap_mm": 23.74,
+   "bevel": 45.0,
+   "reason": "",
+   "seconds": 46
+  }
+ },
+ "0:agnostida": {
+  "spines": {
+   "theta": 24.61,
+   "limited_by": "anatomy",
+   "pair": [
+    "seg1-tail"
+   ],
+   "enroll_class": "open",
+   "gap_mm": 9.76,
+   "bevel": 45.0,
+   "reason": "",
+   "seconds": 11
+  },
+  "nospine": {
+   "theta": 24.61,
+   "limited_by": "anatomy",
+   "pair": [
+    "seg1-tail"
+   ],
+   "enroll_class": "open",
+   "gap_mm": 9.76,
+   "bevel": 45.0,
+   "reason": "",
+   "seconds": 11
+  }
+ },
+ "5:agnostida": {
+  "spines": {
+   "theta": 25.47,
+   "limited_by": "anatomy",
+   "pair": [
+    "seg2-tail"
+   ],
+   "enroll_class": "open",
+   "gap_mm": 12.45,
+   "bevel": 45.0,
+   "reason": "",
+   "seconds": 15
+  },
+  "nospine": {
+   "theta": 25.47,
+   "limited_by": "anatomy",
+   "pair": [
+    "seg2-tail"
+   ],
+   "enroll_class": "open",
+   "gap_mm": 12.45,
+   "bevel": 45.0,
+   "reason": "",
+   "seconds": 15
+  }
+ }
+}
