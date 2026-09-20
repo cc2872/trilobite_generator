@@ -16,14 +16,15 @@ Parameters (all print-only, mm unless noted):
   neckW/H     1.8 / 1.4         neck section (must be < knobW-2*gap_lateral and < knobH-2*gap_vertical for retention)
   lip         1.4               front wall of the pocket
   gap_axial / gap_vertical / gap_lateral   0.20 / 0.30 / 0.25
-  baseChamfer 0.5               45-deg chamfer at every bed edge (elephant foot)
+  baseChamfer 0                 elephant-foot handling is left to the slicer's compensation setting, not cut into
+                                the mesh: the in-geometry inset trick left loose slivers at thin tips (spine tips).
 """
 import math, numpy as np, trimesh
 import parts, mesh as M
 from manifold3d import Manifold, OpType
 
 DEFAULTS = dict(jointZ=0.55, knobW=3.6, knobH=3.0, knobL=1.6, neckW=1.8, neckH=1.4, lip=1.4,
-                gap_axial=0.20, gap_vertical=0.30, gap_lateral=0.25, baseChamfer=0.5)
+                gap_axial=0.20, gap_vertical=0.30, gap_lateral=0.25, baseChamfer=0.0)
 
 
 def _ell(rx, ry, rz, at):
@@ -72,19 +73,8 @@ def print_segment(P, i, J=None, pocket_on_first=False):
         wedge = M.box(big, big, big, at=(0, y0, zj), align=("c", ("min" if rear else "max"), "max"))
         wedge.apply_transform(trimesh.transformations.rotation_matrix((-1 if rear else 1) * th, (1, 0, 0), (0, y0, zj)))
         body = body - M.to_manifold(wedge)
-    # ---- bed chamfer: 45 deg all round at z = 0
-    c = J["baseChamfer"]
-    if c > 0.05:
-        base = body ^ M.to_manifold(M.box(big, big, c, at=(0, 0, 0), align=("c", "c", "min")))
-        # shrink the base slab's footprint by c via a 45-deg cone trick: subtract (footprint ring) — approximate with an
-        # inset copy: scale the slab about its centroid so its outline moves in by ~c, keep the intersection
-        try:
-            slab = M.from_manifold(base); cen = slab.centroid; ext = slab.extents
-            k = max(1 - 2 * c / max(ext[0], 1e-6), 0.8); T = np.diag([k, 1.0, 1.0, 1.0]); T[0, 3] = cen[0] * (1 - k)
-            inset = M.to_manifold(slab.copy().apply_transform(T))
-            body = (body - base) + inset
-        except Exception:
-            pass
+    # ---- bed chamfer removed: the inset trick left 1-3 mm^3 slivers at thin tips (genal spines), so the STL came
+    #      back as extra loose shells. Elephant-foot compensation belongs in the slicer, not cut into the mesh.
     # ---- knob + neck at the rear midline, reaching into the next segment
     y_rear = L - 0.5 * ga
     neck = M.to_manifold(M.box(J["neckW"], (y_piv - y_rear) + 1.0, J["neckH"], at=(0, y_rear - 1.0, zj), align=("c", "min", "c")))
