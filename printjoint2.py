@@ -69,15 +69,18 @@ def print_segment(P, i, J=None, pocket_on_first=False):
     big = 400.0
     # ---- solid wedge body: everything under the dorsal surface down to the bed, flap removed, half-gap each end
     body = M.to_manifold(M.under_envelope(S["outline"], S["zfun"], nu=parts.GRID_SEG[0], nv=parts.GRID_SEG[1], floor=0.0))
-    if P["axialSpine"] > 0.02:                                        # dorsal axial spine (as in parts.segment); union before
-        r = 0.45 * S["margin"]                                        # the run trim + y-stretch so it rides the body
-        body = body + M.to_manifold(parts.spine_solid(0.6 * r + 0.6, 0.5, P["axialSpine"] * S["h"],
-                                    (0, S["ovl"] + 0.45 * (S["d"] - S["ovl"]), S["h"] + S["rise"] - 1.0), 0, pitch_deg=60))
+    spine = None                                                      # dorsal axial spine: built here, unioned AFTER the run
+    if P["axialSpine"] > 0.02:                                        # trim so a tall back-swept spine keeps its full reach.
+        r = 0.45 * S["margin"]                                        # It sweeps over the next segment on purpose — that is
+        spine = M.to_manifold(parts.spine_solid(0.6 * r + 0.6, 0.5, P["axialSpine"] * S["h"],   # what LIMITS the curl (a
+                              (0, S["ovl"] + 0.45 * (S["d"] - S["ovl"]), S["h"] + S["rise"] - 1.0), 0, pitch_deg=60))  # spiny trilobite doesn't fully enrol).
     ovl = S["ovl"]; run = (d + max(ovl - 2.0, 1.0)) - ovl             # the full-height run is 2 mm short of a pitch
     body = body ^ M.to_manifold(M.box(big, run, big, at=(0, ovl, -1), align=("c", "min", "min")))
     L = d                                                              # stretch the run to a full pitch (~ +20 % in y,
     body = body.translate((0, -ovl, 0)).scale((1.0, (d - ga) / run, 1.0))   # ring furrows spread a little), half-gap each end
     body = body.translate((0, 0.5 * ga, 0))
+    if spine is not None:                                             # spine rides the same y-map as the body, uncut by the trim
+        body = body + spine.translate((0, -ovl, 0)).scale((1.0, (d - ga) / run, 1.0)).translate((0, 0.5 * ga, 0))
     # ---- V faces below the pivot height (ventral curl closes the bottoms): half of maxAngle on each face
     th = math.radians(0.5 * P["maxAngle"])
     for rear in (True, False):

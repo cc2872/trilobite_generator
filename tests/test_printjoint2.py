@@ -1,7 +1,16 @@
 """Print joint (printjoint2): every part one watertight body, no rest overlap, captured under pull, stop at maxAngle."""
-import numpy as np, trimesh, schema, mesh as M, instrument as I, printjoint2 as J2
+import numpy as np, trimesh, schema, parts, mesh as M, instrument as I, printjoint2 as J2
 
 def _pen(a, b, T): return (M.to_manifold(a) ^ M.to_manifold(b.copy().apply_transform(T))).volume()
+
+def test_tall_dorsal_spine_carries_into_the_flexi_build():
+    """A tall back-swept axial spine must reach into the flexi segment, not be sliced off by the per-segment run trim
+    (the 21 Sep bug: flexi thorax read ~28 mm vs the pin's ~53). Watertightness alone did not catch it — the spine
+    was silently trimmed. Assert the flexi segment keeps most of the pin's height, and the part stays one body."""
+    P = schema.coerce(dict(maxAngle=18, axialSpine=2.0))
+    pin = parts.segment(P, 3); fx = J2.clean(J2.print_segment(P, 3))
+    assert len(M.bodies(fx)) == 1 and fx.is_watertight
+    assert fx.bounds[1][2] > 0.85 * pin.bounds[1][2], (fx.bounds[1][2], pin.bounds[1][2])
 
 def test_coupon_is_captured_and_stops_at_maxangle():
     P = schema.coerce(dict(maxAngle=30)); a, b = J2.chain(P, deg=0.0, n=2); J, d, zj, y_piv = J2.geometry(P)
