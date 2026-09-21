@@ -69,6 +69,10 @@ def print_segment(P, i, J=None, pocket_on_first=False):
     big = 400.0
     # ---- solid wedge body: everything under the dorsal surface down to the bed, flap removed, half-gap each end
     body = M.to_manifold(M.under_envelope(S["outline"], S["zfun"], nu=parts.GRID_SEG[0], nv=parts.GRID_SEG[1], floor=0.0))
+    if P["axialSpine"] > 0.02:                                        # dorsal axial spine (as in parts.segment); union before
+        r = 0.45 * S["margin"]                                        # the run trim + y-stretch so it rides the body
+        body = body + M.to_manifold(parts.spine_solid(0.6 * r + 0.6, 0.5, P["axialSpine"] * S["h"],
+                                    (0, S["ovl"] + 0.45 * (S["d"] - S["ovl"]), S["h"] + S["rise"] - 1.0), 0, pitch_deg=60))
     ovl = S["ovl"]; run = (d + max(ovl - 2.0, 1.0)) - ovl             # the full-height run is 2 mm short of a pitch
     body = body ^ M.to_manifold(M.box(big, run, big, at=(0, ovl, -1), align=("c", "min", "min")))
     L = d                                                              # stretch the run to a full pitch (~ +20 % in y,
@@ -161,6 +165,27 @@ def print_head(P, J=None):
     body = _vface(body, y_rear, zj, True, 0.5 * P["maxAngle"])
     knob_at, _ = _knob_and_pocket(P, J, d, zj, y_piv)
     body = body + knob_at(y_rear, y_piv - d)                                     # knob centre = lip + gap + r beyond the joint plane
+    # ---- unioned head anatomy. Genal horns: parts.cephalon's crescent-arm shell can't be grafted onto the flexi head
+    #      (it attaches in the rear strip the joint trims off, so it floats, and sweeps flat over seg0, welding the
+    #      head to the thorax). Instead the genal spine is a lifted tapered horn — rooted forward of the trim so it
+    #      fuses, pitched up and yawed out so it clears seg0 through the curl. (The blueprint draws genalSpine as a
+    #      horn too.) The pleural spines, pyg fork and marginal spines are already in the plan outlines.
+    if P["genalSpine"] * S["Lc"] > 0.5:
+        y_att = y_rear - 3.0                                                     # on the kept head, near the genal angle
+        xw = float(S["xmax"](np.array([y_att]))[0]) - 1.0
+        z_att = float(S["zfun"](np.array([xw]), np.array([y_att]))[0])
+        for sx in (1, -1):
+            body = body + M.to_manifold(parts.spine_solid(0.6 * S["margin"], 0.5, P["genalSpine"] * S["Lc"],
+                                        (sx * xw, y_att, z_att), yaw_deg=sx * 22.0, pitch_deg=26.0))
+    if P["occipitalSpine"] > 0.02:
+        body = body + M.to_manifold(parts.spine_solid(0.6 * S["margin"], 0.5, P["occipitalSpine"] * S["Lc"],
+                                    (0, -0.07 * S["Lc"], parts.ring_top(P) - 1.0), 0, pitch_deg=55))
+    if int(P.get("headProngs", 0)) > 0:
+        yf = float(S["outline"](0.0, 1.0)[1])                                    # front margin at the axis
+        body = body + M.to_manifold(parts.prong(int(P["headProngs"]), P["headProngLen"] * S["Lc"], P["headProngSplay"],
+                                    P.get("headProngWidth", 0.45) * S["margin"] + 0.6, 0.45, (0, yf + 1.5, 0.6 * S["margin"] + 0.5),
+                                    yaw_deg=180.0, pitch_deg=8.0, stem_frac=P.get("headProngStem", 0.0),
+                                    center_bias=P.get("headProngCenter", 1.0), curl_deg=P.get("headProngCurl", 0.0)))
     return M.from_manifold(body)
 
 
@@ -174,6 +199,16 @@ def print_tail(P, J=None):
     body = _vface(body, y_front, zj, False, 0.5 * P["maxAngle"])
     _, pocket_at = _knob_and_pocket(P, J, d, zj, y_piv)
     body = body - pocket_at(y_front)
+    # ---- unioned tail anatomy (as in parts.pygidium): terminal spine and posterior prongs at the tail tip (+y).
+    #      The pyg fork and marginal spines are already in S's outline, so they are in the body above.
+    if P["termSpine"] > 0.02:
+        body = body + M.to_manifold(parts.spine_solid(0.5 * S["margin"], 0.6, P["termSpine"] * S["Lp"],
+                                    (0, 0.85 * S["Lp"], 0.5 * S["margin"]), 0))
+    if int(P.get("tailProngs", 0)) > 0:
+        body = body + M.to_manifold(parts.prong(int(P["tailProngs"]), P["tailProngLen"] * S["Lp"], P["tailProngSplay"],
+                                    P.get("tailProngWidth", 0.45) * S["margin"] + 0.6, 0.45, (0, 0.90 * S["Lp"], 0.5 * S["margin"]),
+                                    yaw_deg=0.0, pitch_deg=5.0, stem_frac=P.get("tailProngStem", 0.0),
+                                    center_bias=P.get("tailProngCenter", 1.0), curl_deg=P.get("tailProngCurl", 0.0)))
     return M.from_manifold(body)
 
 
