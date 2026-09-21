@@ -1,7 +1,21 @@
 """Print joint (printjoint2): every part one watertight body, no rest overlap, captured under pull, stop at maxAngle."""
-import numpy as np, trimesh, schema, parts, mesh as M, instrument as I, printjoint2 as J2
+import os, glob, json, numpy as np, trimesh, pytest, schema, parts, mesh as M, instrument as I, printjoint2 as J2
 
 def _pen(a, b, T): return (M.to_manifold(a) ^ M.to_manifold(b.copy().apply_transform(T))).volume()
+
+_PRESETS = sorted(glob.glob(os.path.join(os.path.dirname(__file__), "..", "presets", "*.json")))
+
+@pytest.mark.parametrize("pf", _PRESETS, ids=[os.path.basename(p)[:-5] for p in _PRESETS])
+def test_every_preset_flexi_parts_are_printable(pf):
+    """Across all presets, each flexi part must be ONE watertight body and the tail solid to the bed. Catches the
+    animal-specific graft/joint bugs this session only found via user exports (tail float, spine trim, floating
+    horns) — before they ship, not after."""
+    P = schema.coerce(json.load(open(pf))["params"], base=schema.table_defaults())
+    head = J2.clean(J2.print_head(P)); tail = J2.clean(J2.print_tail(P))
+    seg = J2.clean(J2.print_segment(P, max(0, int(P["segCount"]) // 2), pocket_on_first=True))
+    for name, part in (("head", head), ("tail", tail), ("seg", seg)):
+        assert len(M.bodies(part)) == 1 and part.is_watertight, (os.path.basename(pf), name)
+    assert tail.bounds[0][2] < 0.6, (os.path.basename(pf), "tail floats", tail.bounds[0][2])
 
 def test_tail_is_solid_to_the_bed():
     """print_tail must be solid down to z=0, not floating above the joint bore: the 21 Sep manifold3d lazy-CSG drop in

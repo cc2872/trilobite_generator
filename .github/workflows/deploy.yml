@@ -2,8 +2,21 @@ name: build-image
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
 jobs:
+  test:                                    # gate: broken geometry must not reach the image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt flask
+      - run: python -m pytest tests/ -q
   build:
+    needs: test                            # only build/push if the tests pass
+    if: github.event_name == 'push'        # PRs run the tests only; push to main also builds
     runs-on: ubuntu-latest
     permissions:
       contents: read

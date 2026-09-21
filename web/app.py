@@ -35,7 +35,7 @@ def _build_sig(*names):
     h = hashlib.sha1()
     for n in names:
         try:
-            with open(os.path.join(ROOT, n), "rb") as f: h.update(f.read())
+            with open(os.path.join(ROOT, n), "rb") as f: h.update(f.read().replace(b"\r\n", b"\n"))   # LF-normalize: same key on Windows and in the Docker (LF) build
         except OSError: pass
     return h.hexdigest()[:8]
 BUILD_SIG = _build_sig("printjoint2.py", "printfill.py", "parts.py", "mesh.py", "fields.py")

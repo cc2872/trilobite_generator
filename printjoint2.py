@@ -16,7 +16,7 @@ Anatomy (layered on top of the joint, reusing parts.py builders in the print fra
 Parameters (all print-only, mm unless noted):
   jointZ      0.55              pivot height as a fraction of the ring top at the joint (abs-clamped 6-10 mm)
   knobW/H     3.6 / 3.6         barrel length across the body / barrel diameter -> lobe/bore radius r = knobH/2
-  neckW/H     1.2 / 1.2         round neck through the bore
+  neckH       1.2               round neck through the bore
   lip         1.2               wall between the bore and the concave face
   gap_axial / gap_vertical / gap_lateral   0.80 / 0.30 / 0.25
   baseChamfer 0                 elephant-foot handling is left to the slicer, not cut into the mesh
@@ -25,12 +25,8 @@ import math, numpy as np, trimesh
 import parts, mesh as M
 from manifold3d import Manifold, OpType
 
-DEFAULTS = dict(jointZ=0.55, knobW=3.6, knobH=3.6, knobL=1.6, neckW=1.2, neckH=1.2, lip=1.2,
-                gap_axial=0.80, gap_vertical=0.30, gap_lateral=0.25, baseChamfer=0.0, pocket="bore")
-
-
-def _ell(rx, ry, rz, at):
-    e = trimesh.creation.icosphere(subdivisions=3, radius=1.0); e.apply_scale([rx, ry, rz]); e.apply_translation(at); return M.to_manifold(e)
+DEFAULTS = dict(jointZ=0.55, knobW=3.6, knobH=3.6, neckH=1.2, lip=1.2,
+                gap_axial=0.80, gap_vertical=0.30, gap_lateral=0.25, baseChamfer=0.0)
 
 
 def clean(m):
@@ -56,7 +52,7 @@ def geometry(P, J=None):
     need = 2 * J["lip"] + 3 * J["gap_axial"] + J["knobH"]
     if d < need + 1.0:
         k = max((d - 1.0 - 3 * J["gap_axial"]) / (need - 3 * J["gap_axial"]), 0.45)
-        for key in ("knobW", "knobH", "neckW", "neckH", "lip"): J[key] = J[key] * k
+        for key in ("knobW", "knobH", "neckH", "lip"): J[key] = J[key] * k
         J["scaled"] = round(k, 3)
     zj = float(np.clip(J["jointZ"] * parts.ring_top(P), 6.0, 10.0))
     S = parts.segment_plan(P, 0); ztop = float(S["zfun"](np.array([0.0]), np.array([0.5 * d]))[0])
