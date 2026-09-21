@@ -3,6 +3,15 @@ import numpy as np, trimesh, schema, parts, mesh as M, instrument as I, printjoi
 
 def _pen(a, b, T): return (M.to_manifold(a) ^ M.to_manifold(b.copy().apply_transform(T))).volume()
 
+def test_tail_is_solid_to_the_bed():
+    """print_tail must be solid down to z=0, not floating above the joint bore: the 21 Sep manifold3d lazy-CSG drop in
+    _front_joint lost the tail's underside (~5.5 mm above the bed) and detached the terminal spine. Guarded by forcing
+    evaluation at the entry of the joint helpers."""
+    P = schema.coerce(dict(maxAngle=18, termSpine=0.5))
+    t = J2.clean(J2.print_tail(P))
+    assert len(M.bodies(t)) == 1 and t.is_watertight
+    assert t.bounds[0][2] < 0.6, t.bounds[0][2]                 # underside on (or near) the bed, not floating
+
 def test_tall_dorsal_spine_carries_into_the_flexi_build():
     """A tall back-swept axial spine must reach into the flexi segment, not be sliced off by the per-segment run trim
     (the 21 Sep bug: flexi thorax read ~28 mm vs the pin's ~53). Watertightness alone did not catch it — the spine

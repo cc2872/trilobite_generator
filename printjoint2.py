@@ -69,6 +69,7 @@ def geometry(P, J=None):
 def _rear_joint(body, P, J, zj, y_piv):
     """Concave rear face wrapping the next segment's lobe, plus the barrel on a round neck reaching into it."""
     ga = J["gap_axial"]; r = 0.5 * J["knobH"]; Rc = J["lip"] + ga + r; big = 400.0
+    body = M.to_manifold(M.from_manifold(body))                                          # force: guard the lazy-CSG drop
     body = body - M.to_manifold(M.cylinder(Rc + ga, big, axis="x", at=(0, y_piv, zj)))
     body = M.to_manifold(M.from_manifold(body))                                          # force (lazy-CSG drop otherwise)
     y_rear = y_piv - (Rc + ga); neckR = 0.5 * J["neckH"]
@@ -81,6 +82,7 @@ def _front_joint(body, P, J, zj, yc, y_prev_rear, front_face_y):
     """Convex lobe about the pivot (yc, zj) with a round through-bore and a rounded one-sided slot; below the lobe
     band the front face is cut so the stop lands at maxAngle for a rotation about (y_prev_rear + ..)."""
     ga, gv, gl = J["gap_axial"], J["gap_vertical"], J["gap_lateral"]; r = 0.5 * J["knobH"]; Rc = J["lip"] + ga + r; big = 400.0
+    body = M.to_manifold(M.from_manifold(body))                                          # force: guard the lazy-CSG drop below the lobe band
     ztop = zj - Rc - ga
     front_zone = M.to_manifold(M.box(big, 2 * Rc + 2.0, big, at=(0, yc - Rc - 1.0, ztop), align=("c", "min", "min")))
     lobe = M.to_manifold(M.cylinder(Rc, big, axis="x", at=(0, yc, zj)))
