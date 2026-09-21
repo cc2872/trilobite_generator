@@ -1,29 +1,32 @@
-"""printjoint2.py — the Flexi-#2 joint, parametrized on our segment geometry. PRINT ONLY; the instrument keeps its pin.
+"""printjoint2.py — the Flexi-#2 joint (v3), parametrized on our segment geometry. PRINT ONLY; the instrument keeps its pin.
 
-What Flexi #2 (Thingiverse 3839472, 8 bodies) does, and what this reproduces:
-  * every segment is a SOLID wedge with a flat base on the bed (no hollow shell, no nesting) -> prints with no supports
-  * one joint per pair: a small ellipsoid knob on a short neck at the rear midline of segment k, captured in a pocket
-    INSIDE segment k+1, entered through a slot in k+1's front face. The pocket is only a few mm wide, so its roof is a
-    short bridge and prints free at ~0.3 mm gaps
-  * the two faces meeting at each joint are cut as a V (half of maxAngle each) on the side away from the pivot,
-    so the stop is the faces touching at maxAngle
-Pivot: (x=0, y = pitch + lip + gap_axial + knobL/2, z = jointZ * local ring height). Note the pivot sits ~2.5 mm behind
-the instrument's joint plane (y = pitch): the print's flexion axis is not the measured one; state it, don't hide it.
+Joint v3 (21 Sep 2026, Thingiverse #3839472 form, 0.4 mm faces): each segment is a SOLID wedge on a flat base (no
+shell, no supports). One rounded joint per pair: the FRONT of a segment is a convex lobe (cylinder about the pivot
+line) with a round through-bore; the REAR of the segment ahead is the matching concave face with a barrel on a round
+neck reaching into that bore (_front_joint / _rear_joint). The stop is a back-leaning face below the lobe band, cut so
+the faces meet at maxAngle. Pivot (x=0, y = lip+gap+r beyond the joint plane, z = jointZ*ring, clamped 6-10 mm) sits
+behind the instrument's joint plane — pose print parts with transforms_deg here, not the instrument's hinge.
+
+Anatomy (layered on top of the joint, reusing parts.py builders in the print frames — parts.py / references untouched):
+  * pleural spines, pyg fork, marginal spines, head outline: already in the segment/tail/head plans (S).
+  * grafted solids: genal spine as a lifted horn, occipital spine, head/tail prongs, dorsal axial spine, terminal
+    spine. A tall axial spine is unioned AFTER the run-trim so it keeps its full sweep and simply LIMITS the curl —
+    biology: a spiny trilobite does not fully enrol. clean() drops boolean debris/flakes before export.
 
 Parameters (all print-only, mm unless noted):
-  jointZ      0.55   pivot height as a fraction of the ring top at the joint
-  knobW/H     3.0 / 2.6         barrel length across the body / barrel diameter (knobL unused)
-  neckW/H     1.8 / 1.4         neck section (must be < knobW-2*gap_lateral and < knobH-2*gap_vertical for retention)
-  lip         1.4               front wall of the pocket
-  gap_axial / gap_vertical / gap_lateral   0.30 / 0.30 / 0.25   (axial 0.30 -> 0.15 mm between adjacent faces; FDM cannot resolve less)
-  baseChamfer 0.5               45-deg chamfer at every bed edge (elephant foot)
+  jointZ      0.55              pivot height as a fraction of the ring top at the joint (abs-clamped 6-10 mm)
+  knobW/H     3.6 / 3.6         barrel length across the body / barrel diameter -> lobe/bore radius r = knobH/2
+  neckW/H     1.2 / 1.2         round neck through the bore
+  lip         1.2               wall between the bore and the concave face
+  gap_axial / gap_vertical / gap_lateral   0.80 / 0.30 / 0.25
+  baseChamfer 0                 elephant-foot handling is left to the slicer, not cut into the mesh
 """
 import math, numpy as np, trimesh
 import parts, mesh as M
 from manifold3d import Manifold, OpType
 
-DEFAULTS = dict(jointZ=0.55, knobW=3.6, knobH=3.0, knobL=1.6, neckW=1.8, neckH=1.4, lip=1.4,
-                gap_axial=0.30, gap_vertical=0.30, gap_lateral=0.25, baseChamfer=0.0)
+DEFAULTS = dict(jointZ=0.55, knobW=3.6, knobH=3.6, knobL=1.6, neckW=1.2, neckH=1.2, lip=1.2,
+                gap_axial=0.80, gap_vertical=0.30, gap_lateral=0.25, baseChamfer=0.0, pocket="bore")
 
 
 def _ell(rx, ry, rz, at):
@@ -32,9 +35,8 @@ def _ell(rx, ry, rz, at):
 
 def clean(m):
     """Drop print-debris shells: any connected component under 5 mm^3 OR thinner than 0.5 mm on its shortest axis.
-    Catches the zero-volume boolean ghosts AND the 1-3 mm^3 border flakes a thin, low anterolateral head envelope
-    sheds (0.2 x 3.6 x 0.3 mm, non-watertight) — the earlier 0.5 mm^3 / 0.2 mm export filter was too tight for those.
-    Returns the concatenated real body/bodies; if nothing clears the bar, returns the input untouched."""
+    Catches boolean ghosts and the 1-3 mm^3 border flakes a thin, low anterolateral head envelope sheds. Returns the
+    concatenated real body/bodies; if nothing clears the bar, returns the input untouched."""
     keep = [b for b in m.split(only_watertight=False) if b.volume >= 5.0 and b.extents.min() >= 0.5]
     return trimesh.util.concatenate(keep) if keep else m
 
@@ -59,58 +61,73 @@ def geometry(P, J=None):
     zj = float(np.clip(J["jointZ"] * parts.ring_top(P), 6.0, 10.0))
     S = parts.segment_plan(P, 0); ztop = float(S["zfun"](np.array([0.0]), np.array([0.5 * d]))[0])
     zj = min(zj, ztop - (0.5 * J["knobH"] + J["gap_vertical"] + J["lip"]) - 0.3)   # keep a lip above the pocket
-    y_piv = d + J["lip"] + J["gap_axial"] + 0.5 * J["knobH"]           # barrel centre, inside the next segment
+    y_piv = d + 0.5 * J["gap_axial"] + J["lip"] + J["gap_axial"] + 0.5 * J["knobH"]   # barrel centre = the next segment's bore centre
+                                                                                        # (its front face sits half a gap past the joint plane)
     return J, d, zj, y_piv
 
 
+def _rear_joint(body, P, J, zj, y_piv):
+    """Concave rear face wrapping the next segment's lobe, plus the barrel on a round neck reaching into it."""
+    ga = J["gap_axial"]; r = 0.5 * J["knobH"]; Rc = J["lip"] + ga + r; big = 400.0
+    body = body - M.to_manifold(M.cylinder(Rc + ga, big, axis="x", at=(0, y_piv, zj)))
+    body = M.to_manifold(M.from_manifold(body))                                          # force (lazy-CSG drop otherwise)
+    y_rear = y_piv - (Rc + ga); neckR = 0.5 * J["neckH"]
+    neck = M.to_manifold(M.cylinder(neckR, (y_piv - y_rear) + 2.0, axis="y", at=(0, 0.5 * (y_piv + y_rear) - 1.0, zj)))
+    knob = M.to_manifold(M.cylinder(r, J["knobW"], axis="x", at=(0, y_piv, zj)))
+    return body + neck + knob
+
+
+def _front_joint(body, P, J, zj, yc, y_prev_rear, front_face_y):
+    """Convex lobe about the pivot (yc, zj) with a round through-bore and a rounded one-sided slot; below the lobe
+    band the front face is cut so the stop lands at maxAngle for a rotation about (y_prev_rear + ..)."""
+    ga, gv, gl = J["gap_axial"], J["gap_vertical"], J["gap_lateral"]; r = 0.5 * J["knobH"]; Rc = J["lip"] + ga + r; big = 400.0
+    ztop = zj - Rc - ga
+    front_zone = M.to_manifold(M.box(big, 2 * Rc + 2.0, big, at=(0, yc - Rc - 1.0, ztop), align=("c", "min", "min")))
+    lobe = M.to_manifold(M.cylinder(Rc, big, axis="x", at=(0, yc, zj)))
+    behind = M.to_manifold(M.box(big, big, big, at=(0, yc, ztop), align=("c", "min", "min")))
+    body = ((body - front_zone) + ((body ^ front_zone) ^ lobe)) + (body ^ behind)
+    body = M.to_manifold(M.from_manifold(body))
+    # the stop: front face below the lobe band, a plane through the pivot line leaning back by alpha
+    th = math.radians(P["maxAngle"]); delta = yc - y_prev_rear                         # pivot -> previous part's rear face
+    t_alpha = (math.sin(th) - delta / zj) / math.cos(th)
+    if t_alpha > 0.005:
+        alpha = math.atan(t_alpha); y_e = yc + (zj - ztop) * t_alpha
+        hs = M.box(big, big, big, at=(0, y_e, ztop), align=("c", "max", "c"))
+        hs.apply_transform(trimesh.transformations.rotation_matrix(alpha, (1, 0, 0), (0, y_e, ztop)))
+        body = body - (M.to_manifold(hs) ^ M.to_manifold(M.box(big, big, big, at=(0, 0, ztop), align=("c", "c", "max"))))
+    else:
+        body = body - M.to_manifold(M.box(big, (yc - front_face_y) + 1.0, ztop + 1.0, at=(0, front_face_y - 1.0, -1.0), align=("c", "min", "min")))
+    body = M.to_manifold(M.from_manifold(body))
+    bore = M.to_manifold(M.cylinder(r + gv, big, axis="x", at=(0, yc, zj)))
+    neckR = 0.5 * J["neckH"]
+    slot0 = M.cylinder(neckR + max(gl, gv), Rc + 2.0, axis="y", at=(0, yc - 0.5 * (Rc + 2.0) - 0.5, zj))
+    th2 = math.radians(P["maxAngle"] + 2.0); fan = [M.to_manifold(slot0)]
+    for f in np.linspace(math.radians(-2.0), th2, 9):
+        fan.append(M.to_manifold(slot0.copy().apply_transform(trimesh.transformations.rotation_matrix(f, (1, 0, 0), (0, yc, zj)))))
+    return body - bore - Manifold.batch_boolean(fan, OpType.Add)
+
+
 def print_segment(P, i, J=None, pocket_on_first=False):
+    """Thingiverse #3839472 form (21 Sep): the FRONT of each segment is a rounded lobe (cylinder about the pivot line)
+    with a round through-bore; the REAR of the segment ahead is the matching concave face with a barrel on a round neck
+    reaching into that bore. Solid to the bed, no boxes."""
     J, d, zj, y_piv = geometry(P, J)
-    S = parts.segment_plan(P, i); ga, gv, gl = J["gap_axial"], J["gap_vertical"], J["gap_lateral"]
-    big = 400.0
-    # ---- solid wedge body: everything under the dorsal surface down to the bed, flap removed, half-gap each end
+    S = parts.segment_plan(P, i); ga = J["gap_axial"]; big = 400.0; r = 0.5 * J["knobH"]
+    yc = 0.5 * ga + J["lip"] + ga + r
     body = M.to_manifold(M.under_envelope(S["outline"], S["zfun"], nu=parts.GRID_SEG[0], nv=parts.GRID_SEG[1], floor=0.0))
-    spine = None                                                      # dorsal axial spine: built here, unioned AFTER the run
-    if P["axialSpine"] > 0.02:                                        # trim so a tall back-swept spine keeps its full reach.
-        r = 0.45 * S["margin"]                                        # It sweeps over the next segment on purpose — that is
-        spine = M.to_manifold(parts.spine_solid(0.6 * r + 0.6, 0.5, P["axialSpine"] * S["h"],   # what LIMITS the curl (a
-                              (0, S["ovl"] + 0.45 * (S["d"] - S["ovl"]), S["h"] + S["rise"] - 1.0), 0, pitch_deg=60))  # spiny trilobite doesn't fully enrol).
-    ovl = S["ovl"]; run = (d + max(ovl - 2.0, 1.0)) - ovl             # the full-height run is 2 mm short of a pitch
+    ovl = S["ovl"]; run = (d + max(ovl - 2.0, 1.0)) - ovl
     body = body ^ M.to_manifold(M.box(big, run, big, at=(0, ovl, -1), align=("c", "min", "min")))
-    L = d                                                              # stretch the run to a full pitch (~ +20 % in y,
-    body = body.translate((0, -ovl, 0)).scale((1.0, (d - ga) / run, 1.0))   # ring furrows spread a little), half-gap each end
-    body = body.translate((0, 0.5 * ga, 0))
-    if spine is not None:                                             # spine rides the same y-map as the body, uncut by the trim
-        body = body + spine.translate((0, -ovl, 0)).scale((1.0, (d - ga) / run, 1.0)).translate((0, 0.5 * ga, 0))
-    # ---- V faces below the pivot height (ventral curl closes the bottoms): half of maxAngle on each face
-    th = math.radians(0.5 * P["maxAngle"])
-    for rear in (True, False):
-        y0 = (L - 0.5 * ga) if rear else 0.5 * ga
-        wedge = M.box(big, big, big, at=(0, y0, zj), align=("c", ("min" if rear else "max"), "max"))
-        wedge.apply_transform(trimesh.transformations.rotation_matrix((-1 if rear else 1) * th, (1, 0, 0), (0, y0, zj)))
-        body = body - M.to_manifold(wedge)
-    # (no bed chamfer in the geometry: the earlier x-only inset trick left 1-3 mm3 sliver bodies at the genal-spine and
-    #  pleural tips on the 20 Sep site export. Elephant-foot is the slicer's job — "elephant foot compensation" 0.1-0.2 mm.)
-    # ---- knob + neck at the rear midline, reaching into the next segment
-    y_rear = L - 0.5 * ga
-    neck = M.to_manifold(M.box(J["neckW"], (y_piv - y_rear) + 1.0, J["neckH"], at=(0, y_rear - 1.0, zj), align=("c", "min", "c")))
-    # knob = a short BARREL across the body (axis x): its y-z section is a circle, so flexion about x never changes
-    # its fore-aft extent (the sphere's cap wedged into the slot and the disc's corners both cost axial play)
-    knob = M.to_manifold(M.cylinder(0.5 * J["knobH"], J["knobW"], axis="x", at=(0, y_piv, zj)))
-    body = body + neck + knob
-    # ---- pocket + slot in the FRONT of this segment, for the knob of the segment ahead (same offsets, y measured
-    #      from this segment's front face at y = 0.5*ga): pocket centre at y = 0.5*ga - d + y_piv = lip + ga + knobL/2 + 0.5*ga
+    body = body.translate((0, -ovl, 0)).scale((1.0, (d - ga) / run, 1.0)).translate((0, 0.5 * ga, 0))
+    body = M.to_manifold(M.from_manifold(body))
+    body = _rear_joint(body, P, J, zj, y_piv)
+    body = M.to_manifold(M.from_manifold(body))
     if i > 0 or pocket_on_first:
-        yc = 0.5 * ga + J["lip"] + ga + 0.5 * J["knobH"]
-        # pocket is a BOX (flat inner lip face = real retention across the knob's shoulders; an ellipsoid pocket lets
-        # the knob wedge forward on thin shoulders). Slot runs from the face to the pocket's front wall only.
-        pocket = M.to_manifold(M.box(J["knobW"] + 2 * gl, J["knobH"] + 2 * ga, J["knobH"] + 2 * gv, at=(0, yc, zj)))
-        y_lip_in = yc - (0.5 * J["knobH"] + ga)
-        slot = M.to_manifold(M.box(J["neckW"] + 2 * gl, y_lip_in + 1.0 + 0.05, J["neckH"] + 2 * gv, at=(0, -1.0, zj), align=("c", "min", "c")))
-        # the slot must let the neck swing through the flexion range: sweep it
-        th2 = math.radians(P["maxAngle"] + 6.0); fan = [slot]
-        for f in np.linspace(-th2, th2, 7):
-            fan.append(M.to_manifold(M.from_manifold(slot).apply_transform(trimesh.transformations.rotation_matrix(f, (1, 0, 0), (0, yc, zj)))))
-        body = body - pocket - Manifold.batch_boolean(fan, OpType.Add)
+        body = _front_joint(body, P, J, zj, yc, y_prev_rear=-0.5 * ga, front_face_y=0.5 * ga)
+    if P["axialSpine"] > 0.02:                                        # dorsal axial spine, unioned AFTER the run-trim/joints
+        r_ax = 0.45 * S["margin"]                                     # so a tall back-swept spine keeps its full reach; it
+        sp = M.to_manifold(parts.spine_solid(0.6 * r_ax + 0.6, 0.5, P["axialSpine"] * S["h"],   # sweeps over the next segment
+                           (0, S["ovl"] + 0.45 * (S["d"] - S["ovl"]), S["h"] + S["rise"] - 1.0), 0, pitch_deg=60))  # = spine-limited enrolment (biology)
+        body = body + sp.translate((0, -ovl, 0)).scale((1.0, (d - ga) / run, 1.0)).translate((0, 0.5 * ga, 0))
     return M.from_manifold(body)
 
 
@@ -126,55 +143,24 @@ def chain(P, J=None, deg=0.0, n=None):
 
 
 # ---------------------------------------------------------------- whole animal: head + segments + tail
-def _knob_and_pocket(P, J, d, zj, y_piv):
-    """Shared helpers: knob+neck reaching back from a rear face at y_rear; pocket+slot entering a front face at y_front."""
-    ga, gv, gl = J["gap_axial"], J["gap_vertical"], J["gap_lateral"]
-    def knob_at(y_rear, y_c):
-        neck = M.to_manifold(M.box(J["neckW"], (y_c - y_rear) + 1.0, J["neckH"], at=(0, y_rear - 1.0, zj), align=("c", "min", "c")))
-        return neck + M.to_manifold(M.cylinder(0.5 * J["knobH"], J["knobW"], axis="x", at=(0, y_c, zj)))
-    def pocket_at(y_front):
-        yc = y_front + J["lip"] + ga + 0.5 * J["knobH"]
-        pocket = M.to_manifold(M.box(J["knobW"] + 2 * gl, J["knobH"] + 2 * ga, J["knobH"] + 2 * gv, at=(0, yc, zj)))
-        y_lip_in = yc - (0.5 * J["knobH"] + ga)
-        slot0 = M.box(J["neckW"] + 2 * gl, (y_lip_in - y_front) + 1.0 + 0.05, J["neckH"] + 2 * gv, at=(0, y_front - 1.0, zj), align=("c", "min", "c"))
-        th2 = math.radians(P["maxAngle"] + 6.0); fan = [M.to_manifold(slot0)]
-        for f in np.linspace(-th2, th2, 7):
-            fan.append(M.to_manifold(slot0.copy().apply_transform(trimesh.transformations.rotation_matrix(f, (1, 0, 0), (0, yc, zj)))))
-        return pocket + Manifold.batch_boolean(fan, OpType.Add)
-    return knob_at, pocket_at
-
-
-def _vface(body, y0, zj, rear, half_deg):
-    big = 400.0; th = math.radians(half_deg)
-    wedge = M.box(big, big, big, at=(0, y0, zj), align=("c", ("min" if rear else "max"), "max"))
-    wedge.apply_transform(trimesh.transformations.rotation_matrix((-1 if rear else 1) * th, (1, 0, 0), (0, y0, zj)))
-    return body - M.to_manifold(wedge)
-
-
 def print_head(P, J=None):
-    """Cephalon as a solid on a flat base (eyes and prongs stay: they are above the joint), knob at the rear midline
-    reaching into seg0. Head frame: hinge at y = 0, the shell runs to -y."""
-    J, d, zj, y_piv = geometry(P, J); ga = J["gap_axial"]
+    """Cephalon solid on a flat base (eyes from the tracked eye builder), concave rear + barrel into seg0's lobe.
+    Head frame: joint plane at y = 0, shell runs to -y; its pivot is lip + gap + r beyond the plane, like a segment's."""
+    J, d, zj, y_piv = geometry(P, J); ga = J["gap_axial"]; r = 0.5 * J["knobH"]; big = 400.0
     S = parts.cephalon_plan(P)
     body = M.to_manifold(M.under_envelope(S["outline"], S["zfun"], nu=parts.GRID_SEG[0], nv=parts.GRID_SEG[1], floor=0.0))
-    if P.get("eyeSolid", 0) > 0.5 and P["eyeSize"] > 0.01:                      # eyes (and stalks) as solids from the tracked eye builder
-        G = S["eye"]; EP = parts.eye_params(P, G["eR"])
-        eye, _ = parts.eye_solid(**EP)
+    if P.get("eyeSolid", 0) > 0.5 and P["eyeSize"] > 0.01:
+        G = S["eye"]; EP = parts.eye_params(P, G["eR"]); eye, _ = parts.eye_solid(**EP)
         zb = float(S["zfun"](np.array([G["xe"]]), np.array([G["ye"]]))[0]) - 0.3 + EP.get("stalk", 0.0)
-        eR_ = eye.copy().apply_translation((G["xe"], G["ye"], zb)); eL_ = M.mirror_x(eR_)
-        body = body + M.to_manifold(eR_) + M.to_manifold(eL_)
+        eR_ = eye.copy().apply_translation((G["xe"], G["ye"], zb)); body = body + M.to_manifold(eR_) + M.to_manifold(M.mirror_x(eR_))
+    body = body ^ M.to_manifold(M.box(big, big, big, at=(0, -0.5 * ga, 0), align=("c", "max", "c")))
+    body = _rear_joint(body, P, J, zj, y_piv - d)
+    # ---- unioned head anatomy. Genal spine as a lifted tapered horn (rooted forward of the trim so it fuses, pitched
+    #      up/out so it clears seg0 through the curl), occipital spine, anterior prongs. Outline features (pleural
+    #      spines, head arc) are already in S.
     y_rear = -0.5 * ga
-    body = body ^ M.to_manifold(M.box(400, 400, 400, at=(0, y_rear, 0), align=("c", "max", "c")))   # half a gap short of the joint
-    body = _vface(body, y_rear, zj, True, 0.5 * P["maxAngle"])
-    knob_at, _ = _knob_and_pocket(P, J, d, zj, y_piv)
-    body = body + knob_at(y_rear, y_piv - d)                                     # knob centre = lip + gap + r beyond the joint plane
-    # ---- unioned head anatomy. Genal horns: parts.cephalon's crescent-arm shell can't be grafted onto the flexi head
-    #      (it attaches in the rear strip the joint trims off, so it floats, and sweeps flat over seg0, welding the
-    #      head to the thorax). Instead the genal spine is a lifted tapered horn — rooted forward of the trim so it
-    #      fuses, pitched up and yawed out so it clears seg0 through the curl. (The blueprint draws genalSpine as a
-    #      horn too.) The pleural spines, pyg fork and marginal spines are already in the plan outlines.
     if P["genalSpine"] * S["Lc"] > 0.5:
-        y_att = y_rear - 3.0                                                     # on the kept head, near the genal angle
+        y_att = y_rear - 3.0
         xw = float(S["xmax"](np.array([y_att]))[0]) - 1.0
         z_att = float(S["zfun"](np.array([xw]), np.array([y_att]))[0])
         for sx in (1, -1):
@@ -193,17 +179,13 @@ def print_head(P, J=None):
 
 
 def print_tail(P, J=None):
-    """Pygidium as a solid on a flat base with the pocket at its front. Tail frame: hinge at y = 0, shell runs to +y."""
-    J, d, zj, y_piv = geometry(P, J); ga = J["gap_axial"]
-    S = parts.pygidium_plan(P)
+    """Pygidium solid on a flat base with the front lobe + bore. Tail frame: joint plane at y = 0, shell runs to +y."""
+    J, d, zj, y_piv = geometry(P, J); ga = J["gap_axial"]; r = 0.5 * J["knobH"]; big = 400.0
+    S = parts.pygidium_plan(P); yc = 0.5 * ga + J["lip"] + ga + r
     body = M.to_manifold(M.under_envelope(S["outline"], S["zfun"], nu=parts.GRID_TAIL[0], nv=parts.GRID_TAIL[1], floor=0.0))
-    y_front = 0.5 * ga
-    body = body ^ M.to_manifold(M.box(400, 400, 400, at=(0, y_front, 0), align=("c", "min", "c")))
-    body = _vface(body, y_front, zj, False, 0.5 * P["maxAngle"])
-    _, pocket_at = _knob_and_pocket(P, J, d, zj, y_piv)
-    body = body - pocket_at(y_front)
-    # ---- unioned tail anatomy (as in parts.pygidium): terminal spine and posterior prongs at the tail tip (+y).
-    #      The pyg fork and marginal spines are already in S's outline, so they are in the body above.
+    body = body ^ M.to_manifold(M.box(big, big, big, at=(0, 0.5 * ga, 0), align=("c", "min", "c")))
+    body = _front_joint(body, P, J, zj, yc, y_prev_rear=-0.5 * ga, front_face_y=0.5 * ga)
+    # ---- unioned tail anatomy: terminal spine and posterior prongs at the tip (+y). Pyg fork + marginal spines are in S.
     if P["termSpine"] > 0.02:
         body = body + M.to_manifold(parts.spine_solid(0.5 * S["margin"], 0.6, P["termSpine"] * S["Lp"],
                                     (0, 0.85 * S["Lp"], 0.5 * S["margin"]), 0))
