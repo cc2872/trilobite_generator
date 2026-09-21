@@ -14,6 +14,17 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.ins
 from flask import Flask, request, jsonify, send_from_directory, send_file
 import schema, parts, instrument as I
 
+# manifold3d is pinned to 3.0.1 (PREREG §9): other versions' booleans shed sliver flakes, pinch thin envelopes to
+# non-manifold edges, and spike cylinder seams. A wrong-version image is what shipped the 21 Sep head pinch. Warn
+# loudly at startup so a mis-built deploy is visible in the logs instead of silently exporting crumbs.
+import importlib.metadata as _md
+try: _MANIFOLD_V = _md.version("manifold3d")
+except Exception: _MANIFOLD_V = "unknown"
+if _MANIFOLD_V != "3.0.1":
+    sys.stderr.write(f"[trilobite] WARNING: manifold3d {_MANIFOLD_V} != pinned 3.0.1 — print/measure geometry may carry "
+                     f"boolean artifacts (non-manifold pinches, sliver flakes, seam spikes). `pip install -r requirements.txt`.\n")
+    sys.stderr.flush()
+
 app = Flask(__name__, static_folder=None)
 CACHE = os.path.join(ROOT, "web", "cache"); os.makedirs(CACHE, exist_ok=True)
 
@@ -114,7 +125,7 @@ def api_build():
             try:
                 m = J2.clean(fn())                                     # drop ghost shells + thin border flakes (< 5 mm3 or < 0.5 mm)
                 m.export(os.path.join(folder, f"{name}.glb")); m.export(os.path.join(folder, f"{name}.stl"))
-                out.append(dict(name=name, url=f"/files/{key}/{name}.glb", stl=f"/files/{key}/{name}.stl", bodies=len(__import__("mesh").bodies(m)), volume=round(m.volume, 1)))
+                out.append(dict(name=name, url=f"/files/{key}/{name}.glb", stl=f"/files/{key}/{name}.stl", bodies=len(__import__("mesh").bodies(m)), watertight=bool(m.is_watertight), volume=round(m.volume, 1)))
             except Exception as ex:
                 out.append(dict(name=name, error=str(ex)[:120]))
             PROGRESS.update(done=len(out))
