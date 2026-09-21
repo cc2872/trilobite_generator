@@ -30,6 +30,15 @@ def _ell(rx, ry, rz, at):
     e = trimesh.creation.icosphere(subdivisions=3, radius=1.0); e.apply_scale([rx, ry, rz]); e.apply_translation(at); return M.to_manifold(e)
 
 
+def clean(m):
+    """Drop print-debris shells: any connected component under 5 mm^3 OR thinner than 0.5 mm on its shortest axis.
+    Catches the zero-volume boolean ghosts AND the 1-3 mm^3 border flakes a thin, low anterolateral head envelope
+    sheds (0.2 x 3.6 x 0.3 mm, non-watertight) — the earlier 0.5 mm^3 / 0.2 mm export filter was too tight for those.
+    Returns the concatenated real body/bodies; if nothing clears the bar, returns the input untouched."""
+    keep = [b for b in m.split(only_watertight=False) if b.volume >= 5.0 and b.extents.min() >= 0.5]
+    return trimesh.util.concatenate(keep) if keep else m
+
+
 MIN_PITCH = 4.5          # below this no joint fits; the export should refuse rather than emit a fused chain
 
 
@@ -171,7 +180,7 @@ def print_tail(P, J=None):
 def print_animal(P, J=None):
     """All parts in their own frames (head, seg0..segN-1, tail), so instrument.transforms_deg(P, 0) assembles them."""
     n = int(P["segCount"])
-    return [print_head(P, J)] + [print_segment(P, i, J, pocket_on_first=True) for i in range(n)] + [print_tail(P, J)]
+    return [clean(print_head(P, J))] + [clean(print_segment(P, i, J, pocket_on_first=True)) for i in range(n)] + [clean(print_tail(P, J))]
 
 
 def transforms_deg(P, theta_deg, J=None):

@@ -101,10 +101,10 @@ def api_build():
             builders = [("head", lambda: F.cephalon(P, fill))] + [(f"seg{i}", (lambda i=i: F.segment(P, i, fill))) for i in range(int(P["segCount"]))] + [("tail", lambda: F.pygidium(P, fill))]
         else:
             builders = [("head", lambda: parts.cephalon(P, notes=bnotes))] + [(f"seg{i}", (lambda i=i: parts.segment(P, i))) for i in range(int(P["segCount"]))] + [("tail", lambda: parts.pygidium(P))]
+        import printjoint2 as J2
         for name, fn in builders:
             try:
-                m = fn()
-                m = trimesh.util.concatenate([b for b in m.split(only_watertight=False) if b.volume > 0.5 and b.extents.min() > 0.2])   # drop ghost shells / ribbons from the booleans
+                m = J2.clean(fn())                                     # drop ghost shells + thin border flakes (< 5 mm3 or < 0.5 mm)
                 m.export(os.path.join(folder, f"{name}.glb")); m.export(os.path.join(folder, f"{name}.stl"))
                 out.append(dict(name=name, url=f"/files/{key}/{name}.glb", stl=f"/files/{key}/{name}.stl", bodies=len(__import__("mesh").bodies(m)), volume=round(m.volume, 1)))
             except Exception as ex:
