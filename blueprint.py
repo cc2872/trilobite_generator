@@ -305,12 +305,22 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None):
              f"LENGTH   {L:.1f} mm", f"WIDTH    {W:.1f} mm", f"RELIEF   {z1 - z0:.1f} mm", f"SEGMENTS {int(P['segCount'])}", f"PITCH    {pitch:.2f} mm", "",
              f"HINGE z  {meas.get('hinge_z', '—')} mm", f"KNUCKLE  {meas.get('knuckle', '—')} mm × {int(P.get('nKnuckles', 3))}", f"STOP     {P['maxAngle']}° / joint", "",
              f"E@STOP   {meas.get('e_max', '—')}", f"GAP      {meas.get('closure_gap_mm', '—')} mm", f"CLASS    {str(meas.get('enroll_class', '—')).upper()}", f"PRINT    {'VALID' if meas.get('print_valid') else 'CHECK'}", "",
-             "GENAL PATH", f"  {P.get('genalPath', '—')}", f"  {P.get('genalCurve', 0)}° · {P.get('genalWidthMM', 0)} mm", "", "SHEET 1 / 1   REV A"]
+             "GENAL PATH", f"  {P.get('genalPath', '—')}", f"  {P.get('genalCurve', 0)}° · {P.get('genalWidthMM', 0)} mm", "",
+             "SPEC     json in PNG", "  read_sheet_spec.py", "", "SHEET 1 / 1   REV A"]
     ax5.text(0.02, 0.98, "\n".join(lines), color=INK, fontsize=8, family="monospace", va="top", ha="left", linespacing=1.55)
     for s in ax5.spines.values(): s.set_visible(True); s.set_color(INK); s.set_linewidth(0.8)
     ax5.set_xticks([]); ax5.set_yticks([]); ax5.axis("on")
     fig.text(0.98, 0.018, "Claire Choi · Cornell", color=INK, fontsize=8, ha="right", va="bottom", family="monospace")
-    fig.savefig(path, dpi=110, facecolor=BG); plt.close(fig); return path
+    # embed the full specification in the PNG so the sheet is self-describing: the exact params (and hash / schema /
+    # instrument) travel with the image and can be read back with scripts/read_sheet_spec.py — no cache lookup needed.
+    import json as _json
+    try:
+        import schema as _schema; _sv = _schema.SCHEMA_VERSION
+    except Exception:
+        _sv = str(P.get("schema", ""))
+    spec = _json.dumps({"hash": meas.get("params", ""), "schema": _sv, "instrument": meas.get("instrument", ""),
+                        "params": P}, sort_keys=True, default=str)
+    fig.savefig(path, dpi=110, facecolor=BG, metadata={"trilobite": spec}); plt.close(fig); return path
 
 if __name__ == "__main__" and len(__import__("sys").argv) > 1 and __import__("sys").argv[1] != "gallery":
     import sys, json
