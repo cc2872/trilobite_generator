@@ -9,6 +9,7 @@ instrument (instrument.read: build at the fixed measurement bevel, probe, measur
 the hinge kinematics so the browser animates the animal to its stop with the limiting pair flashing.
 """
 import os, sys, json, glob, time, threading, hashlib, shutil
+import trimesh
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, ROOT)
 from flask import Flask, request, jsonify, send_from_directory, send_file
 import schema, parts, instrument as I
@@ -77,7 +78,12 @@ def api_build():
     P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
     joint = body.get("joint", "pin")                       # "pin" = tracked builder (the measured geometry); "flexi" = printjoint2
     fill = float(body.get("fill", 0.0) or 0.0)              # pin builds only: thicken the shell for printing (mm), print-only
-    key = schema.param_hash(P) + ("-flexi" if joint == "flexi" else "") + (f"-fill{fill:g}" if fill > 0.05 and joint != "flexi" else "")
+    if joint == "flexi":                                    # the print joint's own defaults are part of the cache identity, so a
+        import printjoint2 as J2                            # change to printjoint2 (gaps, chamfer, ...) never serves stale parts
+        jtag = "-flexi" + hashlib.sha1(json.dumps(J2.DEFAULTS, sort_keys=True).encode()).hexdigest()[:6]
+    else:
+        jtag = ""
+    key = schema.param_hash(P) + jtag + (f"-fill{fill:g}" if fill > 0.05 and joint != "flexi" else "")
     folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
     n_parts = int(P["segCount"]) + 2
     PROGRESS.update(done=0, total=n_parts)
@@ -95,14 +101,12 @@ def api_build():
             builders = [("head", lambda: F.cephalon(P, fill))] + [(f"seg{i}", (lambda i=i: F.segment(P, i, fill))) for i in range(int(P["segCount"]))] + [("tail", lambda: F.pygidium(P, fill))]
         else:
             builders = [("head", lambda: parts.cephalon(P, notes=bnotes))] + [(f"seg{i}", (lambda i=i: parts.segment(P, i))) for i in range(int(P["segCount"]))] + [("tail", lambda: parts.pygidium(P))]
-        import mesh as _M, trimesh as _tm
         for name, fn in builders:
             try:
                 m = fn()
-                comps = _M.bodies(m)                                    # drop the V-cut/pocket coincident-face debris
-                if comps: m = comps[0] if len(comps) == 1 else _tm.util.concatenate(comps)   # (zero-volume ghost shells)
+                m = trimesh.util.concatenate([b for b in m.split(only_watertight=False) if b.volume > 0.5 and b.extents.min() > 0.2])   # drop ghost shells / ribbons from the booleans
                 m.export(os.path.join(folder, f"{name}.glb")); m.export(os.path.join(folder, f"{name}.stl"))
-                out.append(dict(name=name, url=f"/files/{key}/{name}.glb", stl=f"/files/{key}/{name}.stl", bodies=len(comps), volume=round(m.volume, 1)))
+                out.append(dict(name=name, url=f"/files/{key}/{name}.glb", stl=f"/files/{key}/{name}.stl", bodies=len(__import__("mesh").bodies(m)), volume=round(m.volume, 1)))
             except Exception as ex:
                 out.append(dict(name=name, error=str(ex)[:120]))
             PROGRESS.update(done=len(out))

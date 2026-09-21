@@ -15,11 +15,8 @@ Parameters (all print-only, mm unless noted):
   knobW/H     3.0 / 2.6         barrel length across the body / barrel diameter (knobL unused)
   neckW/H     1.8 / 1.4         neck section (must be < knobW-2*gap_lateral and < knobH-2*gap_vertical for retention)
   lip         1.4               front wall of the pocket
-  gap_axial / gap_vertical / gap_lateral   0.30 / 0.30 / 0.25   (axial raised from 0.20 on 20 Sep: at 0.20 the two
-                                vertical walls leave a 0.10 mm slot a 0.4 mm FDM nozzle welds shut; 0.30 -> 0.15 mm
-                                between faces. Print the first FDM copy at gap_axial 0.40 and come down; resin OK at 0.10.)
-  baseChamfer 0                 elephant-foot handling is left to the slicer's compensation setting, not cut into
-                                the mesh: the in-geometry inset trick left loose slivers at thin tips (spine tips).
+  gap_axial / gap_vertical / gap_lateral   0.30 / 0.30 / 0.25   (axial 0.30 -> 0.15 mm between adjacent faces; FDM cannot resolve less)
+  baseChamfer 0.5               45-deg chamfer at every bed edge (elephant foot)
 """
 import math, numpy as np, trimesh
 import parts, mesh as M
@@ -75,8 +72,8 @@ def print_segment(P, i, J=None, pocket_on_first=False):
         wedge = M.box(big, big, big, at=(0, y0, zj), align=("c", ("min" if rear else "max"), "max"))
         wedge.apply_transform(trimesh.transformations.rotation_matrix((-1 if rear else 1) * th, (1, 0, 0), (0, y0, zj)))
         body = body - M.to_manifold(wedge)
-    # ---- bed chamfer removed: the inset trick left 1-3 mm^3 slivers at thin tips (genal spines), so the STL came
-    #      back as extra loose shells. Elephant-foot compensation belongs in the slicer, not cut into the mesh.
+    # (no bed chamfer in the geometry: the earlier x-only inset trick left 1-3 mm3 sliver bodies at the genal-spine and
+    #  pleural tips on the 20 Sep site export. Elephant-foot is the slicer's job — "elephant foot compensation" 0.1-0.2 mm.)
     # ---- knob + neck at the rear midline, reaching into the next segment
     y_rear = L - 0.5 * ga
     neck = M.to_manifold(M.box(J["neckW"], (y_piv - y_rear) + 1.0, J["neckH"], at=(0, y_rear - 1.0, zj), align=("c", "min", "c")))
