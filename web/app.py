@@ -16,6 +16,18 @@ import schema, parts, instrument as I
 
 app = Flask(__name__, static_folder=None)
 CACHE = os.path.join(ROOT, "web", "cache"); os.makedirs(CACHE, exist_ok=True)
+
+def _build_sig(*names):
+    """A short hash of the geometry-builder source. Folded into every print cache key so any change to how parts
+    are built (printjoint2 gaps/chamfer/clean(), printfill, the parts/mesh/fields stack) invalidates the cache on
+    its own — no manual web/cache/ clear after a deploy. Params live in param_hash(P); this is the code half."""
+    h = hashlib.sha1()
+    for n in names:
+        try:
+            with open(os.path.join(ROOT, n), "rb") as f: h.update(f.read())
+        except OSError: pass
+    return h.hexdigest()[:8]
+BUILD_SIG = _build_sig("printjoint2.py", "printfill.py", "parts.py", "mesh.py", "fields.py")
 LOCK = threading.Lock()          # one build or measurement at a time (the lab workstation has one job's worth of RAM to spare)
 MEASURED = {}                    # param hash -> last instrument result (so the sheet can carry the reading and the enrolled pose)
 PROGRESS = {"done": 0, "total": 0}   # parts finished in the build now running; the page polls it for its loading count
@@ -78,12 +90,8 @@ def api_build():
     P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
     joint = body.get("joint", "pin")                       # "pin" = tracked builder (the measured geometry); "flexi" = printjoint2
     fill = float(body.get("fill", 0.0) or 0.0)              # pin builds only: thicken the shell for printing (mm), print-only
-    if joint == "flexi":                                    # the print joint's own defaults are part of the cache identity, so a
-        import printjoint2 as J2                            # change to printjoint2 (gaps, chamfer, ...) never serves stale parts
-        jtag = "-flexi" + hashlib.sha1(json.dumps(J2.DEFAULTS, sort_keys=True).encode()).hexdigest()[:6]
-    else:
-        jtag = ""
-    key = schema.param_hash(P) + jtag + (f"-fill{fill:g}" if fill > 0.05 and joint != "flexi" else "")
+    jtag = ("-flexi" if joint == "flexi" else "") + (f"-fill{fill:g}" if fill > 0.05 and joint != "flexi" else "")
+    key = schema.param_hash(P) + "-b" + BUILD_SIG + jtag   # params + builder-source hash: a code change never serves stale parts
     folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
     n_parts = int(P["segCount"]) + 2
     PROGRESS.update(done=0, total=n_parts)
