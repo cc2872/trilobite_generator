@@ -143,10 +143,11 @@ def api_sheet():
     last instrument reading for these parameters if there is one (with the animal enrolled to its stop superimposed)."""
     import trimesh, blueprint
     P, notes = schema.coerce_report(request.get_json(force=True).get("P", {}), base=schema.table_defaults())
-    key = schema.param_hash(P); folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
+    phash = schema.param_hash(P); key = phash + "-b" + BUILD_SIG   # the sheet draws the default (pin) build; key must match api_build's
+    folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
     if not os.path.exists(manifest):
         with app.test_request_context(json={"P": P}): api_build()
-    man = json.load(open(manifest)); meas = MEASURED.get(key)
+    man = json.load(open(manifest)); meas = MEASURED.get(phash)   # MEASURED is keyed by the plain param hash (set in /api/measure)
     tag = "measured" if meas else "flat"; png = os.path.join(folder, f"sheet_{tag}.png")
     if os.path.exists(png): return jsonify(url=f"/files/{key}/sheet_{tag}.png", measured=bool(meas))
     with LOCK:
@@ -157,7 +158,7 @@ def api_sheet():
         flat = trimesh.util.concatenate([mm.copy().apply_transform(T) for mm, T in zip(meshes, mats0)])
         m = dict(meas or {}); m.setdefault("limited_by", "not measured"); m.setdefault("enroll_class", "—")
         m.update(hinge_z=round(parts.hinge_z(P), 2), pitch=round(parts.pitch(P), 2), knuckle=round(parts.hinge_width(P) / int(P["nKnuckles"]) - P["clearance"], 2),
-                 e_max=m.get("v1_equivalent_e_max", "—"), params=key, print_valid=man["print"]["print_valid"])
+                 e_max=m.get("v1_equivalent_e_max", "—"), params=phash, print_valid=man["print"]["print_valid"])
         enrolled = None
         if meas and meas.get("theta_joint_deg") is not None:
             mats = I.transforms_deg(P, float(meas["theta_joint_deg"]))
