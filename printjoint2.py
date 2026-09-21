@@ -15,7 +15,9 @@ Parameters (all print-only, mm unless noted):
   knobW/H     3.0 / 2.6         barrel length across the body / barrel diameter (knobL unused)
   neckW/H     1.8 / 1.4         neck section (must be < knobW-2*gap_lateral and < knobH-2*gap_vertical for retention)
   lip         1.4               front wall of the pocket
-  gap_axial / gap_vertical / gap_lateral   0.20 / 0.30 / 0.25
+  gap_axial / gap_vertical / gap_lateral   0.30 / 0.30 / 0.25   (axial raised from 0.20 on 20 Sep: at 0.20 the two
+                                vertical walls leave a 0.10 mm slot a 0.4 mm FDM nozzle welds shut; 0.30 -> 0.15 mm
+                                between faces. Print the first FDM copy at gap_axial 0.40 and come down; resin OK at 0.10.)
   baseChamfer 0                 elephant-foot handling is left to the slicer's compensation setting, not cut into
                                 the mesh: the in-geometry inset trick left loose slivers at thin tips (spine tips).
 """
@@ -24,7 +26,7 @@ import parts, mesh as M
 from manifold3d import Manifold, OpType
 
 DEFAULTS = dict(jointZ=0.55, knobW=3.6, knobH=3.0, knobL=1.6, neckW=1.8, neckH=1.4, lip=1.4,
-                gap_axial=0.20, gap_vertical=0.30, gap_lateral=0.25, baseChamfer=0.0)
+                gap_axial=0.30, gap_vertical=0.30, gap_lateral=0.25, baseChamfer=0.0)
 
 
 def _ell(rx, ry, rz, at):

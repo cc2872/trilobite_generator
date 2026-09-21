@@ -95,10 +95,14 @@ def api_build():
             builders = [("head", lambda: F.cephalon(P, fill))] + [(f"seg{i}", (lambda i=i: F.segment(P, i, fill))) for i in range(int(P["segCount"]))] + [("tail", lambda: F.pygidium(P, fill))]
         else:
             builders = [("head", lambda: parts.cephalon(P, notes=bnotes))] + [(f"seg{i}", (lambda i=i: parts.segment(P, i))) for i in range(int(P["segCount"]))] + [("tail", lambda: parts.pygidium(P))]
+        import mesh as _M, trimesh as _tm
         for name, fn in builders:
             try:
-                m = fn(); m.export(os.path.join(folder, f"{name}.glb")); m.export(os.path.join(folder, f"{name}.stl"))
-                out.append(dict(name=name, url=f"/files/{key}/{name}.glb", stl=f"/files/{key}/{name}.stl", bodies=len(__import__("mesh").bodies(m)), volume=round(m.volume, 1)))
+                m = fn()
+                comps = _M.bodies(m)                                    # drop the V-cut/pocket coincident-face debris
+                if comps: m = comps[0] if len(comps) == 1 else _tm.util.concatenate(comps)   # (zero-volume ghost shells)
+                m.export(os.path.join(folder, f"{name}.glb")); m.export(os.path.join(folder, f"{name}.stl"))
+                out.append(dict(name=name, url=f"/files/{key}/{name}.glb", stl=f"/files/{key}/{name}.stl", bodies=len(comps), volume=round(m.volume, 1)))
             except Exception as ex:
                 out.append(dict(name=name, error=str(ex)[:120]))
             PROGRESS.update(done=len(out))
