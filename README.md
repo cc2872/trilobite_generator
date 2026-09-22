@@ -1,4 +1,4 @@
-# trilobite generator 6.0 · instrument 2.1
+# trilobite generator 6.0 and instrument 2.1
 
 A parametric generator for articulated dorsal plate chains trilobites first with a fixed-ruler enrolment
 instrument, a printable animal, a labeled blueprint sheet, and a website. No OpenCascade: numpy height fields and
