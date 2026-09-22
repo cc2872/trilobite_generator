@@ -1,7 +1,7 @@
 import numpy as np, matplotlib, time
 matplotlib.use("Agg"); import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-import eyes2
+import eyes2 
 
 specs = [
  ("PHACOPID · schizochroal", dict(R=6, H=8, arc_deg=120, slope_deg=12, ky=0.8, kidney=0.35, taper=0.25, lensD=0.11, lensGap=0.45, lensRise=0.5, style="sunken", rim=0.25, grad=0.2)),
