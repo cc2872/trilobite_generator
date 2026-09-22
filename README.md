@@ -2,7 +2,7 @@
 
 *schema 6.1, instrument 2.1*
 *22 September 2026*
-*by Claire Choi the trilobiter*
+*by Claire Choi the Trilobiter*
 
 ## How to read this
 
