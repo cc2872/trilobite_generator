@@ -1,11 +1,3 @@
-"""printfill.py — thicken the tracked (pin-jointed) parts for printing without touching the measured geometry.
-
-The tracked builder makes a 2 mm shell; printed, it is flimsy. `thicken(part, plan, depth)` adds the layer between the
-dorsal surface and the same surface shifted down by `depth`, i.e. a thicker shell that follows the animal exactly and
-leaves the hinge barrels, bores and knuckles untouched (they sit under the ring at ring_top - 3.4 mm and below, so
-depths <= 3 mm never reach them; deeper fills are clipped 0.5 mm clear of the hinge band). depth = 0 is identity.
-Print only: /api/build applies it when the request carries "fill": <mm>; the cache key gets a -fill<mm> suffix.
-"""
 import numpy as np, parts, mesh as M
 
 
