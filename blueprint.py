@@ -306,10 +306,27 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None):
              f"HINGE z  {meas.get('hinge_z', '—')} mm", f"KNUCKLE  {meas.get('knuckle', '—')} mm × {int(P.get('nKnuckles', 3))}", f"STOP     {P['maxAngle']}° / joint", "",
              f"E@STOP   {meas.get('e_max', '—')}", f"GAP      {meas.get('closure_gap_mm', '—')} mm", f"CLASS    {str(meas.get('enroll_class', '—')).upper()}", f"PRINT    {'VALID' if meas.get('print_valid') else 'CHECK'}", "",
              "GENAL PATH", f"  {P.get('genalPath', '—')}", f"  {P.get('genalCurve', 0)}° · {P.get('genalWidthMM', 0)} mm", "",
-             "SPEC     json in PNG", "  read_sheet_spec.py", "", "SHEET 1 / 1   REV A"]
+             "SPEC     panel below +", "         PNG metadata", "", "SHEET 1 / 1   REV A"]
     ax5.text(0.02, 0.98, "\n".join(lines), color=INK, fontsize=8, family="monospace", va="top", ha="left", linespacing=1.55)
     for s in ax5.spines.values(): s.set_visible(True); s.set_color(INK); s.set_linewidth(0.8)
     ax5.set_xticks([]); ax5.set_yticks([]); ax5.axis("on")
+    # ---- SPEC panel: the parameters moved off the 6.1 defaults, printed on the page. The FULL 98-param spec is in the
+    #      PNG metadata (embedded at save, read_sheet_spec.py) — this visible summary also survives a screenshot, which
+    #      the metadata does not.
+    ax6 = fig.add_subplot(gs[3:4, 7:9]); ax6.set_facecolor(BG); ax6.axis("off")
+    try:
+        import schema as _sch; _def = _sch.table_defaults()
+        def _diff(a, b): return abs(a - b) > 1e-9 if isinstance(a, (int, float)) and isinstance(b, (int, float)) else a != b
+        _fmt = lambda v: (f"{v:g}" if isinstance(v, (int, float)) else str(v))
+        _chg = [f"{k}={_fmt(P[k])}" for k in sorted(P) if k in _def and _diff(P[k], _def[k])]
+    except Exception:
+        _chg = []
+    _MAXP = 24; _extra = len(_chg) - _MAXP
+    _show = _chg[:_MAXP] + ([f"...+{_extra} more (in metadata)"] if _extra > 0 else [])
+    _rows = ["  ".join(_show[i:i + 3]) for i in range(0, len(_show), 3)] or ["(all parameters at 6.1 defaults)"]
+    ax6.set_title("SPEC · changed from 6.1 defaults", color=INK, fontsize=7, family="monospace", loc="left")
+    ax6.text(0.0, 0.98, "full JSON (98 params) in PNG metadata · read_sheet_spec.py\n\n" + "\n".join(_rows),
+             color=INK, fontsize=5.5, family="monospace", va="top", ha="left", linespacing=1.7, transform=ax6.transAxes)
     fig.text(0.98, 0.018, "Claire Choi · Cornell", color=INK, fontsize=8, ha="right", va="bottom", family="monospace")
     # embed the full specification in the PNG so the sheet is self-describing: the exact params (and hash / schema /
     # instrument) travel with the image and can be read back with scripts/read_sheet_spec.py — no cache lookup needed.
