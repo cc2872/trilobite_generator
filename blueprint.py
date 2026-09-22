@@ -187,7 +187,7 @@ def _eye_detail(ax, m, P):
 
 def _fov_lines(P):
     try:
-        from eyes import fov
+        from parts import fov
         f = fov(P)
         if f["blind"]: return ["FOV v%s   blind" % f["fov_version"]]
         return [f"FOV v{f['fov_version']}", f"  azimuth  {f['azimuth_deg']:.0f}°", f"  blind    {f['front_blind_deg']:.0f}° fore · {f['rear_blind_deg']:.0f}° aft",
