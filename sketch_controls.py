@@ -1,15 +1,3 @@
-"""sketch_controls.py — linked plan + elevation sketch with draggable handles (matplotlib, no web).
-
-Standalone: draws a simplified trilobite from a parameter dict P and lets you drag handles.
-Plan (left) owns stations and widths; elevation strip (right) owns heights. Same mm scale in
-both, shared y. No labels at rest; hovering a handle shows one word and links its twin.
-
-    python sketch_controls.py                 # opens the panel with schema defaults
-    from sketch_controls import SketchControls
-    SketchControls(P, on_change=lambda P: rebuild(P))
-
-Parameter keys follow schema.py. Nothing here touches parts/instrument.
-"""
 import math, numpy as np, matplotlib
 import matplotlib.pyplot as plt
 
