@@ -1,16 +1,3 @@
-"""
-sweep.py — the v1 morphospace sweep on the mesh builder (PREREG_v1_sweep.md §2, §4), and the ten-preset batch.
-
-    python sweep.py presets [name ...]                 # every presets/*.json -> out/<name>/ (reading, STLs, flat/posed) + out/presets.csv
-    python sweep.py design  --n-per-order 150 --n-control 50 --seed 1 --out design.csv
-    python sweep.py run     design.csv --out sweep_rows.csv --workers 4 --timeout 600
-    python sweep.py one     design.csv <row_index> --out /tmp/x.json        # what a worker runs; for debugging
-
-design: one row per animal; six axes Latin-hypercube sampled inside each order's preset ranges (segCount, overlap,
-cephFrac/pygFrac, relief, widthThoraxRear, spine_scale); the control subset varies ONLY eyeSize (the null axis).
-run: one child process per design row (OOM isolation), timeouts/kills/exceptions recorded as invalid rows, CSV
-flushed per animal, resumable. A whole animal builds in ~2.5 s and measures in ~7 s on the measurement grid.
-"""
 import sys, os, json, csv, time, argparse, subprocess, traceback, glob
 import numpy as np
 
