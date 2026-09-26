@@ -12,7 +12,8 @@ import os, sys, json, glob, time, threading, hashlib, shutil
 import trimesh
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, ROOT)
 from flask import Flask, request, jsonify, send_from_directory, send_file
-import schema, parts, instrument as I
+import schema, instrument as I, assemble, joints
+from joints import pin as PIN
 
 # manifold3d is pinned to 3.0.1 (PREREG §9): other versions' booleans shed sliver flakes, pinch thin envelopes to
 # non-manifold edges, and spike cylinder seams. A wrong-version image is what shipped the 21 Sep head pinch. Warn
@@ -38,7 +39,7 @@ def _build_sig(*names):
             with open(os.path.join(ROOT, n), "rb") as f: h.update(f.read().replace(b"\r\n", b"\n"))   # LF-normalize: same key on Windows and in the Docker (LF) build
         except OSError: pass
     return h.hexdigest()[:8]
-BUILD_SIG = _build_sig("printjoint2.py", "printfill.py", "parts.py", "mesh.py", "fields.py")
+BUILD_SIG = _build_sig("assemble.py", "joints/pin.py", "joints/flexi.py", "printfill.py", "anatomy/head.py", "anatomy/thorax.py", "anatomy/tail.py", "anatomy/common.py", "mesh.py", "fields.py")
 LOCK = threading.Lock()          # one build or measurement at a time (the lab workstation has one job's worth of RAM to spare)
 MEASURED = {}                    # param hash -> last instrument result (so the sheet can carry the reading and the enrolled pose)
 PROGRESS = {"done": 0, "total": 0}   # parts finished in the build now running; the page polls it for its loading count
@@ -92,7 +93,7 @@ def api_preset(name):
     return jsonify(schema.coerce(P, base=schema.table_defaults()))
 
 def _kinematics(P):
-    return dict(hinge_z=parts.hinge_z(P), offsets=parts.joint_offsets(P), names=I.part_names(P))
+    return dict(hinge_z=PIN.hinge_z(P), offsets=PIN.joint_offsets(P), names=I.part_names(P))
 
 @app.post("/api/build")
 def api_build():
@@ -112,28 +113,40 @@ def api_build():
         if os.path.exists(manifest):
             PROGRESS.update(done=n_parts); return send_file(manifest)
         t0 = time.time(); os.makedirs(folder, exist_ok=True); bnotes = []; out = []
-        if joint == "flexi":
-            import printjoint2 as J2
-            builders = [("head", lambda: J2.print_head(P))] + [(f"seg{i}", (lambda i=i: J2.print_segment(P, i, pocket_on_first=True))) for i in range(int(P["segCount"]))] + [("tail", lambda: J2.print_tail(P))]
-        elif fill > 0.05:
+        JM = joints.get(joint)                                          # the joint module: pin (measured) or a print joint
+        if fill > 0.05 and JM.MEASURED:
             import printfill as F
             builders = [("head", lambda: F.cephalon(P, fill))] + [(f"seg{i}", (lambda i=i: F.segment(P, i, fill))) for i in range(int(P["segCount"]))] + [("tail", lambda: F.pygidium(P, fill))]
         else:
-            builders = [("head", lambda: parts.cephalon(P, notes=bnotes))] + [(f"seg{i}", (lambda i=i: parts.segment(P, i))) for i in range(int(P["segCount"]))] + [("tail", lambda: parts.pygidium(P))]
-        import printjoint2 as J2
+            builders = assemble.builders(P, JM, notes=bnotes)
+        clean = getattr(JM, "clean", lambda m: m)
+        if not JM.MEASURED: PROGRESS.update(total=n_parts + 1)          # + the overhang pass (restore), which needs every part
+        built = []
         for name, fn in builders:
             try:
-                m = J2.clean(fn())                                     # drop ghost shells + thin border flakes (< 5 mm3 or < 0.5 mm)
-                m.export(os.path.join(folder, f"{name}.glb")); m.export(os.path.join(folder, f"{name}.stl"))
-                out.append(dict(name=name, url=f"/files/{key}/{name}.glb", stl=f"/files/{key}/{name}.stl", bodies=len(__import__("mesh").bodies(m)), watertight=bool(m.is_watertight), volume=round(m.volume, 1)))
+                built.append((name, clean(fn()), None))                 # drop ghost shells + thin border flakes (< 5 mm3 or < 0.5 mm)
             except Exception as ex:
-                out.append(dict(name=name, error=str(ex)[:120]))
-            PROGRESS.update(done=len(out))
+                built.append((name, None, str(ex)[:120]))
+            PROGRESS.update(done=len(built))
+        overhangs = None
+        if not JM.MEASURED and all(m is not None for _, m, _ in built):
+            try:                                                        # put back the spines/arms the joint trim removed,
+                overhangs = []                                          # cleared against every later part through the curl
+                fixed = assemble.restore(P, [m for _, m, _ in built], JM, report=overhangs)
+                built = [(nm, f, None) for (nm, _, _), f in zip(built, fixed)]
+            except Exception as ex:
+                bnotes.append(("print", "overhangs not restored", str(ex)[:120])); overhangs = None
+            PROGRESS.update(done=n_parts + 1)
+        for name, m, err in built:
+            if err is not None:
+                out.append(dict(name=name, error=err)); continue
+            m.export(os.path.join(folder, f"{name}.glb")); m.export(os.path.join(folder, f"{name}.stl"))
+            out.append(dict(name=name, url=f"/files/{key}/{name}.glb", stl=f"/files/{key}/{name}.stl", bodies=len(__import__("mesh").bodies(m)), watertight=bool(m.is_watertight), volume=round(m.volume, 1)))
         man = dict(key=key, parts=out, kinematics=_kinematics(P), print=I.print_validity(P), schema_notes=notes, build_notes=bnotes,
                    build_seconds=round(time.time() - t0, 1), schema=schema.SCHEMA_VERSION, joint=joint, fill_mm=fill)
-        if joint == "flexi":
-            import printjoint2 as J2
-            Jr, d, zj, y_piv = J2.geometry(P); man["print_joint"] = dict(pivot_z=round(zj, 2), pivot_y_beyond_joint=round(y_piv - d, 2), scale=Jr.get("scaled", 1.0), gaps={k: Jr[k] for k in ("gap_axial", "gap_vertical", "gap_lateral")})
+        if not JM.MEASURED:
+            man["overhangs"] = overhangs; pv = JM.pivot(P)
+            man["print_joint"] = dict(pivot_z=pv["z"], pivot_y_beyond_joint=pv["y_beyond_plane"], scale=pv.get("scale", 1.0), gaps=pv.get("gaps"))
         json.dump(P, open(os.path.join(folder, "params.json"), "w")); json.dump(man, open(manifest, "w")); _evict()
         return jsonify(man)
 
@@ -165,10 +178,10 @@ def api_sheet():
         names = [p["name"] for p in man["parts"] if "error" not in p]
         meshes = [trimesh.load(os.path.join(folder, f"{n}.stl")) for n in names]
         # parts are built in their own frames (front hinge at y = 0): place them at rest before drawing
-        mats0 = I.transforms_deg(P, 0.0)
+        mats0 = joints.get(man.get("joint", "pin")).transforms_deg(P, 0.0)
         flat = trimesh.util.concatenate([mm.copy().apply_transform(T) for mm, T in zip(meshes, mats0)])
         m = dict(meas or {}); m.setdefault("limited_by", "not measured"); m.setdefault("enroll_class", "—")
-        m.update(hinge_z=round(parts.hinge_z(P), 2), pitch=round(parts.pitch(P), 2), knuckle=round(parts.hinge_width(P) / int(P["nKnuckles"]) - P["clearance"], 2),
+        m.update(hinge_z=round(PIN.hinge_z(P), 2), pitch=round(PIN.joint_offsets(P)[1], 2), knuckle=round(PIN.hinge_width(P) / int(P["nKnuckles"]) - P["clearance"], 2),
                  e_max=m.get("v1_equivalent_e_max", "—"), params=phash, print_valid=man["print"]["print_valid"])
         enrolled = None
         if meas and meas.get("theta_joint_deg") is not None:
@@ -185,12 +198,14 @@ def api_stl(key):
     out = os.path.join(folder, "flat.stl")
     if not os.path.exists(out):
         P = schema.coerce(json.load(open(os.path.join(folder, "params.json")))) if os.path.exists(os.path.join(folder, "params.json")) else None
-        meshes = [trimesh.load(os.path.join(folder, f"{p['name']}.stl")) for p in man["parts"] if "error" not in p]
-        if man.get("joint") == "flexi" and P is not None:
-            import printjoint2 as J2; mats0 = J2.transforms_deg(P, 0.0)
-        else:
-            mats0 = I.transforms_deg(P, 0.0) if P is not None else [__import__("numpy").eye(4)] * len(meshes)
-        trimesh.util.concatenate([mm.copy().apply_transform(T) for mm, T in zip(meshes, mats0)]).export(out)
+        idx = [k for k, p in enumerate(man["parts"]) if "error" not in p]
+        meshes = [trimesh.load(os.path.join(folder, f"{man['parts'][k]['name']}.stl")) for k in idx]
+        mats0 = joints.get(man.get("joint", "pin")).transforms_deg(P, 0.0) if P is not None else [__import__("numpy").eye(4)] * len(man["parts"])
+        whole = trimesh.util.concatenate([mm.copy().apply_transform(mats0[k]) for mm, k in zip(meshes, idx)])
+        V = whole.vertices                                                 # refuse a file a slicer would read as enormous
+        if not __import__("numpy").isfinite(V).all() or (V.max(0) - V.min(0)).max() > 600:
+            return jsonify(error="export failed its size check (non-finite or > 600 mm); rebuild this animal"), 500
+        tmp = out + ".part"; whole.export(tmp, file_type="stl"); os.replace(tmp, out)   # never serve a half-written file
     return send_file(out, as_attachment=True, download_name=f"trilobite_{key}.stl")
 
 @app.get("/files/<key>/<path:name>")

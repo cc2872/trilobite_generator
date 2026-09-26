@@ -6,7 +6,7 @@ itself). 2.0 built the measurement meshes at ONE fixed wide bevel per joint and 
 closure. 2.1 fixed six audit findings: the bevel actually built is recorded (it used to pass through the schema's
 maxAngle clamp), the rest baseline is keyed on mesh content, rest interference above a budget censors the animal, a
 coarse forward scan precedes bisection, the closed pose is classified, and every row carries the instrument version and
-the parameter hash. This file is 2.1 with the OpenCascade builder replaced by parts.py; the readings are unchanged
+the parameter hash. This file is 2.1 with the OpenCascade builder replaced by the mesh builder (assemble + anatomy + joints/pin); the readings are unchanged
 (11 Sep 2026: proetida 22.81/22.81, corynexochida 22.66/22.58, harpetida 30.39/30.31 deg vs the frozen BREP runs).
 
 The reading: theta_joint_deg (largest uniform flexion per joint before interference or closure), total_deg,
@@ -18,7 +18,8 @@ import math, time, hashlib, csv, os
 import numpy as np
 import trimesh
 from trimesh.collision import CollisionManager
-import schema, parts, mesh as M
+import schema, mesh as M, assemble
+from joints import pin as PIN                      # the measured joint; the ruler is THIS joint and no other
 
 INSTRUMENT_VERSION = "2.1"
 BOUND_DEG = 45.0          # per-joint bevel of the measurement build; the sweep's hard ceiling
@@ -48,7 +49,7 @@ def probe_bound(P, bounds=BOUNDS_PROBE, grid=MEASURE_GRID):
     for b in bounds:
         worst = 1
         for i in range(int(P["segCount"])):
-            try: n = len(M.bodies(parts.segment(P, i, bevel_deg=b, grid=grid)))
+            try: n = len(M.bodies(assemble.part(P, f"seg{i}", PIN, bevel_deg=b, grid=grid)))
             except Exception: n = -1
             worst = n if (n < 0 or n > worst) and worst != -1 else worst
             if worst != 1: break
@@ -60,9 +61,7 @@ def build_animal(P, bound_deg=BOUND_DEG, grid=MEASURE_GRID, export_dir=None):
     """Every part at one fixed bevel. Returns dict: names, meshes, head_body, bevel_built_deg, unsane_parts, notes, build_seconds.
     unsane_parts = parts that did not come out as one closed body (a severed pleural tip is a body of its own)."""
     P = schema.coerce(P); t0 = time.time(); notes = []; names = part_names(P); meshes = []; unsane = []
-    builders = [lambda: parts.cephalon(P, bevel_deg=bound_deg, grid=grid, notes=notes)] + \
-               [(lambda i=i: parts.segment(P, i, bevel_deg=bound_deg, grid=grid)) for i in range(int(P["segCount"]))] + \
-               [lambda: parts.pygidium(P, bevel_deg=bound_deg, grid=grid)]
+    builders = [fn for _, fn in assemble.builders(P, PIN, bevel_deg=bound_deg, grid=grid, notes=notes)]
     for n, fn in zip(names, builders):
         try:
             m = fn()
@@ -75,7 +74,7 @@ def build_animal(P, bound_deg=BOUND_DEG, grid=MEASURE_GRID, export_dir=None):
         meshes.append(m)
     hb = None
     if P["genalSpine"] * P["cephFrac"] * P["length"] > 0.5:
-        try: hb = parts.cephalon(dict(P, genalSpine=0.0), bevel_deg=bound_deg, grid=grid)
+        try: hb = assemble.head_body(P, bevel_deg=bound_deg, grid=grid)
         except Exception as ex: notes.append(("head_body", "build failed", str(ex)[:80]))
     return dict(names=names, meshes=meshes, head_body=hb, bevel_built_deg=float(bound_deg), unsane_parts=unsane, notes=notes,
                 build_seconds=round(time.time() - t0, 1), grid=grid)
@@ -88,13 +87,8 @@ def _trans(x, y, z):
     m = np.eye(4); m[:3, 3] = (x, y, z); return m
 
 def transforms_deg(P, theta_deg):
-    """4x4 per part for a uniform flexion of theta_deg at every joint (head = identity)."""
-    zh = parts.hinge_z(P); offs = parts.joint_offsets(P)
-    mats = [np.eye(4)]; Mx = np.eye(4)
-    for i in range(len(offs)):
-        Mx = Mx @ _trans(0, offs[i], 0) @ _trans(0, 0, zh) @ _rot_x(-theta_deg) @ _trans(0, 0, -zh)
-        mats.append(Mx)
-    return mats
+    """4x4 per part for a uniform flexion of theta_deg at every joint (head = identity): the pin joint's pose."""
+    return PIN.transforms_deg(P, theta_deg)
 
 def _posed(meshes, mats): return [m.copy().apply_transform(T) for m, T in zip(meshes, mats)]
 def _aabb_hit(a, b, pad=0.5):
@@ -185,9 +179,9 @@ def theta_max(P, meshes, bound_deg=BOUND_DEG, tol_deg=RES_DEG, scan_step_deg=SCA
 # ---------------------------------------------------------------- print validity (mesh version of 1.0's)
 def print_validity(P, meshes=None):
     P = schema.coerce(P); v = []
-    d = parts.pitch(P)
+    d = PIN.joint_offsets(P)[1]
     if d < 8.0: v.append(f"pitch {d:.1f} mm < 8")
-    Wh = parts.hinge_width(P); kw = Wh / int(P["nKnuckles"]) - P["clearance"]
+    Wh = PIN.hinge_width(P); kw = Wh / int(P["nKnuckles"]) - P["clearance"]
     if kw < 3.0: v.append(f"knuckle {kw:.1f} mm < 3.0")
     if P["wall"] < 1.5: v.append(f"wall {P['wall']} mm < 1.5")
     return dict(print_valid=(len(v) == 0), violations=v)

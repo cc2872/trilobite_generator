@@ -52,3 +52,19 @@ def test_default_animal_builds_and_curls():
         for i in range(len(posed)):
             for j in range(i + 1, len(posed)):
                 if I._aabb_hit(posed[i], posed[j]): assert (mans[i] ^ mans[j]).volume() < 0.01, (deg, i, j)
+
+
+def test_overhangs_keep_the_pin_outline_and_clear_the_curl():
+    """26 Sep: the flexi trim deleted pleural spines and genal arms (flexi 87 mm wide vs pin 121 mm on 06f24ab3bc).
+    restore() must put the pleural spines back to the pin build's reach, keep every part one body, and leave no
+    overlap between any two parts at rest or at the stop."""
+    import itertools
+    P = schema.coerce(dict(segCount=4, spineBase=1.0, spineSweep=39.0, maxAngle=18))
+    rep = []; pieces = J2.print_animal(P, report=rep)
+    assert all(len(p.split(only_watertight=False)) == 1 and p.is_watertight for p in pieces)
+    X_tip = parts.segment_plan(P, 1)["X_tip"]
+    assert np.abs(pieces[2].vertices[:, 0]).max() >= X_tip - 1.5, "pleural spines were not restored"
+    for deg in (0.0, P["maxAngle"]):
+        posed = [M.to_manifold(p.copy().apply_transform(T)) for p, T in zip(pieces, J2.transforms_deg(P, deg))]
+        for i, j in itertools.combinations(range(len(posed)), 2):
+            assert (posed[i] ^ posed[j]).volume() < 0.05, f"parts {i},{j} overlap at {deg} deg"

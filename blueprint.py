@@ -41,7 +41,7 @@ def _eye_panels(fig, gs, m, P):
     geometry is the drawing), the outward view of the band with its lens lattice, and the band unrolled with
     the lattice formulas. All four read the same parameters the builder used."""
     import math as _m
-    from parts import eye_geometry, fov
+    from anatomy.head import eye_geometry, fov
     G = eye_geometry(P)
     axes = [fig.add_subplot(gs[4:6, 4:5]), fig.add_subplot(gs[4:6, 5:6]), fig.add_subplot(gs[4:6, 6:7]), fig.add_subplot(gs[4:6, 7:9])]
     for ax in axes: ax.set_facecolor(BG); ax.set_aspect("equal"); ax.axis("off")
@@ -97,7 +97,7 @@ def _eye_panels(fig, gs, m, P):
     ax.set_title(f"SECTION B–B · lean {P.get('eyeSlope', 0):.0f}°", color=INK, fontsize=7, family="monospace", loc="left")
     # ---- outward view and unrolled band: the lattice as built
     try:
-        from parts import lens_centres, eye_params
+        from anatomy.head import lens_centres, eye_params
         EP = eye_params(P, eR); slope = _m.radians(EP["slope_deg"]); arc = _m.radians(EP["arc_deg"]); H = EP["H"]
         D = EP["lensD"] * eR; cs = lens_centres(eR, H, slope, arc, D, EP["lensGap"]); rb = eR + H * _m.tan(slope)
         ax = axes[2]; yt, yb = eR * _m.sin(arc / 2), rb * _m.sin(arc / 2)
@@ -131,7 +131,7 @@ def _eye_detail(ax, m, P):
     arc from eyes.eye_geometry (the same numbers the builder used), a transverse section through the eye centre
     below it, and the dimensions the primitive will be fitted to: R, band height over the cheek, arc."""
     try:
-        from parts import eye_geometry, fov
+        from anatomy.head import eye_geometry, fov
         G = eye_geometry(P)
     except Exception as ex:
         ax.text(0, 0, f"eye: {str(ex)[:30]}", color=DIM, fontsize=7, family="monospace"); return
@@ -167,7 +167,7 @@ def _eye_detail(ax, m, P):
     _dim(ax, xe - eR, ye + W + 2, xe + eR, ye + W + 2, f"R {eR:.1f}", off=0)
     if P.get("eyeSolid", 0) > 0.5:                                                   # lattice as built (eye_solid.lens_centres), outward view
         try:
-            from parts import lens_centres, eye_params
+            from anatomy.head import lens_centres, eye_params
             EP = eye_params(P, eR); import math as _m
             cs = lens_centres(EP["R"], EP["H"], _m.radians(EP["slope_deg"]), _m.radians(EP["arc_deg"]), EP["lensD"] * eR, EP["lensGap"])
             ox = xe + W + 4; oz = ye - W - 4 - (z1 - z0) - 14 - EP["H"]
@@ -306,27 +306,10 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None):
              f"HINGE z  {meas.get('hinge_z', '—')} mm", f"KNUCKLE  {meas.get('knuckle', '—')} mm × {int(P.get('nKnuckles', 3))}", f"STOP     {P['maxAngle']}° / joint", "",
              f"E@STOP   {meas.get('e_max', '—')}", f"GAP      {meas.get('closure_gap_mm', '—')} mm", f"CLASS    {str(meas.get('enroll_class', '—')).upper()}", f"PRINT    {'VALID' if meas.get('print_valid') else 'CHECK'}", "",
              "GENAL PATH", f"  {P.get('genalPath', '—')}", f"  {P.get('genalCurve', 0)}° · {P.get('genalWidthMM', 0)} mm", "",
-             "SPEC     panel below +", "         PNG metadata", "", "SHEET 1 / 1   REV A"]
+             "SPEC     json in PNG", "  read_sheet_spec.py", "", "SHEET 1 / 1   REV A"]
     ax5.text(0.02, 0.98, "\n".join(lines), color=INK, fontsize=8, family="monospace", va="top", ha="left", linespacing=1.55)
     for s in ax5.spines.values(): s.set_visible(True); s.set_color(INK); s.set_linewidth(0.8)
     ax5.set_xticks([]); ax5.set_yticks([]); ax5.axis("on")
-    # ---- SPEC panel: the parameters moved off the 6.1 defaults, printed on the page. The FULL 98-param spec is in the
-    #      PNG metadata (embedded at save, read_sheet_spec.py) — this visible summary also survives a screenshot, which
-    #      the metadata does not.
-    ax6 = fig.add_subplot(gs[3:4, 7:9]); ax6.set_facecolor(BG); ax6.axis("off")
-    try:
-        import schema as _sch; _def = _sch.table_defaults()
-        def _diff(a, b): return abs(a - b) > 1e-9 if isinstance(a, (int, float)) and isinstance(b, (int, float)) else a != b
-        _fmt = lambda v: (f"{v:g}" if isinstance(v, (int, float)) else str(v))
-        _chg = [f"{k}={_fmt(P[k])}" for k in sorted(P) if k in _def and _diff(P[k], _def[k])]
-    except Exception:
-        _chg = []
-    _MAXP = 24; _extra = len(_chg) - _MAXP
-    _show = _chg[:_MAXP] + ([f"...+{_extra} more (in metadata)"] if _extra > 0 else [])
-    _rows = ["  ".join(_show[i:i + 3]) for i in range(0, len(_show), 3)] or ["(all parameters at 6.1 defaults)"]
-    ax6.set_title("SPEC · changed from 6.1 defaults", color=INK, fontsize=7, family="monospace", loc="left")
-    ax6.text(0.0, 0.98, "full JSON (98 params) in PNG metadata · read_sheet_spec.py\n\n" + "\n".join(_rows),
-             color=INK, fontsize=5.5, family="monospace", va="top", ha="left", linespacing=1.7, transform=ax6.transAxes)
     fig.text(0.98, 0.018, "Claire Choi · Cornell", color=INK, fontsize=8, ha="right", va="bottom", family="monospace")
     # embed the full specification in the PNG so the sheet is self-describing: the exact params (and hash / schema /
     # instrument) travel with the image and can be read back with scripts/read_sheet_spec.py — no cache lookup needed.

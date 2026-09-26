@@ -1,4 +1,5 @@
 """tests/test_web.py — the Flask API on the mesh builder: schema/cells, presets, build (+cache, GLB), measure."""
+import schema
 import os, sys, json, time
 import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, ROOT); sys.path.insert(0, os.path.join(ROOT, "web"))
@@ -10,13 +11,13 @@ def c(): return A.app.test_client()
 
 def test_schema_endpoint(c):
     s = c.get("/api/schema").get_json()
-    assert s["version"] == "6.0" and s["instrument"] == "2.1" and len(s["params"]) == 95
+    assert s["version"] == schema.SCHEMA_VERSION and s["instrument"] == "2.1" and len(s["params"]) == len(schema.PARAMS)
     assert set(s["cells"]) == {"frame", "b1", "a1", "b2", "a2", "b3", "a3", "ruler"}
 
 def test_preset_and_index(c):
     assert c.get("/").status_code == 200
     assert c.get("/api/preset/nope").status_code == 404
-    P = c.get("/api/preset/proetida").get_json(); assert len(P) == 95
+    P = c.get("/api/preset/proetida").get_json(); assert len(P) == len(schema.PARAMS)
 
 def test_build_caches_and_serves_glb(c):
     P = c.get("/api/preset/proetida").get_json(); P["segCount"] = 4

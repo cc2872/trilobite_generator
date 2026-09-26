@@ -4,3 +4,4 @@ __pycache__/
 .testvenv/ 
 web_out/
 *.log
+web/cache/
