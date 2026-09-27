@@ -8,7 +8,7 @@ A joint that passes here can be swapped in without touching anatomy/, assemble.p
 import itertools, numpy as np, pytest, trimesh
 import schema, mesh as M, assemble, joints
 
-JOINTS = ["pin", "flexi"]
+JOINTS = ["pin", "flexi", "ball"]
 ANIMAL = dict(segCount=4, maxAngle=18)                      # small default animal: fast, has every port type
 
 

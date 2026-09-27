@@ -1,27 +1,24 @@
 """
 joints/ball.py: a print-in-place BALL-AND-SOCKET joint, on the joints/base.py template. PRINT ONLY, never measured.
 
-Inspired by the appendage joints of itbefred's Articulated Giant Isopod (Thingiverse #4777921, CC-BY-NC-SA) — the
-MECHANISM only (a ball on a neck captured in a socket is a generic hinge, not copyrightable); none of that model's
-geometry is used. Every dimension here is our own, parametrized on the segment pitch.
+Mechanism inspired by the appendage joints of itbefred's Articulated Giant Isopod (Thingiverse #4777921,
+CC-BY-NC-SA) — the ball-in-socket idea only (a generic hinge, not copyrightable); none of that model's geometry is
+used. Every dimension here is our own, parametrized on the segment pitch.
 
-Unlike joints/flexi (a one-axis ventral hinge for enrolment), a ball joint poses in ANY direction and has no hard
-enrolment stop — so it does NOT reproduce the trilobite's rolling; it makes a freely poseable articulated model.
-BASE = "solid": each part is a solid wedge on a flat base.
-
-Form: the REAR of a part carries a ball (radius r = ballD/2) on a round neck reaching back to the next part's socket
-centre. The FRONT of the part ahead is a spherical socket (cavity r + gap_ball) opening through a round MOUTH
-(radius mouthFrac*r < r) in its front face — so the ball, printed in place, is captured (mouth < ball) yet free to
-swing until the neck meets the mouth rim (stop_deg). Pivot: the ball centre (x=0, y = lip+gap+r beyond the joint
-plane, z = jointZ*ring, clamped 6-10 mm). Pose print parts with this module's pose(), not the pin's.
+It is joints/flexi's recessed form with every CYLINDER replaced by a SPHERE, so the joint bears and rotates on any
+axis instead of one: the FRONT of a part is a convex spherical lobe (radius Rc about the pivot) with a spherical
+socket + round mouth inside it; the REAR of the part ahead is the matching concave sphere with a ball on a round
+neck reaching into that socket. Concentric spheres rotate freely about the pivot; the ball (radius r > mouth) is
+captured; the round neck swings until it meets the mouth rim (stop_deg). There is NO enrolment stop — a ball joint
+poses in any direction and does NOT reproduce the trilobite's rolling. BASE = "solid".
 
 Parameters (all print-only, mm unless noted):
   jointZ      0.55              pivot height as a fraction of the ring top at the joint (abs-clamped 6-10 mm)
-  ballD       3.8               ball diameter -> r = ballD/2
-  neckD       1.6               round neck diameter
-  mouthFrac   0.82              socket mouth radius as a fraction of r (< 1 so the ball is captured)
-  gap_ball    0.35              spherical clearance between ball and socket (print-in-place)
-  gap_axial   0.60              gap between the parts' flat faces (also the run-trim end gap)
+  ballD       3.6               retention ball diameter -> r = ballD/2
+  neckD       1.4               round neck diameter (swings in the mouth)
+  mouthFrac   0.78              socket mouth radius as a fraction of r (< 1 so the ball is captured)
+  lip         1.2               wall between the socket and the concave face
+  gap_axial / gap_vertical / gap_lateral   0.80 / 0.30 / 0.25   (axial: face gap & run end; vertical: ball/socket clearance)
   overhangs   True              restore the anatomy the rear trim removed (pleural spines, genal arms, ...)
 """
 import math, numpy as np, trimesh
@@ -31,7 +28,8 @@ from anatomy import thorax as THORAX
 from manifold3d import Manifold, OpType
 
 NAME = "ball"; MEASURED = False; BASE = "solid"
-DEFAULTS = dict(jointZ=0.55, ballD=3.8, neckD=1.6, mouthFrac=0.82, gap_ball=0.35, gap_axial=0.60, overhangs=True)
+DEFAULTS = dict(jointZ=0.55, ballD=3.6, neckD=1.4, mouthFrac=0.78, lip=1.2,
+                gap_axial=0.80, gap_vertical=0.30, gap_lateral=0.25, overhangs=True)
 RESTORED_ORNAMENTS = ("genalArms", "occipitalSpine")   # supplied by overhang() instead (they reach over seg0)
 MIN_PITCH = 4.5
 
@@ -40,61 +38,67 @@ def clean(m):
     keep = [b for b in m.split(only_watertight=False) if b.volume >= 5.0 and b.extents.min() >= 0.5]
     return trimesh.util.concatenate(keep) if keep else m
 
-def _ball(r, at):
+def _ell(r, at):
     e = trimesh.creation.icosphere(subdivisions=3, radius=r); e.apply_translation(at); return M.to_manifold(e)
+def _force(body): return M.to_manifold(M.from_manifold(body))   # materialise: guard the manifold3d lazy-CSG drop
 
 def fits(P):
     geometry(P); return True
 def pivot(P):
     J, d, zj, y_piv = geometry(P); return dict(z=round(zj, 2), y_beyond_plane=round(y_piv - d, 2), scale=J.get("scaled", 1.0),
-                                              gap_ball=J["gap_ball"], mouth_r=round(J["mouthFrac"] * 0.5 * J["ballD"], 2))
+                                              ball_d=round(J["ballD"], 2), mouth_r=round(J["mouthFrac"] * 0.5 * J["ballD"], 2))
 def stop_deg(P):
-    """The neck swings until it meets the mouth rim: asin((mouth_r - neckR) / r). A ball joint has no enrolment stop;
-    this is the free travel per joint in any direction."""
+    """A ball joint has no enrolment stop; this is the free travel per joint in any direction, set by the neck meeting
+    the mouth rim: asin((mouth_r - neckR) / r)."""
     J, d, zj, y_piv = geometry(P); r = 0.5 * J["ballD"]
     return round(math.degrees(math.asin(np.clip((J["mouthFrac"] * r - 0.5 * J["neckD"]) / r, 0.0, 1.0))), 1)
 
 def geometry(P, J=None):
-    """Resolve the joint. Short-pitch animals scale the ball/neck down (gaps do not) so the joint stays printable
-    instead of breaking; below MIN_PITCH -> ValueError. Pivot is an absolute bed height, clamped and kept a wall
-    below the shell top so the socket has a roof."""
+    """Resolve the joint. Short-pitch animals scale the ball/neck/lip down (gaps do not); below MIN_PITCH -> ValueError.
+    Pivot is an absolute bed height, clamped and kept a wall below the shell top so the socket has a roof."""
     J = dict(DEFAULTS, **(J or {})); d = pitch(P)
     if d < MIN_PITCH: raise ValueError(f"pitch {d:.2f} mm < {MIN_PITCH}: no ball joint fits (fewer segments or a longer animal)")
-    lip = 1.0
-    need = 2 * lip + 3 * J["gap_axial"] + J["ballD"]
+    need = 2 * J["lip"] + 3 * J["gap_axial"] + J["ballD"]
     if d < need + 1.0:
         k = max((d - 1.0 - 3 * J["gap_axial"]) / (need - 3 * J["gap_axial"]), 0.45)
-        for key in ("ballD", "neckD"): J[key] = J[key] * k
+        for key in ("ballD", "neckD", "lip"): J[key] = J[key] * k
         J["scaled"] = round(k, 3)
-    r = 0.5 * J["ballD"]
     zj = float(np.clip(J["jointZ"] * ring_top(P), 6.0, 10.0))
     S = THORAX.plan(P, 0); ztop = float(S["zfun"](np.array([0.0]), np.array([0.5 * d]))[0])
-    zj = min(zj, ztop - (r + J["gap_ball"] + 1.0) - 0.3)               # keep a wall above the socket
-    y_piv = d + 0.5 * J["gap_axial"] + lip + J["gap_ball"] + r          # ball centre = the next part's socket centre
+    zj = min(zj, ztop - (0.5 * J["ballD"] + J["gap_vertical"] + J["lip"]) - 0.3)   # keep a wall above the socket
+    y_piv = d + 0.5 * J["gap_axial"] + J["lip"] + J["gap_axial"] + 0.5 * J["ballD"]   # ball centre = the next part's socket centre
     return J, d, zj, y_piv
 
-def _ball_rear(body, P, J, zj, y_piv, y_rear):
-    """Neck (axis y) from the rear face out to the ball, plus the ball at the pivot."""
-    r = 0.5 * J["ballD"]; neckR = 0.5 * J["neckD"]
-    body = M.to_manifold(M.from_manifold(body))                                          # force: guard the lazy-CSG drop
-    neck = M.to_manifold(M.cylinder(neckR, (y_piv - y_rear) + 1.0, axis="y", at=(0, 0.5 * (y_rear - 1.0 + y_piv), zj)))
-    return body + neck + _ball(r, (0, y_piv, zj))
+def _rear_joint(body, P, J, zj, y_piv):
+    """Concave SPHERE wrapping the next part's convex lobe, plus the retention ball on a round neck reaching into it."""
+    ga = J["gap_axial"]; r = 0.5 * J["ballD"]; Rc = J["lip"] + ga + r
+    body = _force(body)
+    body = body - _ell(Rc + ga, (0, y_piv, zj))                                          # concave rear (dome)
+    body = _force(body)
+    y_rear = y_piv - (Rc + ga); neckR = 0.5 * J["neckD"]
+    neck = M.to_manifold(M.cylinder(neckR, (y_piv - y_rear) + 2.0, axis="y", at=(0, 0.5 * (y_piv + y_rear) - 1.0, zj)))
+    return body + neck + _ell(r, (0, y_piv, zj))
 
-def _socket_front(body, P, J, zj, yc):
-    """Spherical cavity (r + gap) at the socket centre, opened to the front face by a round mouth (radius < r, so the
-    printed-in-place ball is captured) swept through the swing so the neck is free."""
-    r = 0.5 * J["ballD"]; gb = J["gap_ball"]; mouthR = J["mouthFrac"] * r; big = 400.0
-    body = M.to_manifold(M.from_manifold(body))                                          # force: guard the lazy-CSG drop
-    cavity = _ball(r + gb, (0, yc, zj))
-    mouth0 = M.cylinder(mouthR, yc + big, axis="y", at=(0, yc, zj), align=("c", "max", "c"))   # from the cavity forward through the face
+def _front_joint(body, P, J, zj, yc, front_face_y):
+    """Convex SPHERE lobe about the pivot with a spherical socket + round mouth (captures the previous part's ball).
+    No enrolment stop: the front face below the lobe band is cut flat."""
+    ga, gv, gl = J["gap_axial"], J["gap_vertical"], J["gap_lateral"]; r = 0.5 * J["ballD"]; Rc = J["lip"] + ga + r; big = 400.0
+    body = _force(body)
+    ztop = zj - Rc - ga
+    front_zone = M.to_manifold(M.box(big, 2 * Rc + 2.0, big, at=(0, yc - Rc - 1.0, ztop), align=("c", "min", "min")))
+    lobe = _ell(Rc, (0, yc, zj))
+    behind = M.to_manifold(M.box(big, big, big, at=(0, yc, ztop), align=("c", "min", "min")))
+    body = ((body - front_zone) + ((body ^ front_zone) ^ lobe)) + (body ^ behind)
+    body = _force(body)
+    body = body - M.to_manifold(M.box(big, (yc - front_face_y) + 1.0, ztop + 1.0, at=(0, front_face_y - 1.0, -1.0), align=("c", "min", "min")))
+    body = _force(body)
+    socket = _ell(r + gv, (0, yc, zj))
+    mouthR = J["mouthFrac"] * r; L = yc + 2.0
+    mouth0 = M.cylinder(mouthR, L, axis="y", at=(0, yc - 0.5 * L, zj))                    # cavity centre forward through the face
     th = math.radians(stop_deg(P) + 3.0); fan = [M.to_manifold(mouth0)]
     for f in np.linspace(-th, th, 9):
         fan.append(M.to_manifold(mouth0.copy().apply_transform(trimesh.transformations.rotation_matrix(f, (1, 0, 0), (0, yc, zj)))))
-    return body - cavity - Manifold.batch_boolean(fan, Manifold.OpType.Add if hasattr(Manifold, "OpType") else 0) if False else _sub_fan(body, cavity, fan)
-
-def _sub_fan(body, cavity, fan):
-    from manifold3d import OpType
-    return body - cavity - Manifold.batch_boolean(fan, OpType.Add)
+    return body - socket - Manifold.batch_boolean(fan, OpType.Add)
 
 # ---------------------------------------------------------------- the template: cut / overhang / pose
 def _trim_rear(body, P, port, J, d):
@@ -104,7 +108,7 @@ def _trim_rear(body, P, port, J, d):
     body = body ^ M.to_manifold(M.box(big, run, big, at=(0, ovl, -1), align=("c", "min", "min")))
     body = body.translate((0, -ovl, 0)).scale((1.0, (d - ga) / run, 1.0)).translate((0, 0.5 * ga, 0))
     T = np.diag([1.0, (d - ga) / run, 1.0, 1.0]); T[1, 3] = -ovl * (d - ga) / run + 0.5 * ga
-    return M.to_manifold(M.from_manifold(body)), T
+    return _force(body), T
 
 def cut(body, env, P, port, **opts):
     """One edge of one solid part."""
@@ -113,16 +117,16 @@ def cut(body, env, P, port, **opts):
     if port.rear:
         if port.kind == "seg":
             man, T = _trim_rear(man, P, port, J, d)
-            man = _ball_rear(man, P, J, zj, y_piv, y_rear=d - 0.5 * ga)
+            man = _rear_joint(man, P, J, zj, y_piv)
         else:                                                       # head rear: cut at the joint plane, ball beyond it
             man = man ^ M.to_manifold(M.box(big, big, big, at=(0, -0.5 * ga, 0), align=("c", "max", "c")))
-            man = _ball_rear(man, P, J, zj, y_piv - d, y_rear=-0.5 * ga)
+            man = _rear_joint(man, P, J, zj, y_piv - d)
     else:
-        yc = 0.5 * ga + 1.0 + J["gap_ball"] + r                     # socket centre (lip=1.0 beyond the front face)
+        yc = 0.5 * ga + J["lip"] + ga + r
         if port.kind == "tail":
             man = man ^ M.to_manifold(M.box(big, big, big, at=(0, 0.5 * ga, 0), align=("c", "min", "c")))
-        man = _socket_front(man, P, J, zj, yc)
-    return M.from_manifold(M.to_manifold(M.from_manifold(man))), T
+        man = _front_joint(man, P, J, zj, yc, front_face_y=0.5 * ga)
+    return M.from_manifold(_force(man)), T
 
 def overhang(P, part, S, port, opts=None):
     """What the rear trim removed, in the part frame, continuous with the rear face (same restore pass as flexi)."""
