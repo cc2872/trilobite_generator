@@ -87,10 +87,15 @@ def loading_gif(): return send_file(os.path.join(ROOT, "web", "loading.gif"))
 @app.get("/api/progress")
 def api_progress(): return jsonify(PROGRESS)
 
+# eye configurations offered as a single dropdown in the head cell, built from the schema's own CHARACTERS bundles
+EYE_TYPES = ["holochroalEyes", "schizochroalEyes", "pelagicEyes", "stalkedEyes", "eyesLost"]
+
 @app.get("/api/schema")
 def api_schema():
+    eye_types = [dict(key=k, name=schema.CHARACTERS[k]["name"], set=schema.CHARACTERS[k]["set"]) for k in EYE_TYPES]
     return jsonify(dict(version=schema.SCHEMA_VERSION, instrument=I.INSTRUMENT_VERSION, params=_params_meta(), cells=schema.CELLS,
-                        vertical_spines=schema.VERTICAL_SPINES, presets=sorted(_presets()), default=schema.DEFAULT_PRESET))
+                        vertical_spines=schema.VERTICAL_SPINES, presets=sorted(_presets()), default=schema.DEFAULT_PRESET,
+                        eye_types=eye_types))
 
 @app.get("/api/preset/<name>")
 def api_preset(name):

@@ -156,6 +156,14 @@ function slider(k){ const m=META[k]; const r=document.createElement('div'); r.cl
   r.innerHTML=`<div class="lab"><span title="${m.doc}">${m.label}</span><span>${fmt(P[k],m)}</span></div><input type="range" min="${m.lo}" max="${m.hi}" step="${m.step}" value="${P[k]}">`;
   const inp=r.querySelector('input'); inp.oninput=e=>{P[k]=+e.target.value; r.querySelector('.lab span:last-child').textContent=fmt(P[k],m); redraw();}; inp.onchange=()=>{lastMeas=null; dirty();}; return r; }
 const GL={}; function glyph(id,vb){const s=document.createElement('div'); s.innerHTML=`<svg class="arm" id="${id}" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg>`; GL[id]=1; return s;}
+function eyeSelect(){   // one dropdown to pick an eye configuration; applies that character's parameter bundle
+  const types=S.eye_types||[]; if(!types.length) return document.createTextNode('');
+  const r=document.createElement('div'); r.className='ctrl'; r.dataset.k='__eyeType';
+  r.innerHTML=`<div class="lab"><span title="apply a whole eye configuration; fine-tune with the sliders below">Eye type</span></div>`+
+    `<select><option value="">— choose —</option>${types.map(t=>`<option value="${t.key}">${t.name}</option>`).join('')}</select>`;
+  r.querySelector('select').onchange=e=>{ const t=types.find(x=>x.key===e.target.value); if(!t) return;
+    Object.assign(P, t.set); lastMeas=null; render(); dirty(); };   // apply the bundle, rebuild the sliders to show new values
+  return r; }
 function redraw(){ drawMap(); for(const id in GL){ const e=$(id); if(!e){delete GL[id];continue;} DRAW[id](e);} }
 const t=(x,y,s,anchor)=>`<text x="${x}" y="${y}"${anchor?` text-anchor="${anchor}"`:''}>${s}</text>`;
 const DRAW={
@@ -442,7 +450,7 @@ function packing(){ const d=document.createElement('div'); d.className='pack';
 const VISUAL={
  frame:()=>[slider('length'), slider('width'), slider('relief'), slider('segCount'), slider('cephFrac'), slider('pygFrac')],
  b1:()=>[glyph('glab','0 0 340 125'), slider('glabInflate'), slider('glabRise'), slider('glabLobes'), slider('glabFront'), slider('headOutlineExp'), slider('headDomeExp'), slider('cephParallel'), slider('occipitalSpine')],
- a1:()=>[packing(), slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('eyePos'), slider('eyeLat'), slider('eyeStalk'), slider('eyeStalkR'), slider('eyeLean'), slider('eyeSolid'), slider('eyeSlope'), slider('eyeShade'), slider('eyeProfile'), slider('lensD'), slider('lensGap'), slider('lensRise'), slider('genalSpine'), slider('genalCurve'), slider('genalPath'), slider('genalTaper'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
+ a1:()=>[eyeSelect(), packing(), slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('eyePos'), slider('eyeLat'), slider('eyeStalk'), slider('eyeStalkR'), slider('eyeLean'), slider('eyeSolid'), slider('eyeSlope'), slider('eyeShade'), slider('eyeProfile'), slider('lensD'), slider('lensGap'), slider('lensRise'), slider('genalSpine'), slider('genalCurve'), slider('genalPath'), slider('genalTaper'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
  b2:()=>[slider('axisFrac'), slider('axisRise'), slider('furrowDepth'), slider('ringArch'), slider('axialSpine')],
  a2:()=>[glyph('pleura','0 0 340 110'), slider('fulcrum'), slider('pleuralSlope'), slider('overlap'), slider('spineBase'), slider('spineSweep')],
  b3:()=>[slider('pygRings'), slider('tailRelief'), slider('tailDomeExp')],
