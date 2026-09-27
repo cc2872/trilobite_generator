@@ -14,12 +14,16 @@ poses in any direction and does NOT reproduce the trilobite's rolling. BASE = "s
 
 Parameters (all print-only, mm unless noted):
   jointZ      0.55              pivot height as a fraction of the ring top at the joint (abs-clamped 6-10 mm)
-  ballD       3.6               retention ball diameter -> r = ballD/2
-  neckD       1.4               round neck diameter (swings in the mouth)
-  mouthFrac   0.78              socket mouth radius as a fraction of r (< 1 so the ball is captured)
-  lip         1.2               wall between the socket and the concave face
+  ballD       6.0               retention ball diameter -> r = ballD/2
+  neckD       3.0               round neck diameter (swings in the mouth) -- the load-bearing member; kept thick
+  mouthFrac   0.80              socket mouth radius as a fraction of r (< 1 so the ball is captured)
+  lip         2.0               wall between the socket and the concave face
   gap_axial / gap_vertical / gap_lateral   0.80 / 0.30 / 0.25   (axial: face gap & run end; vertical: ball/socket clearance)
   overhangs   True              restore the anatomy the rear trim removed (pleural spines, genal arms, ...)
+
+Durability: short-pitch animals scale the solids down, but SCALE_FLOOR caps how far, and NECK_MIN/LIP_MIN put an
+absolute floor under the two thin members so the printed joint never falls below what an FDM print can survive. An
+animal too short-pitched to hold a durable joint raises ValueError rather than emit a joint that snaps.
 """
 import math, numpy as np, trimesh
 import mesh as M
@@ -28,10 +32,13 @@ from anatomy import thorax as THORAX
 from manifold3d import Manifold, OpType
 
 NAME = "ball"; MEASURED = False; BASE = "solid"
-DEFAULTS = dict(jointZ=0.55, ballD=3.6, neckD=1.4, mouthFrac=0.78, lip=1.2,
+DEFAULTS = dict(jointZ=0.55, ballD=6.0, neckD=3.0, mouthFrac=0.80, lip=2.0,
                 gap_axial=0.80, gap_vertical=0.30, gap_lateral=0.25, overhangs=True)
 RESTORED_ORNAMENTS = ("genalArms", "occipitalSpine")   # supplied by overhang() instead (they reach over seg0)
-MIN_PITCH = 4.5
+SCALE_FLOOR = 0.62     # never shrink the solids past this fraction of their default (below it the neck is too thin to print)
+NECK_MIN = 1.8         # absolute floor (mm) on the load-bearing neck: thinner than this snaps on an FDM print
+LIP_MIN = 1.0          # absolute floor (mm) on the socket wall
+MIN_PITCH = 8.5        # below this a durable ball joint does not fit -> ValueError (use fewer segments, a longer animal, or flexi)
 
 def clean(m):
     """Drop print-debris shells: any connected component under 5 mm^3 OR thinner than 0.5 mm on its shortest axis."""
@@ -60,9 +67,10 @@ def geometry(P, J=None):
     if d < MIN_PITCH: raise ValueError(f"pitch {d:.2f} mm < {MIN_PITCH}: no ball joint fits (fewer segments or a longer animal)")
     need = 2 * J["lip"] + 3 * J["gap_axial"] + J["ballD"]
     if d < need + 1.0:
-        k = max((d - 1.0 - 3 * J["gap_axial"]) / (need - 3 * J["gap_axial"]), 0.45)
+        k = max((d - 1.0 - 3 * J["gap_axial"]) / (need - 3 * J["gap_axial"]), SCALE_FLOOR)
         for key in ("ballD", "neckD", "lip"): J[key] = J[key] * k
         J["scaled"] = round(k, 3)
+    J["neckD"] = max(J["neckD"], NECK_MIN); J["lip"] = max(J["lip"], LIP_MIN)   # absolute floors: never print a member too thin to survive
     zj = float(np.clip(J["jointZ"] * ring_top(P), 6.0, 10.0))
     S = THORAX.plan(P, 0); ztop = float(S["zfun"](np.array([0.0]), np.array([0.5 * d]))[0])
     zj = min(zj, ztop - (0.5 * J["ballD"] + J["gap_vertical"] + J["lip"]) - 0.3)   # keep a wall above the socket
