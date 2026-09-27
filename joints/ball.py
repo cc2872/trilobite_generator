@@ -38,7 +38,7 @@ RESTORED_ORNAMENTS = ("genalArms", "occipitalSpine")   # supplied by overhang() 
 SCALE_FLOOR = 0.62     # never shrink the solids past this fraction of their default (below it the neck is too thin to print)
 NECK_MIN = 1.8         # absolute floor (mm) on the load-bearing neck: thinner than this snaps on an FDM print
 LIP_MIN = 1.0          # absolute floor (mm) on the socket wall
-MIN_PITCH = 8.5        # below this a durable ball joint does not fit -> ValueError (use fewer segments, a longer animal, or flexi)
+MIN_PITCH = 7.5        # below this the floored joint self-intersects -> ValueError (verified clean to ~7.7; use fewer segments, a longer animal, or flexi)
 
 def clean(m):
     """Drop print-debris shells: any connected component under 5 mm^3 OR thinner than 0.5 mm on its shortest axis."""
