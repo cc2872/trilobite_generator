@@ -75,8 +75,11 @@ def _presets():
 @app.get("/")
 def index(): return send_file(os.path.join(ROOT, "web", "index.html"))
 
+@app.get("/tree")
+def tree(): return send_file(os.path.join(ROOT, "web", "tree.html"))                  # the ring/spiral family tree
+
 @app.get("/family-tree")
-def family_tree(): return send_file(os.path.join(ROOT, "web", "family_tree.html"))   # DEMO page, reached from the generator
+def family_tree(): return send_file(os.path.join(ROOT, "web", "tree.html"))            # alias -> the same page
 
 @app.get("/loading.gif")
 def loading_gif(): return send_file(os.path.join(ROOT, "web", "loading.gif"))
