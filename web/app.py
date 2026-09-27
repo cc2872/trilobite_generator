@@ -39,7 +39,7 @@ def _build_sig(*names):
             with open(os.path.join(ROOT, n), "rb") as f: h.update(f.read().replace(b"\r\n", b"\n"))   # LF-normalize: same key on Windows and in the Docker (LF) build
         except OSError: pass
     return h.hexdigest()[:8]
-BUILD_SIG = _build_sig("assemble.py", "joints/pin.py", "joints/flexi.py", "printfill.py", "anatomy/head.py", "anatomy/thorax.py", "anatomy/tail.py", "anatomy/common.py", "mesh.py", "fields.py")
+BUILD_SIG = _build_sig("assemble.py", "joints/pin.py", "joints/flexi.py", "joints/ball.py", "printfill.py", "anatomy/head.py", "anatomy/thorax.py", "anatomy/tail.py", "anatomy/common.py", "mesh.py", "fields.py")
 LOCK = threading.Lock()          # one build or measurement at a time (the lab workstation has one job's worth of RAM to spare)
 MEASURED = {}                    # param hash -> last instrument result (so the sheet can carry the reading and the enrolled pose)
 PROGRESS = {"done": 0, "total": 0}   # parts finished in the build now running; the page polls it for its loading count
@@ -100,9 +100,9 @@ def api_build():
     """Print geometry: every part at the printed stop bevel (P['maxAngle']), one GLB each, cached by parameter hash."""
     body = request.get_json(force=True)
     P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
-    joint = body.get("joint", "pin")                       # "pin" = tracked builder (the measured geometry); "flexi" = printjoint2
+    joint = body.get("joint", "pin")                       # "pin" = tracked builder (the measured geometry); "flexi"/"ball" = print joints
     fill = float(body.get("fill", 0.0) or 0.0)              # pin builds only: thicken the shell for printing (mm), print-only
-    jtag = ("-flexi" if joint == "flexi" else "") + (f"-fill{fill:g}" if fill > 0.05 and joint != "flexi" else "")
+    jtag = ("" if joint == "pin" else f"-{joint}") + (f"-fill{fill:g}" if fill > 0.05 and joint == "pin" else "")  # pin stays untagged (matches the sheet key)
     key = schema.param_hash(P) + "-b" + BUILD_SIG + jtag   # params + builder-source hash: a code change never serves stale parts
     folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
     n_parts = int(P["segCount"]) + 2
