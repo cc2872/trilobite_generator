@@ -99,6 +99,7 @@
   <div class="panel">
     <div class="controls">
       <h1>Trilobite Morphospace</h1>
+      <button id="familytree" onclick="location.href='/family-tree'" title="browse the orders as a family tree (demo)">family tree</button>
       <div class="ctrl"><div class="lab"><span>Order</span></div><select id="preset"></select></div>
       <svg class="map" id="map" viewBox="0 0 384 396" xmlns="http://www.w3.org/2000/svg"></svg>
       <div class="sect" id="cellname"></div>
@@ -134,11 +135,12 @@
 <script type="module">
 import * as THREE from 'three'; import {OrbitControls} from 'three/addons/controls/OrbitControls.js'; import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 const S = await (await fetch('/api/schema')).json(); const META = Object.fromEntries(S.params.map(p=>[p.key,p]));
-let P = await (await fetch('/api/preset/'+S.default)).json(); let sel='frame', showMore=false, kin=null, partMeshes={}, buildKey=null, mode='sheet', lastMeas=null, threeReady=false;
+const _q=new URLSearchParams(location.search).get('order'); const START=(_q&&S.presets.includes(_q))?_q:S.default;   // family-tree deep link (?order=)
+let P = await (await fetch('/api/preset/'+START)).json(); let sel='frame', showMore=false, kin=null, partMeshes={}, buildKey=null, mode='sheet', lastMeas=null, threeReady=false;
 const $=id=>document.getElementById(id); const INK='#ffffff', MID='#9a9a9a', LINE='#262626', SOFT='#141414';
 const ROWOF={b1:'head',a1:'head',b2:'seg',a2:'seg',b3:'tail',a3:'tail'};
 const C=$('C');
-const ps=$('preset'); S.presets.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;if(n===S.default)o.selected=true;ps.appendChild(o);});
+const ps=$('preset'); S.presets.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;if(n===START)o.selected=true;ps.appendChild(o);});
 ps.onchange=async()=>{P=await (await fetch('/api/preset/'+ps.value)).json(); lastMeas=null; render(); dirty();};
 function fmt(v,m){return (m.kind==='int'||m.kind==='odd_int')?String(Math.round(v)):(+v).toFixed(m.step<0.01?3:m.step<0.1?2:m.step<1?1:0)+(m.unit?' '+m.unit:'');}
 function clampP(k,v){ const m=META[k]; v=Math.min(Math.max(+v,m.lo),m.hi); if(m.kind==='int') v=Math.round(v);
