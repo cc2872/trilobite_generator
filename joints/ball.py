@@ -100,7 +100,10 @@ def _front_joint(body, P, J, zj, yc, front_face_y):
     ga, gv, gl = J["gap_axial"], J["gap_vertical"], J["gap_lateral"]; r = 0.5 * J["ballD"]; Rc = J["lip"] + ga + r; big = 400.0
     body = _force(body)
     ztop = zj - Rc - ga
-    front_zone = M.to_manifold(M.box(big, 2 * Rc + 2.0, big, at=(0, yc - Rc - 1.0, ztop), align=("c", "min", "min")))
+    # carve only BELOW the lobe equator (replace with the bearing hemisphere); keep the full body above zj so the
+    # dorsal shell roofs the socket and covers the silhouette, staying connected across the equatorial disk.
+    # (a full-height carve here removed the dorsal shell and left the fish-skeleton gap between segments)
+    front_zone = M.to_manifold(M.box(big, 2 * Rc + 2.0, zj + 1.0, at=(0, yc - Rc - 1.0, -1.0), align=("c", "min", "min")))
     lobe = _ell(Rc, (0, yc, zj))
     behind = M.to_manifold(M.box(big, big, big, at=(0, yc, ztop), align=("c", "min", "min")))
     body = ((body - front_zone) + ((body ^ front_zone) ^ lobe)) + (body ^ behind)
