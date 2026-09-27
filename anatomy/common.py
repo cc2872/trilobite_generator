@@ -31,6 +31,9 @@ def vault(u, P):
     u = np.abs(u); f = P["fulcrum"]
     inner = 1 - 0.35 * (u / f) ** 2
     outer = 0.65 * (1 - (np.maximum(u - f, 0) / (1 - f)) ** 1.6)
+    m = P.get("vaultRound", 1.0)                       # 27 Sep 2026: < 1 rounds the flank into a helmet (0.62 = a quarter circle,
+    if m != 1.0: outer = 0.65 * np.clip(outer / 0.65, 0, 1) ** m   # lower = fuller top, steeper sides). 1.0 = the v4 profile, untouched.
+                                                       # (u runs past 1 at pleural tips and genal arms, where the legacy form goes negative)
     v4 = np.where(u <= f, inner, outer)
     k = P["tent"]
     if k <= 0.001: return v4

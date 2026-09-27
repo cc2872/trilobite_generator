@@ -152,11 +152,14 @@ def mirror_asymmetry_mm(m, n=6000, seed=0):
 # ---------------------------------------------------------------- height fields
 REF_NU = 53               # the BREP builder's segment grid: its 2-pass blur defines the smoothing the presets were tuned on
 
-def sample_grid(outline, zfun, nu=NU, nv=NV, passes=None, symmetric=True):
+def sample_grid(outline, zfun, nu=NU, nv=NV, passes=None, symmetric=True, detail=None):
     """Sample (x, y, z) on the plan grid. u in [-1, 1] across, v in [0, 1] along. With symmetric=True the right half
     (u >= 0) is sampled and mirrored — outline(u, v) is only ever called for u >= 0 and zfun only on x >= 0.
     The 3-tap blur is the BREP builder's; passes=None scales the pass count with grid density so the smoothing LENGTH
-    (not the cell count) matches the 53-wide reference grid — a finer grid then adds resolution without changing shape."""
+    (not the cell count) matches the 53-wide reference grid — a finer grid then adds resolution without changing shape.
+    detail (27 Sep 2026): an optional z-offset field added AFTER the blur, for surface detail finer than the smoothing
+    length (~1.2 mm sigma: a suture groove or an eye ridge would otherwise build at a third of its height). None = the
+    path the frozen references were built on, unchanged."""
     if nu % 2 == 0: nu += 1
     if passes is None: passes = max(1, int(round(2 * ((nu - 1) / (REF_NU - 1)) ** 2)))
     mid = nu // 2
@@ -175,6 +178,8 @@ def sample_grid(outline, zfun, nu=NU, nv=NV, passes=None, symmetric=True):
         zp = np.pad(zs, 1, mode="edge"); zs = 0.25 * zp[1:-1, :-2] + 0.5 * zp[1:-1, 1:-1] + 0.25 * zp[1:-1, 2:]
         zp = np.pad(zs, 1, mode="edge"); zs = 0.25 * zp[:-2, 1:-1] + 0.5 * zp[1:-1, 1:-1] + 0.25 * zp[2:, 1:-1]
     if symmetric: zs[:, :mid] = zs[:, nu - 1:mid:-1]
+    if detail is not None:
+        zs = zs + (detail(np.abs(xs.ravel()), ys.ravel()) if symmetric else detail(xs.ravel(), ys.ravel())).reshape(nv, nu)
     # a pinched row/column (all plan points coincident) must carry ONE z, or the merge leaves a fan of vertical edges
     for j in (0, nv - 1):
         if np.ptp(xs[j]) < 1e-9 and np.ptp(ys[j]) < 1e-9: zs[j, :] = zs[j].mean()
@@ -225,19 +230,19 @@ def _closed(top_xyz, bot_xyz, nv, nu):
     if m.volume < 0: m.invert()
     return m
 
-def heightfield_shell(outline, zfun, t, nu=NU, nv=NV, z_min=Z_MIN, symmetric=True):
+def heightfield_shell(outline, zfun, t, nu=NU, nv=NV, z_min=Z_MIN, symmetric=True, detail=None):
     """Shell of vertical thickness t under z = zfun(x, y) on the plan outline(u, v). Same floors as trilobite.plate:
     top >= z_min, bottom = max(top - t, z_min), and never thinner than T_MIN."""
-    xs, ys, zs = sample_grid(outline, zfun, nu, nv, symmetric=symmetric)
+    xs, ys, zs = sample_grid(outline, zfun, nu, nv, symmetric=symmetric, detail=detail)
     nv_, nu_ = zs.shape
     top = np.maximum(zs, z_min + T_MIN)
     bot = np.minimum(np.maximum(zs - t, z_min), top - T_MIN)
     T = np.column_stack([xs.ravel(), ys.ravel(), top.ravel()]); B = np.column_stack([xs.ravel(), ys.ravel(), bot.ravel()])
     return _closed(T, B, nv_, nu_)
 
-def under_envelope(outline, zfun, nu=NU, nv=NV, floor=-1.0, z_min=Z_MIN, symmetric=True):
+def under_envelope(outline, zfun, nu=NU, nv=NV, floor=-1.0, z_min=Z_MIN, symmetric=True, detail=None):
     """Everything under the surface down to z = floor: the clipping envelope for hinge webs and spine roots."""
-    xs, ys, zs = sample_grid(outline, zfun, nu, nv, symmetric=symmetric)
+    xs, ys, zs = sample_grid(outline, zfun, nu, nv, symmetric=symmetric, detail=detail)
     nv_, nu_ = zs.shape
     top = np.maximum(zs, z_min + T_MIN)
     T = np.column_stack([xs.ravel(), ys.ravel(), top.ravel()]); B = np.column_stack([xs.ravel(), ys.ravel(), np.full(xs.size, floor)])

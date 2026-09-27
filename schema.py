@@ -8,7 +8,8 @@ artifact — derives from this table. Add a parameter here and it exists everywh
 from dataclasses import dataclass, asdict
 import json, hashlib, warnings
 
-SCHEMA_VERSION = "6.1"      # 13 Sep 2026: eyeStalk / eyeStalkR added (pedunculate eyes). 6.0: ornament, skins, seed
+SCHEMA_VERSION = "6.2"      # 27 Sep 2026: sutureEnd / sutureDepth (the facial suture, a groove) and eyeRidge; all default 0 = head unchanged.
+                            # 6.1: eyeStalk / eyeStalkR (pedunculate eyes). 6.0: ornament, skins, seed
                             # and eyeElong removed; prongs added; CELLS is the UI contract
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ PARAMS = [
     Param("furrowDepth", "Furrow depth", 1.2, 0.0, 3.0, 0.1, "Axis & furrows", "Depth of the furrows at full expression", unit="mm"),
     Param("effacement", "Effacement", 0.0, 0.0, 1.0, 0.01, "Axis & furrows", "0 = fully sculpted, 1 = smooth (Nileus)"),
     # ---- surface form (fitted from the reference sculpt, 2026-09-05: seg2 crest rms 0.12 mm, head dome rms 0.33 mm)
+    Param("vaultRound", "Vault roundness", 1.0, 0.3, 1.0, 0.02, "Form", "Outer flank of the v4 vault: 1 = the v4 profile, 0.62 = a quarter-circle helmet, lower = fuller top and near-vertical sides (pelagic Carolinites)"),
     Param("tent", "Tent vault", 1.0, 0.0, 1.0, 0.01, "Form", "0 = fulcrum vault (v4), 1 = axial dome + straight pleural slope (reference sculpt)"),
     Param("axisSigma", "Axial dome width", 0.55, 0.25, 1.0, 0.01, "Form", "Gaussian half-width of the axial dome / half-width (tent vault)"),
     Param("pleuralSlope", "Pleural slope", 0.74, 0.2, 1.2, 0.01, "Form", "Linear drop of the pleural slope over the half-width / relief (tent vault)"),
@@ -68,7 +70,7 @@ PARAMS = [
     Param("glabRise", "Glabella rise", 0.18, 0.0, 0.6, 0.01, "Head", "Glabella height above the cheeks / relief"),
     Param("glabLobes", "Glabellar furrow pairs", 3, 0, 4, 1, "Head", "Pairs of lateral glabellar furrows", kind="int"),
     Param("glabFront", "Glabella front", 2.5, 1.5, 8.0, 0.1, "Head", "How the glabella closes at the front: 2.5 ovoid nose, 6+ blunt"),
-    Param("eyeSize", "Eye size", 0.14, 0.0, 0.45, 0.005, "Head", "Eye radius / head half-width (0 = blind)"),
+    Param("eyeSize", "Eye size", 0.14, 0.0, 0.55, 0.005, "Head", "Eye radius / head half-width (0 = blind; a pelagic cyclopygid eye is ~0.45)"),
     Param("eyePos", "Eye position", 0.45, 0.10, 0.90, 0.01, "Head", "Along the head, 0 rear → 1 front"),
     Param("eyeArc", "Eye arc", 150, 60, 300, 5, "Head", "Angular extent of the visual surface", unit="deg"),
     Param("eyeHeight", "Eye height", 0.8, 0.2, 1.6, 0.05, "Head", "Dome height of the eye / eye radius"),
@@ -83,6 +85,12 @@ PARAMS = [
     Param("eyeStalk", "Eye stalk", 0.0, 0.0, 4.0, 0.05, "Head", "Pedunculate eye: stalk length / eye radius (0 = sessile, sitting on the cheek)"),
     Param("eyeStalkR", "Eye stalk width", 0.45, 0.15, 1.0, 0.05, "Head", "Stalk radius / eye radius"),
     Param("eyeLean", "Eye lean forward", 0, 0, 90, 1, "Head", "A stalked eye tips forward from vertical; 90° looks straight ahead over the front margin", unit="deg"),
+    Param("eyeStalkBend", "Eye stalk curve", 30, 0, 80, 1, "Head", "The stalk curves outward by this much along its length (0 = straight)", unit="deg"),
+    Param("eyeSphere", "Eye as a sphere", 0, 0, 1, 1, "Head", "1 = a spherical eye instead of the drum (a stalked eye always is)", kind="int"),
+    Param("eyeAxial", "Eye fore-aft stretch", 1.0, 0.6, 1.8, 0.05, "Head", "A spherical eye stretched along the body: 1 = round, 1.4 = the cyclopygid bean"),
+    Param("eyeTall", "Eye vertical stretch", 1.0, 0.6, 1.5, 0.05, "Head", "A spherical eye stretched vertically"),
+    Param("eyeCollar", "Eye collar", 0.0, 0.0, 0.6, 0.05, "Head", "The cheek rises around a spherical eye's rim by this fraction of its radius, so the eye grows out of the head rather than sitting on it"),
+    Param("eyeSink", "Eye sink", 0.55, 0.2, 2.2, 0.05, "Head", "How deep a spherical eye sits: 0.55 half sunk in the cheek, 1.0 centre at cheek level, 1.85 hanging below the cheek with its top at the palpebral shelf (Carolinites)"),
     Param("genalSweep", "Cheek sweep", 0.8, 0.0, 2.5, 0.05, "Head", "How far the cheeks sweep back along the shoulder / segment pitch"),
     Param("borderWidth", "Border width", 0.10, 0.0, 0.30, 0.01, "Head", "Raised border / head half-width (0 = none)"),
     Param("genalSpine", "Genal spine length", 0.35, 0.0, 1.5, 0.01, "Head", "Genal spine length / head length (0 = none)"),
@@ -95,6 +103,15 @@ PARAMS = [
           "e.g. 's**2' flares late, 's' straight, 'sin(pi*s/2)' flares early, '-0.5*s+s**2' hugs the thorax then flares", kind="expr"),
     Param("genalWidthMM", "Genal arm thickness (mm)", 0.0, 0.0, 30.0, 0.5, "Head", "Absolute arm thickness in mm; 0 = use genalWidth (fraction of half-width)"),
     Param("genalCurve", "Genal spine curve", 20, -60, 60, 1, "Head", "Inward curl of the genal spines", unit="deg"),
+    # ---- the facial suture (27 Sep 2026): the line the cephalon splits along at the moult, drawn as a shallow groove.
+    # Gon (2009) p. 21: the three suture types differ only in where the posterior branch meets the margin.
+    Param("sutureEnd", "Facial suture end", 0.0, -1.0, 1.0, 0.05, "Head",
+          "Where the posterior branch meets the margin: -1 on the lateral margin forward of the genal angle (proparian, Phacopina), "
+          "0 at the genal angle (gonatoparian, Calymenina), +1 on the posterior margin inboard of it (opisthoparian, Ptychopariina)"),
+    Param("sutureDepth", "Facial suture depth", 0.0, 0.0, 0.6, 0.05, "Head", "Groove cut along the suture; 0 = not drawn, the head is unchanged", unit="mm"),
+    # ---- eye ridges (27 Sep 2026): the primitive character (Gon p. 41, Redlichia): a raised ridge from the glabella's
+    # frontal lobe back and out to the front of the eye. Lost in most derived groups, so 0 is the derived state.
+    Param("eyeRidge", "Eye ridge height", 0.0, 0.0, 1.5, 0.05, "Head", "Ridge from the glabella to the eye; 0 = none, the head is unchanged", unit="mm"),
     # ---- thorax pleurae and spines (fields along the thorax)
     Param("tipSweep", "Pleural tip sweep", 0.5, 0.0, 2.0, 0.01, "Thorax", "How far the pleural blades sweep back / pitch"),
     Param("bladeChord", "Blade chord", 1.3, 0.5, 1.3, 0.01, "Thorax", "Fore-aft width of the pleural blade beyond its root / segment pitch (1.3 = the v4 full plate, 0.9 = separate ribs)"),
@@ -198,11 +215,12 @@ CELLS = {
                more=["glabFront", "headDomeExp", "headDomeFill", "headOutlineExp", "cephParallel", "headRelief", "headWall", "occipitalSpine"]),
     "a1": dict(label="Cheek + genal angle", doc="the side of the head: eye, border, genal spine or prolongation", primary=["eyeSize", "genalSpine", "headRearArc"],
                more=["eyePos", "eyeArc", "eyeHeight", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade", "lensD", "lensGap", "lensRise",
-                     "eyeStalk", "eyeStalkR", "eyeLean",
+                     "eyeStalk", "eyeStalkR", "eyeLean", "eyeStalkBend", "eyeSphere", "eyeAxial", "eyeTall", "eyeSink", "eyeCollar",
                      "borderWidth", "genalSweep", "genalCurve", "genalPath", "genalWidth", "genalWidthMM", "genalTaper", "headRearExp",
-                     "headProngs", "headProngLen", "headProngSplay", "headProngStem", "headProngCenter", "headProngWidth", "headProngCurl"]),
+                     "headProngs", "headProngLen", "headProngSplay", "headProngStem", "headProngCenter", "headProngWidth", "headProngCurl",
+                     "sutureEnd", "sutureDepth", "eyeRidge"]),
     "b2": dict(label="Axial rings", doc="the ring chain over the hinges", primary=["axisFrac", "axisRise", "furrowDepth"],
-               more=["effacement", "axisSigma", "ringArch", "tent", "axialSpine"]),
+               more=["effacement", "axisSigma", "ringArch", "tent", "vaultRound", "axialSpine"]),
     "a2": dict(label="Pleura", doc="inner run to the fulcrum, then the blade; its spine is the blade running on", primary=["overlap", "fulcrum", "pleuralSlope"],
                more=["marginHeight", "bladeCamber", "bladeChord", "tipSweep", "tipTaper", "spineBase", "spineGrad", "spineSweep", "macroIndex", "macroAmp"]),
     "b3": dict(label="Tail axis", doc="the pygidial axis and its rings", primary=["pygRings", "tailRelief", "tailDomeExp"],
@@ -230,6 +248,57 @@ def migrate(P):
     return Q, [f"{k}: removed in schema 6.0" for k in dead]
 
 DEAD_KEYS = {"headSkin", "skinOlenoides", "skinGltf", "skinHarpetida", "skinProetida", "tubercles", "tubercleSize", "seed", "eyeElong"}
+
+# ---- characters (27 Sep 2026): the guide's morphological characters, each as the parameter settings that express it
+# (`set`) and a test that reads it off any parameter table (`has`). The tree page's LOCATE and the presets' character
+# lists come from here, so the thresholds are written down once. Only characters the generator models appear; sutures
+# and hypostome attachment are not here until the geometry exists (sutures do: 6.2). Gon (2009) page in `p`.
+CHARACTERS = {
+    "holochroalEyes":  dict(name="holochroal eyes",   p=24, set=dict(eyeSolid=1, lensD=0.05, lensGap=0.0),
+                            has=lambda P: P["eyeSize"] > 0.01 and P["lensD"] <= 0.07),
+    "schizochroalEyes":dict(name="schizochroal eyes", p=24, set=dict(eyeSolid=1, lensD=0.16, lensGap=0.3, eyeProfile=6.0),
+                            has=lambda P: P["eyeSize"] > 0.01 and P["lensD"] >= 0.10 and P["lensGap"] >= 0.15),
+    "eyesLost":        dict(name="eyes lost",         p=26, set=dict(eyeSize=0.0),
+                            has=lambda P: P["eyeSize"] <= 0.01),
+    "pelagicEyes":     dict(name="pelagic eyes",      p=44,
+                            # after the Carolinites reconstruction: a helmet head (v4 vault, full height to mid-head, low margin,
+                            # no border) with the globe set into the flank, its top at the apex, at the front corners of a narrow head
+                            set=dict(eyeSolid=1, eyeSphere=1, eyeSize=0.42, eyeArc=300, eyePos=0.62, eyeLat=0.74, eyeAxial=1.15, eyeTall=1.20,
+                                     eyeSink=1.25, eyeCollar=0.0, lensD=0.05, lensGap=0.0,      # the globe tucked under the crest, hanging below
+                                     tent=0.0, fulcrum=0.36, vaultRound=0.45, cephParallel=0.42, marginHeight=0.06, headRelief=1.55, borderWidth=0.0,
+                                     widthHeadFront=0.74, glabInflate=1.4),           # NB tent / fulcrum / marginHeight shape the thorax too
+                            has=lambda P: P["eyeSize"] >= 0.30 and P["eyeArc"] >= 220),
+    "stalkedEyes":     dict(name="stalked eyes",      p=25, set=dict(eyeSolid=1, eyeStalk=2.0, eyeStalkBend=30),
+                            has=lambda P: P["eyeSize"] > 0.01 and P["eyeStalk"] >= 0.5),
+    "eyeRidges":       dict(name="eye ridges",        p=41, set=dict(eyeRidge=0.8),
+                            has=lambda P: P["eyeRidge"] >= 0.2),
+    "proparian":       dict(name="proparian sutures", p=21, set=dict(sutureDepth=0.3, sutureEnd=-1.0),
+                            has=lambda P: P["sutureDepth"] > 0.05 and P["sutureEnd"] <= -0.5),
+    "gonatoparian":    dict(name="gonatoparian sutures", p=21, set=dict(sutureDepth=0.3, sutureEnd=0.0),
+                            has=lambda P: P["sutureDepth"] > 0.05 and -0.5 < P["sutureEnd"] < 0.5),
+    "opisthoparian":   dict(name="opisthoparian sutures", p=21, set=dict(sutureDepth=0.3, sutureEnd=1.0),
+                            has=lambda P: P["sutureDepth"] > 0.05 and P["sutureEnd"] >= 0.5),
+    "genalSpines":     dict(name="genal spines",      p=41, set=dict(genalSpine=0.5),
+                            has=lambda P: P["genalSpine"] >= 0.15),
+    "pleuralSpines":   dict(name="pleural spines",    p=42, set=dict(spineBase=0.4, spineGrad=0.0),
+                            has=lambda P: max(P["spineBase"], P["spineBase"] + P["spineGrad"]) >= 0.15),
+    "pygidialSpines":  dict(name="pygidial spines",   p=42, set=dict(pygSpine=1.0, pygMarginal=4),
+                            has=lambda P: P["pygSpine"] >= 0.3 or P["pygMarginal"] >= 1 or P["termSpine"] >= 0.2 or P["tailProngs"] >= 1),
+    "isopygous":       dict(name="isopygous",         p=27, set=dict(pygFrac=0.30, pygWidth=0.95),
+                            has=lambda P: P["pygFrac"] >= 0.85 * P["cephFrac"]),
+    "effaced":         dict(name="effaced",           p=42, set=dict(effacement=0.85, glabLobes=0),
+                            has=lambda P: P["effacement"] >= 0.6),
+    "olenimorph":      dict(name="olenimorph",        p=44, set=dict(segCount=14, widthThoraxFront=1.0, relief=9.0),
+                            has=lambda P: P["segCount"] >= 12 and P["width"] / P["length"] >= 0.5),
+}
+def characters(P):
+    """The character keys an animal shows, read off its (coerced) parameter table. Data for the tree's LOCATE."""
+    P = coerce(P); return [k for k, c in CHARACTERS.items() if c["has"](P)]
+def express(P, *keys):
+    """P with the named characters' settings applied (later keys win). The inverse of characters()."""
+    Q = dict(P)
+    for k in keys: Q.update(CHARACTERS[k]["set"])
+    return coerce(Q)
 
 BY_KEY = {p.key: p for p in PARAMS}
 GROUPS = []
