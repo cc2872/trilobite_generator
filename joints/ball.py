@@ -1,44 +1,46 @@
 """
 joints/ball.py: a print-in-place BALL-AND-SOCKET joint, on the joints/base.py template. PRINT ONLY, never measured.
 
-Mechanism inspired by the appendage joints of itbefred's Articulated Giant Isopod (Thingiverse #4777921,
-CC-BY-NC-SA) — the ball-in-socket idea only (a generic hinge, not copyrightable); none of that model's geometry is
-used. Every dimension here is our own, parametrized on the segment pitch.
+The retention BALL is the actual ball of itbefred's Articulated Giant Isopod (Thingiverse #4777921, CC-BY-NC-SA,
+used with permission) — extracted from the source STL to joints/assets/isopod_ball.stl and grafted onto each part.
+It is a proven, durable print-in-place hinge; we reuse its exact geometry rather than re-deriving it.
 
-It is joints/flexi's recessed form with every CYLINDER replaced by a SPHERE, so the joint bears and rotates on any
-axis instead of one: the FRONT of a part is a convex spherical lobe (radius Rc about the pivot) with a spherical
-socket + round mouth inside it; the REAR of the part ahead is the matching concave sphere with a ball on a round
-neck reaching into that socket. Concentric spheres rotate freely about the pivot; the ball (radius r > mouth) is
-captured; the round neck swings until it meets the mouth rim (stop_deg). There is NO enrolment stop — a ball joint
-poses in any direction and does NOT reproduce the trilobite's rolling. BASE = "solid".
+The joint is SELF-SIMILAR: every dimension is a fixed fraction of the segment pitch, at the isopod's own ratios
+(ball diameter ~0.70 x pitch, the reason it prints strong). So the joint always fits and always looks the same
+relative to the body, at any animal size — no per-animal scaling floors, no minimum pitch to snap under.
 
-Parameters (all print-only, mm unless noted):
-  jointZ      0.55              pivot height as a fraction of the ring top at the joint (abs-clamped 6-10 mm)
-  ballD       6.0               retention ball diameter -> r = ballD/2
-  neckD       3.0               round neck diameter (swings in the mouth) -- the load-bearing member; kept thick
+Form (joints/flexi's recessed shape): the FRONT of a part is a convex spherical lobe (radius Rc about the pivot)
+holding a true-sphere socket + round mouth; the REAR of the part ahead carries the isopod ball on a round neck
+reaching into it. The spherical socket lets the ball rotate freely; the ball (radius r > mouth) is captured; the
+neck swings until it meets the mouth rim (stop_deg). BASE = "solid".
+
+To match the isopod's absolute scale (a 13 mm ball prints durably), model_scale(P) reports 18/pitch — the factor
+the download applies so the printed animal is isopod-sized. The on-screen model keeps the ratio; the viewer auto-fits.
+
+Parameters (mostly derived from pitch; opts may override):
+  jointZ      0.55              pivot height as a fraction of the ring top at the joint
   mouthFrac   0.80              socket mouth radius as a fraction of r (< 1 so the ball is captured)
-  lip         2.0               wall between the socket and the concave face
-  gap_axial / gap_vertical / gap_lateral   0.80 / 0.30 / 0.25   (axial: face gap & run end; vertical: ball/socket clearance)
   overhangs   True              restore the anatomy the rear trim removed (pleural spines, genal arms, ...)
-
-Durability: short-pitch animals scale the solids down, but SCALE_FLOOR caps how far, and NECK_MIN/LIP_MIN put an
-absolute floor under the two thin members so the printed joint never falls below what an FDM print can survive. An
-animal too short-pitched to hold a durable joint raises ValueError rather than emit a joint that snaps.
 """
-import math, numpy as np, trimesh
+import math, os, numpy as np, trimesh
 import mesh as M
 from anatomy.common import pitch, ring_top, spine_solid
 from anatomy import thorax as THORAX
 from manifold3d import Manifold, OpType
 
 NAME = "ball"; MEASURED = False; BASE = "solid"
-DEFAULTS = dict(jointZ=0.55, ballD=6.0, neckD=3.0, mouthFrac=0.80, lip=2.0,
-                gap_axial=0.80, gap_vertical=0.30, gap_lateral=0.25, overhangs=True)
+DEFAULTS = dict(jointZ=0.55, mouthFrac=0.80, overhangs=True)
 RESTORED_ORNAMENTS = ("genalArms", "occipitalSpine")   # supplied by overhang() instead (they reach over seg0)
-SCALE_FLOOR = 0.62     # never shrink the solids past this fraction of their default (below it the neck is too thin to print)
-NECK_MIN = 1.8         # absolute floor (mm) on the load-bearing neck: thinner than this snaps on an FDM print
-LIP_MIN = 1.0          # absolute floor (mm) on the socket wall
-MIN_PITCH = 7.5        # below this the floored joint self-intersects -> ValueError (verified clean to ~7.7; use fewer segments, a longer animal, or flexi)
+MIN_PITCH = 3.0        # a sanity floor only; the joint is self-similar and fits at any pitch above it
+ISO_PITCH = 18.0       # the isopod's own segment pitch (mm); the download scales the animal to this so the ball is ~13 mm
+# self-similar joint ratios (fraction of pitch), taken from the isopod's proportions
+BALL_FRAC = 0.70; NECK_FRAC = 0.28; LIP_FRAC = 0.16
+GAP_AXIAL_FRAC = 0.045; GAP_VERT_FRAC = 0.020; GAP_LAT_FRAC = 0.015
+
+# the actual isopod ball, extracted from the source STL, centred at the origin, scaled at graft time to bound-radius r
+_ASSET = trimesh.load(os.path.join(os.path.dirname(__file__), "assets", "isopod_ball.stl"), force="mesh")
+_ASSET.apply_translation(-_ASSET.centroid)
+_ASSET_R = float(np.linalg.norm(_ASSET.vertices, axis=1).max())   # bounding radius: scale so the ball fits exactly in r
 
 def clean(m):
     """Drop print-debris shells: any connected component under 5 mm^3 OR thinner than 0.5 mm on its shortest axis."""
@@ -47,45 +49,50 @@ def clean(m):
 
 def _ell(r, at):
     e = trimesh.creation.icosphere(subdivisions=3, radius=r); e.apply_translation(at); return M.to_manifold(e)
+def _iso(r, at):
+    """The isopod ball, scaled so its bounding radius is r and placed at `at`."""
+    m = _ASSET.copy(); m.apply_scale(r / _ASSET_R); m.apply_translation(at); return M.to_manifold(m)
 def _force(body): return M.to_manifold(M.from_manifold(body))   # materialise: guard the manifold3d lazy-CSG drop
+
+def model_scale(P):
+    """Factor the download applies so the built animal reaches the isopod's absolute scale (a ~13 mm ball)."""
+    return round(ISO_PITCH / pitch(P), 4)
 
 def fits(P):
     geometry(P); return True
 def pivot(P):
-    J, d, zj, y_piv = geometry(P); return dict(z=round(zj, 2), y_beyond_plane=round(y_piv - d, 2), scale=J.get("scaled", 1.0),
+    J, d, zj, y_piv = geometry(P); return dict(z=round(zj, 2), y_beyond_plane=round(y_piv - d, 2), scale=model_scale(P),
                                               ball_d=round(J["ballD"], 2), mouth_r=round(J["mouthFrac"] * 0.5 * J["ballD"], 2))
 def stop_deg(P):
-    """A ball joint has no enrolment stop; this is the free travel per joint in any direction, set by the neck meeting
-    the mouth rim: asin((mouth_r - neckR) / r)."""
+    """A ball joint has no enrolment stop; this is the free travel per joint, set by the neck meeting the mouth rim:
+    asin((mouth_r - neckR) / r)."""
     J, d, zj, y_piv = geometry(P); r = 0.5 * J["ballD"]
     return round(math.degrees(math.asin(np.clip((J["mouthFrac"] * r - 0.5 * J["neckD"]) / r, 0.0, 1.0))), 1)
 
 def geometry(P, J=None):
-    """Resolve the joint. Short-pitch animals scale the ball/neck/lip down (gaps do not); below MIN_PITCH -> ValueError.
-    Pivot is an absolute bed height, clamped and kept a wall below the shell top so the socket has a roof."""
+    """Resolve the joint. Every solid dimension is a fixed fraction of pitch (self-similar), so the joint fits at any
+    size. Pivot is kept a wall below the shell top so the socket has a roof, and above the bed so the ball clears it."""
     J = dict(DEFAULTS, **(J or {})); d = pitch(P)
-    if d < MIN_PITCH: raise ValueError(f"pitch {d:.2f} mm < {MIN_PITCH}: no ball joint fits (fewer segments or a longer animal)")
-    need = 2 * J["lip"] + 3 * J["gap_axial"] + J["ballD"]
-    if d < need + 1.0:
-        k = max((d - 1.0 - 3 * J["gap_axial"]) / (need - 3 * J["gap_axial"]), SCALE_FLOOR)
-        for key in ("ballD", "neckD", "lip"): J[key] = J[key] * k
-        J["scaled"] = round(k, 3)
-    J["neckD"] = max(J["neckD"], NECK_MIN); J["lip"] = max(J["lip"], LIP_MIN)   # absolute floors: never print a member too thin to survive
-    zj = float(np.clip(J["jointZ"] * ring_top(P), 6.0, 10.0))
+    if d < MIN_PITCH: raise ValueError(f"pitch {d:.2f} mm < {MIN_PITCH}: animal too small for a ball joint")
+    J["ballD"] = BALL_FRAC * d; J["neckD"] = NECK_FRAC * d; J["lip"] = LIP_FRAC * d
+    J["gap_axial"] = GAP_AXIAL_FRAC * d; J["gap_vertical"] = GAP_VERT_FRAC * d; J["gap_lateral"] = GAP_LAT_FRAC * d
+    r = 0.5 * J["ballD"]
     S = THORAX.plan(P, 0); ztop = float(S["zfun"](np.array([0.0]), np.array([0.5 * d]))[0])
-    zj = min(zj, ztop - (0.5 * J["ballD"] + J["gap_vertical"] + J["lip"]) - 0.3)   # keep a wall above the socket
-    y_piv = d + 0.5 * J["gap_axial"] + J["lip"] + J["gap_axial"] + 0.5 * J["ballD"]   # ball centre = the next part's socket centre
+    lo = r + 0.5; hi = ztop - (r + J["gap_vertical"] + J["lip"]) - 0.3          # ball clears the bed; wall above the socket
+    if hi < lo: raise ValueError(f"segment too short ({ztop:.1f} mm) for a {J['ballD']:.1f} mm ball joint")
+    zj = float(np.clip(J["jointZ"] * ring_top(P), lo, hi))
+    y_piv = d + 0.5 * J["gap_axial"] + J["lip"] + J["gap_axial"] + r            # ball centre = the next part's socket centre
     return J, d, zj, y_piv
 
 def _rear_joint(body, P, J, zj, y_piv):
-    """Concave SPHERE wrapping the next part's convex lobe, plus the retention ball on a round neck reaching into it."""
+    """Concave SPHERE wrapping the next part's convex lobe, plus the isopod retention ball on a round neck."""
     ga = J["gap_axial"]; r = 0.5 * J["ballD"]; Rc = J["lip"] + ga + r
     body = _force(body)
     body = body - _ell(Rc + ga, (0, y_piv, zj))                                          # concave rear (dome)
     body = _force(body)
     y_rear = y_piv - (Rc + ga); neckR = 0.5 * J["neckD"]
     neck = M.to_manifold(M.cylinder(neckR, (y_piv - y_rear) + 2.0, axis="y", at=(0, 0.5 * (y_piv + y_rear) - 1.0, zj)))
-    return body + neck + _ell(r, (0, y_piv, zj))
+    return body + neck + _iso(r, (0, y_piv, zj))                                          # <-- the actual isopod ball
 
 def _front_joint(body, P, J, zj, yc, front_face_y):
     """Convex SPHERE lobe about the pivot with a spherical socket + round mouth (captures the previous part's ball).

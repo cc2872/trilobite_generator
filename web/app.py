@@ -200,11 +200,14 @@ def api_stl(key):
         P = schema.coerce(json.load(open(os.path.join(folder, "params.json")))) if os.path.exists(os.path.join(folder, "params.json")) else None
         idx = [k for k, p in enumerate(man["parts"]) if "error" not in p]
         meshes = [trimesh.load(os.path.join(folder, f"{man['parts'][k]['name']}.stl")) for k in idx]
-        mats0 = joints.get(man.get("joint", "pin")).transforms_deg(P, 0.0) if P is not None else [__import__("numpy").eye(4)] * len(man["parts"])
+        JM = joints.get(man.get("joint", "pin"))
+        mats0 = JM.transforms_deg(P, 0.0) if P is not None else [__import__("numpy").eye(4)] * len(man["parts"])
         whole = trimesh.util.concatenate([mm.copy().apply_transform(mats0[k]) for mm, k in zip(meshes, idx)])
+        if P is not None and hasattr(JM, "model_scale"):
+            whole.apply_scale(JM.model_scale(P))                           # scale the print to the joint's native (isopod) size
         V = whole.vertices                                                 # refuse a file a slicer would read as enormous
-        if not __import__("numpy").isfinite(V).all() or (V.max(0) - V.min(0)).max() > 600:
-            return jsonify(error="export failed its size check (non-finite or > 600 mm); rebuild this animal"), 500
+        if not __import__("numpy").isfinite(V).all() or (V.max(0) - V.min(0)).max() > 800:   # 800: the ball joint scales to isopod size
+            return jsonify(error="export failed its size check (non-finite or > 800 mm); rebuild this animal"), 500
         tmp = out + ".part"; whole.export(tmp, file_type="stl"); os.replace(tmp, out)   # never serve a half-written file
     return send_file(out, as_attachment=True, download_name=f"trilobite_{key}.stl")
 
