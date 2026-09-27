@@ -37,10 +37,20 @@ ISO_PITCH = 18.0       # the isopod's own segment pitch (mm); the download scale
 BALL_FRAC = 0.70; NECK_FRAC = 0.28; LIP_FRAC = 0.16
 GAP_AXIAL_FRAC = 0.045; GAP_VERT_FRAC = 0.020; GAP_LAT_FRAC = 0.015
 
-# the actual isopod ball, extracted from the source STL, centred at the origin, scaled at graft time to bound-radius r
+# the actual isopod ball, extracted from the source STL. The asset is the ball PLUS its neck stub and a slab of the
+# leg it was cut from (14 x 12 x 14 mm around a 11.5 mm sphere), so centre and scale on the fitted SPHERE, not on
+# the centroid / bounding radius (that shrank the ball to 0.54 r and left the slab as a 0.3 mm plate on its tip),
+# and crop to the sphere so only the ball and its slot are grafted.
+def _fit_sphere(v):
+    A = np.c_[2 * v, np.ones(len(v))]; c = np.linalg.lstsq(A, (v ** 2).sum(1), rcond=None)[0]
+    return c[:3], float(np.sqrt(c[3] + c[:3] @ c[:3]))
 _ASSET = trimesh.load(os.path.join(os.path.dirname(__file__), "assets", "isopod_ball.stl"), force="mesh")
-_ASSET.apply_translation(-_ASSET.centroid)
-_ASSET_R = float(np.linalg.norm(_ASSET.vertices, axis=1).max())   # bounding radius: scale so the ball fits exactly in r
+_c, _ASSET_R = _fit_sphere(_ASSET.vertices)
+for _ in range(4):                                                   # refit on inliers: ignore the stub and the slab
+    _d = np.abs(np.linalg.norm(_ASSET.vertices - _c, axis=1) - _ASSET_R); _c, _ASSET_R = _fit_sphere(_ASSET.vertices[_d < 0.3])
+_ASSET.apply_translation(-_c)
+_ASSET = trimesh.boolean.intersection([_ASSET, trimesh.creation.icosphere(4, _ASSET_R + 0.05)], engine="manifold")
+assert 5.5 < _ASSET_R < 6.0, _ASSET_R                                # the isopod ball is 11.5 mm across
 
 def clean(m):
     """Drop print-debris shells: any connected component under 5 mm^3 OR thinner than 0.5 mm on its shortest axis."""
