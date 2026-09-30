@@ -109,7 +109,7 @@
     <div class="actions">
       <div class="printopt">
         <span>Joint</span>
-        <span class="seg" id="jointseg"><span class="on" data-joint="ball">print · ball</span> · <span data-joint="flexi">print · flexi</span> · <span data-joint="pin">measure · pin</span></span>
+        <span class="seg" id="jointseg"><span class="on" data-joint="isopod">isopod model</span> · <span data-joint="ball">print · ball</span> · <span data-joint="flexi">print · flexi</span> · <span data-joint="pin">measure · pin</span></span>
         <span class="fillwrap off" id="fillwrap">· <input type="number" id="fill" min="0" max="3" step="0.5" value="0"> mm fill</span>
       </div>
       <button class="primary" id="buildBtn">Build</button>
@@ -135,8 +135,9 @@
 <script type="module">
 import * as THREE from 'three'; import {OrbitControls} from 'three/addons/controls/OrbitControls.js'; import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 const S = await (await fetch('/api/schema')).json(); const META = Object.fromEntries(S.params.map(p=>[p.key,p]));
-const _q=new URLSearchParams(location.search).get('order'); const START=(_q&&S.presets.includes(_q))?_q:S.default;   // family-tree deep link (?order=)
-let P = await (await fetch('/api/preset/'+START)).json(); let sel='frame', showMore=false, kin=null, partMeshes={}, buildKey=null, mode='sheet', lastMeas=null, threeReady=false;
+const _u=new URLSearchParams(location.search); const _q=_u.get('order')||_u.get('preset'); const START=(_q&&S.presets.includes(_q))?_q:S.default;   // tree deep link (?order= / ?preset=)
+let P = await (await fetch('/api/preset/'+START)).json(); let sel='frame', showMore=false, kin=null, partMeshes={}, buildKey=null, mode='3d', lastMeas=null, threeReady=false;   // default build is the isopod model, shown in 3D (it has no blueprint sheet)
+const _eye=_u.get('eye'); if(_eye){ const _t=(S.eye_types||[]).find(x=>x.key===_eye); if(_t) Object.assign(P,_t.set); }   // tree ?eye= deep link: apply the eye bundle
 const $=id=>document.getElementById(id); const INK='#ffffff', MID='#9a9a9a', LINE='#262626', SOFT='#141414';
 const ROWOF={b1:'head',a1:'head',b2:'seg',a2:'seg',b3:'tail',a3:'tail'};
 const C=$('C');
@@ -474,7 +475,7 @@ let building=false, pending=false;
 // print mode: the site builds and hands back the print-ready ball joint by default (flexi is the one-axis
 // alternative); "pin" is the raw measurement shell (the geometry the sheet and the instrument describe),
 // with an optional fill (mm).
-let joint='ball', fillMm=0;
+let joint='isopod', fillMm=0;
 const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0});
 const why=ex=>String(ex&&ex.message||ex).slice(0,60);
 async function post(url,body){ const r=await fetch(url,{method:'POST',body:JSON.stringify(body)});
@@ -499,7 +500,7 @@ async function build(){ if(building){pending=true;return;} building=true; status
     catch(ex){ status('build failed · '+why(ex),false); return; }
     kin=man.kinematics; buildKey=man.key; readout();
     status(`built in ${man.build_seconds}s · ${man.print.print_valid?'printable':man.print.violations.join('; ')}`,false);
-    if(mode==='sheet') await sheet(); else await load3d(man);
+    if(mode==='sheet' && joint!=='isopod') await sheet(); else await load3d(man);
   } finally { building=false; loadingOff(); if(pending){pending=false; build();} } }
 let sheetWait=null;                        // resolved true by the img's load, false by its error or the timeout,
 const SHEET_TRIES=3;                       // so the overlay lifts on the painted sheet, not on the response
@@ -527,9 +528,11 @@ $('sheet').onerror=()=>sheetDone(false);                                        
 $('dl').onclick=()=>{ if(buildKey) window.location='/api/stl/'+buildKey; };
 // print-mode toggle: ball (default) and flexi hand back a print joint; pin exposes the fill field and builds
 // the measurement shell (optionally thickened). Any choice rebuilds so the preview and the download agree.
-function setJoint(j){ if(j!=='pin'&&j!=='flexi'&&j!=='ball') return; joint=j;
+function setJoint(j){ if(j!=='pin'&&j!=='flexi'&&j!=='ball'&&j!=='isopod') return; joint=j;
   [...$('jointseg').querySelectorAll('span[data-joint]')].forEach(s=>s.classList.toggle('on',s.dataset.joint===j));
-  $('fillwrap').classList.toggle('off',j!=='pin'); build(); }
+  $('fillwrap').classList.toggle('off',j!=='pin');
+  if(j==='isopod' && mode==='sheet'){ to3D(false); }   // the isopod has no sheet — switch to 3D (build() below loads it)
+  build(); }
 $('jointseg').onclick=e=>{ if(e.target.dataset.joint) setJoint(e.target.dataset.joint); };
 $('fill').onchange=e=>{ fillMm=Math.max(0,+e.target.value||0); if(joint==='pin') build(); };
 // ---- 3D — v1's model view: black fill with white feature edges (blueprint look) or shaded (model look), Z-up root, grid
@@ -564,11 +567,18 @@ async function load3d(man){ init3d(); root.clear(); partMeshes={};
   pose(+$('roll').value); fit(); $('view3d').style.display='flex'; }
 function fit(){ const box=new THREE.Box3().setFromObject(root); if(box.isEmpty()) return; const c=box.getCenter(new THREE.Vector3()), s=box.getSize(new THREE.Vector3()).length();
   ctl.target.copy(c); cam.position.copy(c).add(new THREE.Vector3(0.6,0.55,0.95).multiplyScalar(s*0.9)); cam.near=s/100; cam.far=s*10; cam.updateProjectionMatrix(); }
-function pose(th){ if(!kin||!threeReady) return; const pz=(posePivotZ!=null?posePivotZ:kin.hinge_z), py=posePivotY, offs=kin.offsets; let M=new THREE.Matrix4(); const rot=new THREE.Matrix4().makeRotationX(-th*Math.PI/180);
+function pose(th){ if(!kin||!threeReady) return; const rot=new THREE.Matrix4().makeRotationX(-th*Math.PI/180);
+  if(kin.pivots){ // isopod model: parts are in one frame; each joint curls about its own pivot (y,z) in print mm
+    let M=new THREE.Matrix4();
+    kin.names.forEach((n,i)=>{ if(i>0){ const p=kin.pivots[i-1]; M=M.clone().multiply(new THREE.Matrix4().makeTranslation(0,p[0],p[1])).multiply(rot).multiply(new THREE.Matrix4().makeTranslation(0,-p[0],-p[1])); } const g=partMeshes[n]; if(g){g.matrixAutoUpdate=false; g.matrix.copy(M);} });
+    return; }
+  const pz=(posePivotZ!=null?posePivotZ:kin.hinge_z), py=posePivotY, offs=kin.offsets; let M=new THREE.Matrix4();
   kin.names.forEach((n,i)=>{ if(i>0){ M=M.clone().multiply(new THREE.Matrix4().makeTranslation(0,offs[i-1],0)).multiply(new THREE.Matrix4().makeTranslation(0,py,pz)).multiply(rot).multiply(new THREE.Matrix4().makeTranslation(0,-py,-pz)); } const g=partMeshes[n]; if(g){g.matrixAutoUpdate=false; g.matrix.copy(M);} }); }
 function highlight(row){ if(!threeReady) return; for(const [n,g] of Object.entries(partMeshes)){ const on=row&&(row==='seg'?n.startsWith('seg'):n===row); const e=g.getObjectByName('edges'); if(e) e.material.opacity=on?1.0:(row?0.35:0.9); } }
-$('view3d').onclick=async()=>{ if(mode==='sheet'){ mode='3d'; $('sheet').style.display='none'; $('stage3d').style.display='block'; $('rollbar').style.display='grid'; $('look').style.display='block'; $('view3d').textContent='View sheet'; placeView3D(); await load3d(null); }
-  else { mode='sheet'; $('stage3d').style.display='none'; $('rollbar').style.display='none'; $('look').style.display='none'; $('sheet').style.display='block'; $('view3d').textContent='View 3D'; placeView3D(); await sheet(); } };
+async function to3D(load){ mode='3d'; $('sheet').style.display='none'; $('stage3d').style.display='block'; $('rollbar').style.display='grid'; $('look').style.display='block'; $('view3d').textContent='View sheet'; placeView3D(); if(load) await load3d(null); }
+async function toSheet(){ mode='sheet'; $('stage3d').style.display='none'; $('rollbar').style.display='none'; $('look').style.display='none'; $('sheet').style.display='block'; $('view3d').textContent='View 3D'; placeView3D(); await sheet(); }
+$('view3d').onclick=async()=>{ if(mode==='sheet') await to3D(true);
+  else { if(joint==='isopod'){ status('the isopod model has no blueprint sheet',false); return; } await toSheet(); } };
 function rollLabel(v){ const mx=+$('roll').max||1; return Math.round(100*v/mx)+'% · '+(+v).toFixed(1)+'° / joint'; }
 $('roll').oninput=e=>{ $('rollval').textContent=rollLabel(+e.target.value); pose(+e.target.value); };
 // ---- measure
@@ -579,7 +589,7 @@ $('go').onclick=async()=>{ status('measuring',true); $('go').disabled=true;
   } catch(ex){ status('measure failed · '+why(ex),false); }
   finally { $('go').disabled=false; } };
 $('roll').max=P.maxAngle; $('roll').value=P.maxAngle; $('rollval').textContent=rollLabel(P.maxAngle);
-render(); build(); placeView3D();
+render(); to3D(false); build(); placeView3D();   // boot into the 3D view: the default build is the isopod model
 </script>
 </body>
 </html>

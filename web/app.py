@@ -40,6 +40,30 @@ def _build_sig(*names):
         except OSError: pass
     return h.hexdigest()[:8]
 BUILD_SIG = _build_sig("assemble.py", "joints/pin.py", "joints/flexi.py", "joints/ball.py", "printfill.py", "anatomy/head.py", "anatomy/thorax.py", "anatomy/tail.py", "anatomy/common.py", "mesh.py", "fields.py")
+# the isopod model is a separate builder (isopod_model/); its own source hash keys its cache half
+ISOPOD_SIG = _build_sig("isopod_model/body.py", "isopod_model/crescent_head.py", "anatomy/head_crescent.py", "joints/ball.py", "mesh.py", "fields.py")
+def _isopod_body():
+    """Import isopod_model/body.py (its intra-package `import crescent_head` needs isopod_model on sys.path)."""
+    d = os.path.join(ROOT, "isopod_model")
+    if d not in sys.path: sys.path.insert(0, d)
+    import body as IBODY
+    return IBODY
+
+def _build_isopod(P, folder):
+    """Build the isopod model (isopod body + ball joints + crescent-on-isopod head) at print mm. Returns (parts, man-fields)."""
+    IBODY = _isopod_body()
+    parts, plans, PV, K = IBODY.build(P, "isopod")
+    s = K["s"]                                                  # model units -> the isopod's own print mm
+    pieces = [p.copy().apply_scale(1.0 / s) for p in parts]
+    names = ["head"] + [f"seg{i}" for i in range(len(pieces) - 2)] + ["tail"]
+    pivots = [[float(y / s), float(z / s)] for (y, z) in PV]    # per-joint pivot (y, z) in print mm, for the viewer's pose
+    out = []
+    for name, m in zip(names, pieces):
+        m.export(os.path.join(folder, f"{name}.glb")); m.export(os.path.join(folder, f"{name}.stl"))
+        out.append(dict(name=name, url=f"/files/{os.path.basename(folder)}/{name}.glb", stl=f"/files/{os.path.basename(folder)}/{name}.stl",
+                        bodies=len(__import__("mesh").bodies(m)), watertight=bool(m.is_watertight), volume=round(float(m.volume), 1)))
+    kin = dict(names=names, pivots=pivots)                      # pivots present => the viewer poses about per-joint pivots (ball joints)
+    return out, kin
 LOCK = threading.Lock()          # one build or measurement at a time (the lab workstation has one job's worth of RAM to spare)
 MEASURED = {}                    # param hash -> last instrument result (so the sheet can carry the reading and the enrolled pose)
 PROGRESS = {"done": 0, "total": 0}   # parts finished in the build now running; the page polls it for its loading count
@@ -111,8 +135,26 @@ def api_build():
     """Print geometry: every part at the printed stop bevel (P['maxAngle']), one GLB each, cached by parameter hash."""
     body = request.get_json(force=True)
     P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
-    joint = body.get("joint", "pin")                       # "pin" = tracked builder (the measured geometry); "flexi"/"ball" = print joints
+    joint = body.get("joint", "isopod")                    # "isopod" = the default (isopod model); "pin" = measured; "flexi"/"ball" = print joints
     fill = float(body.get("fill", 0.0) or 0.0)              # pin builds only: thicken the shell for printing (mm), print-only
+    if joint == "isopod":
+        key = schema.param_hash(P) + "-i" + ISOPOD_SIG      # the isopod model has its own builder-source hash
+        folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
+        PROGRESS.update(done=0, total=1)
+        if os.path.exists(manifest):
+            PROGRESS.update(done=1); return send_file(manifest)
+        with LOCK:
+            if os.path.exists(manifest):
+                PROGRESS.update(done=1); return send_file(manifest)
+            t0 = time.time(); os.makedirs(folder, exist_ok=True); bnotes = []
+            try:
+                out, kin = _build_isopod(P, folder)
+            except Exception as ex:
+                bnotes.append(("isopod", "build failed", str(ex)[:160])); out, kin = [], _kinematics(P)
+            man = dict(key=key, parts=out, kinematics=kin, print=dict(print_valid=True, notes=[]), schema_notes=notes,
+                       build_notes=bnotes, build_seconds=round(time.time() - t0, 1), schema=schema.SCHEMA_VERSION, joint="isopod", fill_mm=0)
+            json.dump(P, open(os.path.join(folder, "params.json"), "w")); json.dump(man, open(manifest, "w")); _evict()
+            PROGRESS.update(done=1); return jsonify(man)
     jtag = ("" if joint == "pin" else f"-{joint}") + (f"-fill{fill:g}" if fill > 0.05 and joint == "pin" else "")  # pin stays untagged (matches the sheet key)
     key = schema.param_hash(P) + "-b" + BUILD_SIG + jtag   # params + builder-source hash: a code change never serves stale parts
     folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
@@ -177,11 +219,14 @@ def api_sheet():
     """The blueprint sheet (A3, blueprint.sheet) for the current parameters: the flat animal from the cached build, the
     last instrument reading for these parameters if there is one (with the animal enrolled to its stop superimposed)."""
     import trimesh, blueprint
-    P, notes = schema.coerce_report(request.get_json(force=True).get("P", {}), base=schema.table_defaults())
+    body = request.get_json(force=True)
+    if body.get("joint") == "isopod":                              # the blueprint sheet is the classic instrument's artifact; view the isopod model in 3D
+        return jsonify(error="no blueprint sheet for the isopod model — use the 3D view"), 400
+    P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
     phash = schema.param_hash(P); key = phash + "-b" + BUILD_SIG   # the sheet draws the default (pin) build; key must match api_build's
     folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
     if not os.path.exists(manifest):
-        with app.test_request_context(json={"P": P}): api_build()
+        with app.test_request_context(json={"P": P, "joint": "pin"}): api_build()   # the sheet draws the pin build; be explicit now the default is isopod
     man = json.load(open(manifest)); meas = MEASURED.get(phash)   # MEASURED is keyed by the plain param hash (set in /api/measure)
     tag = "measured" if meas else "flat"; png = os.path.join(folder, f"sheet_{tag}.png")
     if os.path.exists(png): return jsonify(url=f"/files/{key}/sheet_{tag}.png", measured=bool(meas))
@@ -211,11 +256,14 @@ def api_stl(key):
         P = schema.coerce(json.load(open(os.path.join(folder, "params.json")))) if os.path.exists(os.path.join(folder, "params.json")) else None
         idx = [k for k, p in enumerate(man["parts"]) if "error" not in p]
         meshes = [trimesh.load(os.path.join(folder, f"{man['parts'][k]['name']}.stl")) for k in idx]
-        JM = joints.get(man.get("joint", "pin"))
-        mats0 = JM.transforms_deg(P, 0.0) if P is not None else [__import__("numpy").eye(4)] * len(man["parts"])
-        whole = trimesh.util.concatenate([mm.copy().apply_transform(mats0[k]) for mm, k in zip(meshes, idx)])
-        if P is not None and hasattr(JM, "model_scale"):
-            whole.apply_scale(JM.model_scale(P))                           # scale the print to the joint's native (isopod) size
+        if man.get("joint") == "isopod":
+            whole = trimesh.util.concatenate(meshes)                       # isopod parts are already in one frame at print mm
+        else:
+            JM = joints.get(man.get("joint", "pin"))
+            mats0 = JM.transforms_deg(P, 0.0) if P is not None else [__import__("numpy").eye(4)] * len(man["parts"])
+            whole = trimesh.util.concatenate([mm.copy().apply_transform(mats0[k]) for mm, k in zip(meshes, idx)])
+            if P is not None and hasattr(JM, "model_scale"):
+                whole.apply_scale(JM.model_scale(P))                       # scale the print to the joint's native (isopod) size
         V = whole.vertices                                                 # refuse a file a slicer would read as enormous
         if not __import__("numpy").isfinite(V).all() or (V.max(0) - V.min(0)).max() > 800:   # 800: the ball joint scales to isopod size
             return jsonify(error="export failed its size check (non-finite or > 800 mm); rebuild this animal"), 500
