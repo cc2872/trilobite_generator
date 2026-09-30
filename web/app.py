@@ -150,7 +150,10 @@ def api_build():
             try:
                 out, kin = _build_isopod(P, folder)
             except Exception as ex:
-                bnotes.append(("isopod", "build failed", str(ex)[:160])); out, kin = [], _kinematics(P)
+                shutil.rmtree(folder, ignore_errors=True)               # never cache a failed build — a retry must rebuild, not serve the error
+                PROGRESS.update(done=1)
+                return jsonify(key=key, parts=[], kinematics=_kinematics(P), joint="isopod",
+                               build_notes=[("isopod", "build failed", str(ex)[:160])], build_seconds=round(time.time() - t0, 1)), 500
             man = dict(key=key, parts=out, kinematics=kin, print=dict(print_valid=True, notes=[]), schema_notes=notes,
                        build_notes=bnotes, build_seconds=round(time.time() - t0, 1), schema=schema.SCHEMA_VERSION, joint="isopod", fill_mm=0)
             json.dump(P, open(os.path.join(folder, "params.json"), "w")); json.dump(man, open(manifest, "w")); _evict()
