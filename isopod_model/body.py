@@ -383,9 +383,9 @@ def body_ornaments(P, plans, parts):
         if solids: parts[k] = M.union(parts[k], *solids)
 
 
-def build(P, head="generator"):
-    """head: 'generator' (the anatomy head, drawn like the rest) or 'isopod' (the crescent head made on the isopod's
-    head piece, crescent_head.py)."""
+def build(P, head="isopod"):
+    """head: 'isopod' (the crescent head made on the isopod's head piece, crescent_head.py; the default) or
+    'generator' (the anatomy head, drawn like the rest)."""
     plans = placed_plans(P)
     J, d, zj, y_piv = BALL.geometry(P); K = iso_kit(P); PV = pivots(plans, J, K)
     U = None
@@ -457,7 +457,7 @@ def curl_check(parts, PV, angles):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("out", nargs="?", default="out"); ap.add_argument("--preset", default=None)
-    ap.add_argument("--head", default="generator", choices=("generator", "isopod"))
+    ap.add_argument("--head", default="isopod", choices=("generator", "isopod"))
     A = ap.parse_args(); os.makedirs(A.out, exist_ok=True)
     P = schema.preset(A.preset) if A.preset else schema.defaults()
     parts, plans, PV, K = build(P, A.head)
