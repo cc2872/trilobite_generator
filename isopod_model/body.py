@@ -24,7 +24,7 @@ untouched), in the ball build's rest placement:
     isopod; the pivot is the isopod ball's centre.
 Checks: every part watertight and one piece; neighbours apart at rest and through the curl.
 """
-import os, sys, math, argparse
+import os, sys, math, argparse, gc
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import numpy as np, trimesh
 import schema, mesh as M
@@ -36,6 +36,8 @@ from manifold3d import Manifold, OpType
 WALL = 2.0          # plate thickness behind a part's rear joint plane (model mm)
 GAP_Z = 0.5         # least air gap between a plate and the lip under it, through the curl (model mm)
 CURL = 30.0         # the chain curls this far per joint (deg) without touching
+CURL_CLEAR_STEP = 3.0   # angular step for the head/segment clearance sweep (deg). 1.5 was exact-ish but doubled the
+                        # boolean count; 3.0 halves it. If the curl check ever flags a sliver, lower this or widen the dilation.
 LIP_MIN = 0.8       # thinnest lip kept (model mm)
 GRID = {"head": (241, 121), "seg": (161, 61), "tail": (241, 121)}
 
@@ -49,9 +51,18 @@ ISO_OVER = 0.4      # the halves overlap by this much past the split (the column
 ISO_PITCH = 18.0    # joints/ball.py's ISO_PITCH: the build is exported at 18 / pitch, so s = pitch / 18 below
 
 
+_ISO_MESH = None
+def _iso_load():
+    """The 25 MB isopod asset, loaded from disk once and reused (iso_kit and isopod_head both need it). Returns a
+    fresh copy each call so callers can translate/split without corrupting the cache."""
+    global _ISO_MESH
+    if _ISO_MESH is None: _ISO_MESH = trimesh.load(ISO)
+    return _ISO_MESH.copy()
+
+
 def _iso_frame():
     """The copied isopod pieces (piece ISO_PIECE and the next) and the two ball centres, in the asset's work frame."""
-    m = trimesh.load(ISO); z0 = m.bounds[0][2]; xc = 0.5 * (m.bounds[0][0] + m.bounds[1][0])
+    m = _iso_load(); z0 = m.bounds[0][2]; xc = 0.5 * (m.bounds[0][0] + m.bounds[1][0])
     m.apply_translation((-xc, 0, -z0))
     parts = sorted(m.split(only_watertight=False), key=lambda p: p.bounds[0][1])
     def centre(p):                                                          # as crescent_head.ball_centre
@@ -257,7 +268,7 @@ def isopod_head(P, plans, J, PV, K, step=0.25):
         squashed), on the crescent's eye; the occipital spine and head prongs where the preset has them.
     Returns the head (model mm) and its underside for the lip under it."""
     head, info = head_piece(face_of(P))                                     # work frame, isopod size
-    iso = trimesh.load(ISO); z0 = iso.bounds[0][2]; xc = 0.5 * (iso.bounds[0][0] + iso.bounds[1][0])
+    iso = _iso_load(); z0 = iso.bounds[0][2]; xc = 0.5 * (iso.bounds[0][0] + iso.bounds[1][0])
     iso.apply_translation((-xc, 0, -z0))
     pieces = sorted(iso.split(only_watertight=False), key=lambda p: p.bounds[0][1])
     loc, _, _ = pieces[0].ray.intersects_location([(8.0, 0.0, 3.0)], [(0, 1.0, 0)])
@@ -406,9 +417,10 @@ def build(P, head="isopod"):
         for k in range(1, len(plans)):
             if parts[k].bounds[0][1] > H.bounds[1][1] + 1.0: break
             m = M.to_manifold(parts[k])
-            for a in np.arange(0.0, CURL + 1e-9, 1.5):                      # one pose at a time (memory)
+            for a in np.arange(0.0, CURL + 1e-9, CURL_CLEAR_STEP):          # one pose at a time (memory)
                 m = BALL._force(m - HM.transform(np.linalg.inv(pose(PV, [a] * len(PV))[k])[:3, :]))
             parts[k] = M.from_manifold(m); flakes(k)
+        del HM; gc.collect()                                               # the dilated head is large; free it before the neighbour pass
     else:
         parts[0] = head_ornaments(P, plans[0][2], parts[0])
     # every part keeps clear of the part ahead at rest: GAP_Z under it, and a little under half the axial gap beside it
@@ -419,8 +431,10 @@ def build(P, head="isopod"):
     # the spines go on last: the clearances above shape the plates and lips, they never cut a spine. A spine that meets
     # another part through the curl is what stops the curl (the enrollment test finds it), not something to trim.
     SKIPPED.clear(); body_ornaments(P, plans, parts)
+    gc.collect()                                                          # release the per-part clearance intermediates before the middle paste
     paste_middle(parts, plans, PV, K)
     global LAST_DROPPED; LAST_DROPPED = dict(J["_dropped"])                # flakes cut off by the clearances (model mm3)
+    gc.collect()
     return parts, plans, PV, K
 
 
