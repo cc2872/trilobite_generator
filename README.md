@@ -4,6 +4,24 @@ A parametric generator for articulated dorsal plate chains trilobites first with
 instrument, a printable animal, a labeled blueprint sheet, and a website. No OpenCascade: numpy height fields and
 Manifold booleans, mirror-symmetric by construction.
 
+## The default build is the isopod model
+
+The generator's default animal is the **isopod model**: the crescent head made on the giant isopod's head piece, on
+the isopod-style body with the isopod's own ball joints, at the isopod's print size. It lives in `isopod_model/`.
+
+    pip install -r requirements.txt
+    python build.py                     # the isopod model -> isopod_model/stl/trilobite_isopod.stl, checks, photos
+    python build.py --preset lichida    # one preset
+    python web/app.py                   # the website — the isopod model is the default build
+
+See `isopod_model/README.md` for the model (how it is made, the parameters, the checks). The website serves the
+isopod model by default; the classic parametric heads/joints are still selectable there.
+
+## The classic parametric generator
+
+The classic pipeline (anatomy/ + assemble.py + joints/pin) is still here and runs the frozen enrollment instrument
+unchanged:
+
     pip install -r requirements.txt flask
     python -m pytest tests -q              animals
     python sweep.py presets 
