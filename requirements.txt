@@ -7,3 +7,5 @@ rtree>=1.0
 matplotlib>=3.8
 pandas>=2.0
 pytest>=8.0
+pillow>=10.0
+numba>=0.59        # optional: makes the isopod_model photo renderer fast (render.py runs without it, slowly)
