@@ -97,6 +97,11 @@
   #dhint b{color:var(--ink);font-weight:normal}
   #dhint .x{position:absolute;right:7px;top:5px;cursor:pointer;color:var(--mid)}
   #dhint .x:hover{color:var(--ink)}
+  #classif{margin:8px 0 0;font-size:10.5px;line-height:1.5;color:var(--mid);min-height:14px}
+  #classif b{color:var(--ink);font-weight:normal}
+  #classif .lab{letter-spacing:.1em;text-transform:uppercase;color:var(--mid);font-size:9px;margin-right:4px}
+  #classif .reads{color:var(--ink)}
+  #classif .reads b{border-bottom:1px solid var(--ink)}
   @media (max-width: 720px), (pointer: coarse) and (max-width: 1024px) {
     html,body{overflow:auto;font-size:14px}
     #app{display:flex;flex-direction:column;height:auto;min-height:100vh}
@@ -124,6 +129,7 @@
       <div class="ctrl"><div class="lab"><span>Order</span></div><select id="preset"></select></div>
       <svg class="map" id="map" viewBox="0 0 384 396" xmlns="http://www.w3.org/2000/svg"></svg>
       <div id="dhint"><span class="x" id="dhintx" title="dismiss">×</span><b>Tip:</b> the diagram is the control. <b>Drag</b> the marks to shape the animal, <b>tap</b> a region to edit it, <b>tap</b> a prong to add a tine.</div>
+      <div id="classif" title="the morphological characters this animal expresses, and the order it most resembles"></div>
       <div class="sect" id="cellname"></div>
       <div id="C"></div>
       <div class="more" id="more">more</div>
@@ -193,12 +199,15 @@ function slider(k){ const m=META[k]; const r=document.createElement('div'); r.cl
   r.innerHTML=`<div class="lab"><span title="${m.doc}">${m.label}</span><span>${fmt(P[k],m)}</span></div><input type="range" min="${m.lo}" max="${m.hi}" step="${m.step}" value="${P[k]}">`;
   const inp=r.querySelector('input'); inp.oninput=e=>{P[k]=+e.target.value; r.querySelector('.lab span:last-child').textContent=fmt(P[k],m); redraw();}; inp.onchange=()=>{lastMeas=null; dirty();}; return r; }
 const GL={}; function glyph(id,vb){const s=document.createElement('div'); s.innerHTML=`<svg class="arm" id="${id}" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg>`; GL[id]=1; return s;}
-function eyeSelect(){   // one dropdown to pick an eye configuration; applies that character's parameter bundle
-  const types=S.eye_types||[]; if(!types.length) return document.createTextNode('');
-  const r=document.createElement('div'); r.className='ctrl'; r.dataset.k='__eyeType';
-  r.innerHTML=`<div class="lab"><span title="apply a whole eye configuration; fine-tune with the sliders below">Eye type</span></div>`+
-    `<select><option value="">— choose —</option>${types.map(t=>`<option value="${t.key}">${t.name}</option>`).join('')}</select>`;
-  r.querySelector('select').onchange=e=>{ const t=types.find(x=>x.key===e.target.value); if(!t) return;
+// the morphological characters (schema.CHARACTERS) grouped by the cell their parameters live in: a dropdown of named
+// features per cell — eye types and sutures in the head, pleural/pygidial spines in the thorax/tail, body plans on the frame.
+const FEATS={}; (S.characters||[]).forEach(ch=>{ (FEATS[ch.cell]||(FEATS[ch.cell]=[])).push(ch); });
+function featureSelect(cell){   // pick a named character; applies its parameter bundle, then the sliders fine-tune it
+  const feats=FEATS[cell]||[]; if(!feats.length) return document.createTextNode('');
+  const r=document.createElement('div'); r.className='ctrl'; r.dataset.k='__feat_'+cell;
+  r.innerHTML=`<div class="lab"><span title="apply a named morphological character; fine-tune with the sliders below">Feature</span></div>`+
+    `<select><option value="">— choose a character —</option>${feats.map(t=>`<option value="${t.key}">${t.name}</option>`).join('')}</select>`;
+  r.querySelector('select').onchange=e=>{ const t=feats.find(x=>x.key===e.target.value); if(!t) return;
     Object.assign(P, t.set); lastMeas=null; render(); dirty(); };   // apply the bundle, rebuild the sliders to show new values
   return r; }
 function redraw(){ drawMap(); for(const id in GL){ const e=$(id); if(!e){delete GL[id];continue;} DRAW[id](e);} }
@@ -499,13 +508,13 @@ function packing(){ const d=document.createElement('div'); d.className='pack';
     d.appendChild(b); }
   return d; }
 const VISUAL={
- frame:()=>[slider('length'), slider('width'), slider('relief'), slider('segCount'), slider('cephFrac'), slider('pygFrac')],
+ frame:()=>[featureSelect('frame'), slider('length'), slider('width'), slider('relief'), slider('segCount'), slider('cephFrac'), slider('pygFrac')],
  b1:()=>[glyph('glab','0 0 340 125'), slider('glabInflate'), slider('glabRise'), slider('glabLobes'), slider('glabFront'), slider('headOutlineExp'), slider('headDomeExp'), slider('cephParallel'), slider('occipitalSpine')],
- a1:()=>[eyeSelect(), packing(), slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('eyePos'), slider('eyeLat'), slider('eyeStalk'), slider('eyeStalkR'), slider('eyeLean'), slider('eyeSolid'), slider('eyeSlope'), slider('eyeShade'), slider('eyeProfile'), slider('lensD'), slider('lensGap'), slider('lensRise'), slider('genalSpine'), slider('genalCurve'), slider('genalPath'), slider('genalTaper'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
- b2:()=>[slider('axisFrac'), slider('axisRise'), slider('furrowDepth'), slider('ringArch'), slider('axialSpine')],
- a2:()=>[glyph('pleura','0 0 340 110'), slider('fulcrum'), slider('pleuralSlope'), slider('overlap'), slider('spineBase'), slider('spineSweep')],
+ a1:()=>[featureSelect('a1'), packing(), slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('eyePos'), slider('eyeLat'), slider('eyeStalk'), slider('eyeStalkR'), slider('eyeLean'), slider('eyeSolid'), slider('eyeSlope'), slider('eyeShade'), slider('eyeProfile'), slider('lensD'), slider('lensGap'), slider('lensRise'), slider('genalSpine'), slider('genalCurve'), slider('genalPath'), slider('genalTaper'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
+ b2:()=>[featureSelect('b2'), slider('axisFrac'), slider('axisRise'), slider('furrowDepth'), slider('ringArch'), slider('axialSpine')],
+ a2:()=>[glyph('pleura','0 0 340 110'), featureSelect('a2'), slider('fulcrum'), slider('pleuralSlope'), slider('overlap'), slider('spineBase'), slider('spineSweep')],
  b3:()=>[slider('pygRings'), slider('tailRelief'), slider('tailDomeExp')],
- a3:()=>[slider('pygWidth'), slider('pygSpine'), slider('pygSplay'), slider('pygMarginal'), slider('tailProngs'), slider('tailProngLen'), slider('tailProngSplay'), slider('tailProngStem'), slider('tailProngCenter'), slider('tailProngCurl')],
+ a3:()=>[featureSelect('a3'), slider('pygWidth'), slider('pygSpine'), slider('pygSplay'), slider('pygMarginal'), slider('tailProngs'), slider('tailProngLen'), slider('tailProngSplay'), slider('tailProngStem'), slider('tailProngCenter'), slider('tailProngCurl')],
  ruler:()=>[slider('maxAngle'), slider('clearance'), slider('nKnuckles')],
 };
 function render(){ const c=S.cells[sel]; $('cellname').textContent=c.label;
@@ -514,7 +523,17 @@ function render(){ const c=S.cells[sel]; $('cellname').textContent=c.label;
   if(showMore) [...c.primary,...c.more].filter(k=>!used.has(k)).forEach(k=>C.appendChild(slider(k)));
   $('more').textContent=showMore?'less':'more'; redraw(); pulseHandles(); }
 $('more').onclick=()=>{showMore=!showMore;render();};
-function dirty(){ status('edited',false); }
+function dirty(){ status('edited',false); classify(); }
+// live classification: the morphological characters the animal expresses, and the order it reads as (schema.characters,
+// server-side so the thresholds live in one place). Debounced; cheap (no geometry).
+let classifT=null;
+function classify(){ clearTimeout(classifT); classifT=setTimeout(async()=>{
+  try{ const r=await post('/api/classify',{P}); const el=$('classif'); if(!el) return;
+    const names=(r.characters||[]).map(c=>c.name);
+    el.innerHTML = names.length
+      ? `<span class="lab">Characters</span>${names.join(' · ')}` + (r.nearest?` <span class="reads">→ reads as <b>${r.nearest}</b></span>`:'')
+      : `<span class="lab">Characters</span><span style="opacity:.6">none named</span>`;
+  }catch(_){} },300); }
 $('buildBtn').onclick=()=>build();
 function status(s,busy){$('status').textContent=s; $('status').className='status'+(busy?' busy':'');}
 function readout(){ const m=lastMeas; let h=`<b>${ps.value}</b> · ${Math.round(P.segCount)} segments · ${Math.round(P.length)} mm`; if(m&&m.theta_joint_deg!=null){ const w={sphaeroidal:'closes, margins meet',double:'closes, tail under head',spiral:'closes, tail past head',discoidal:'closes flat',open:'stops on itself'}[m.enroll_class]||m.enroll_class; h+=`<br>${m.theta_joint_deg}° per joint · ${m.total_deg}° total · ${w}`; if(m.stopped_by&&m.stopped_by.length) h+=`<br>limited by ${kin.names[m.stopped_by[0][0]]}–${kin.names[m.stopped_by[0][1]]}`; h+=`<br>instrument ${m.instrument} · bevel ${m.bevel_built_deg}°`; } else if(m) h+=`<br>${m.limited_by}: ${m.reason||''}`; $('readout').innerHTML=h; }
@@ -671,7 +690,7 @@ $('go').onclick=async()=>{ status('measuring',true); $('go').disabled=true;
   } catch(ex){ status('measure failed · '+why(ex),false); }
   finally { $('go').disabled=false; } };
 $('roll').max=P.maxAngle; $('roll').value=P.maxAngle; $('rollval').textContent=rollLabel(P.maxAngle);
-render(); build(); placeView3D();
+render(); build(); placeView3D(); classify();
 </script>
 </body>
 </html>

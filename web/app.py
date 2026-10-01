@@ -114,12 +114,41 @@ def api_progress(): return jsonify(PROGRESS)
 # eye configurations offered as a single dropdown in the head cell, built from the schema's own CHARACTERS bundles
 EYE_TYPES = ["holochroalEyes", "schizochroalEyes", "pelagicEyes", "stalkedEyes", "eyesLost"]
 
+# the morphological characters (schema.CHARACTERS) as selectable "features", each tagged with the 3x3 cell its
+# parameters live in (so the picker can sit in the right cell). The cell is the most common cell among the set's params.
+_PARAM_CELL = {}
+for _cid, _c in schema.CELLS.items():
+    for _k in list(_c.get("primary", [])) + list(_c.get("more", [])): _PARAM_CELL.setdefault(_k, _cid)
+def _char_cell(ch):
+    from collections import Counter
+    cells = [_PARAM_CELL[k] for k in ch["set"] if k in _PARAM_CELL]
+    return Counter(cells).most_common(1)[0][0] if cells else "a1"
+def _characters_list():
+    return [dict(key=k, name=c["name"], set=c["set"], cell=_char_cell(c)) for k, c in schema.CHARACTERS.items()]
+
 @app.get("/api/schema")
 def api_schema():
     eye_types = [dict(key=k, name=schema.CHARACTERS[k]["name"], set=schema.CHARACTERS[k]["set"]) for k in EYE_TYPES]
     return jsonify(dict(version=schema.SCHEMA_VERSION, instrument=I.INSTRUMENT_VERSION, params=_params_meta(), cells=schema.CELLS,
                         vertical_spines=schema.VERTICAL_SPINES, presets=sorted(_presets()), default=schema.DEFAULT_PRESET,
-                        eye_types=eye_types))
+                        eye_types=eye_types, characters=_characters_list()))
+
+_PRESET_CHARS = None
+@app.post("/api/classify")
+def api_classify():
+    """The morphological characters the current animal expresses (schema.characters), and the order whose character
+    set it most resembles (max Jaccard overlap). Cheap — no geometry — so the page can call it live as you edit."""
+    global _PRESET_CHARS
+    P = request.get_json(force=True).get("P", {})
+    ch = schema.characters(P); cur = set(ch)
+    if _PRESET_CHARS is None:
+        _PRESET_CHARS = {n: set(schema.characters(pp)) for n, pp in _presets().items()}
+    best, best_score = None, 0.0
+    for n, pc in _PRESET_CHARS.items():
+        union = len(cur | pc) or 1; score = len(cur & pc) / union
+        if score > best_score: best, best_score = n, score
+    return jsonify(characters=[dict(key=k, name=schema.CHARACTERS[k]["name"]) for k in ch],
+                   nearest=best if best_score > 0 else None, nearest_score=round(best_score, 2))
 
 @app.get("/api/preset/<name>")
 def api_preset(name):
