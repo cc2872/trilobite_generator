@@ -587,10 +587,9 @@ const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0});
 // relief style picker: "blueprint" (b&w, default) or a scientific colormap (the wave-optics heatmap). Just re-renders.
 (function(){ const sel=$('cmap');
   const bp=document.createElement('option'); bp.value='none'; bp.textContent='blueprint'; bp.selected=true; sel.appendChild(bp);
-  const rb=document.createElement('option'); rb.value='rainbow'; rb.textContent='rainbow'; sel.appendChild(rb);   // the flowing all-hues loop (3D Relief only)
+  const rb=document.createElement('option'); rb.value='rainbow'; rb.textContent='rainbow'; sel.appendChild(rb);   // full spectrum: a vivid still on the sheet, a flowing loop in 3D
   (S.colormaps||[]).forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);});
-  sel.onchange=()=>{ cmap=sel.value;
-    if(cmap==='rainbow'){ look='model'; if(mode!=='3d') to3D(true); else setLook('model'); return; }   // rainbow only animates in 3D — jump there
+  sel.onchange=()=>{ cmap=sel.value;   // the sheet renders any map (rainbow = a vivid still); 3D animates rainbow, shades the rest
     if(mode==='sheet') sheet(); else if(threeReady) setLook(cmap==='none'?'blueprint':'model'); }; })();
 const why=ex=>String(ex&&ex.message||ex).slice(0,60);
 async function post(url,body){ const r=await fetch(url,{method:'POST',body:JSON.stringify(body)});

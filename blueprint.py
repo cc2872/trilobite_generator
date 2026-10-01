@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Arc, Circle, Ellipse
 
 INK, BG, DIM = "#ffffff", "#000000", "#9a9a9a"
-CMAPS = ("magma", "viridis", "twilight", "inferno", "cividis", "gray")   # scientific field colormaps (wave-optics look)
+CMAPS = ("magma", "viridis", "twilight", "inferno", "cividis", "gray", "rainbow")   # scientific field colormaps (wave-optics look) + rainbow (full spectrum, vivid)
 RELIEF_ALPHA = 0.5   # the relief field sits semi-transparent under the blueprint lines — muted, not vibrant
 
 def _eye_lenses(ax, head, P, color=INK):
@@ -36,12 +36,16 @@ def _eye_lenses(ax, head, P, color=INK):
     except Exception: pass
 
 def _field(ax, GA, GB, Z, cmap):
-    """Draw a relief scalar field as a soft, semi-transparent colormapped image (the wave-optics look)."""
+    """Draw a relief scalar field as a colormapped image. Scientific maps render soft and semi-transparent (the
+    wave-optics look); 'rainbow' renders the full hue spectrum, vivid and opaque, to match the 3D Relief rainbow."""
     if Z is None or not np.isfinite(Z).any(): return
     from matplotlib.colors import PowerNorm
     vlo, vhi = np.nanmin(Z), np.nanmax(Z)
-    ax.imshow(np.ma.masked_invalid(Z), extent=[GA.min(), GA.max(), GB.min(), GB.max()], origin="lower", cmap=cmap,
-              norm=PowerNorm(0.6, vmin=vlo - 0.04 * (vhi - vlo), vmax=vhi), interpolation="bilinear", aspect="equal", zorder=0, alpha=RELIEF_ALPHA)
+    rainbow = (cmap == "rainbow")
+    mcmap = "hsv" if rainbow else cmap                                 # matplotlib's cyclic full-spectrum = the 3D's height->hue ramp
+    alpha = 0.92 if rainbow else RELIEF_ALPHA                          # rainbow runs vivid; the scientific fields stay muted
+    ax.imshow(np.ma.masked_invalid(Z), extent=[GA.min(), GA.max(), GB.min(), GB.max()], origin="lower", cmap=mcmap,
+              norm=PowerNorm(0.6, vmin=vlo - 0.04 * (vhi - vlo), vmax=vhi), interpolation="bilinear", aspect="equal", zorder=0, alpha=alpha)
 
 def _strong_outline(ax, GX, GY, Mask, color=INK, lw=1.9, draw=False):
     """A silhouette traced from the footprint mask's boundary (robust; no shapely). Disabled by default — the bright
