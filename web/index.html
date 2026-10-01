@@ -780,7 +780,7 @@ function setLook(l){ look=l; [...$('look').children].forEach(s=>s.classList.togg
   for(const g of Object.values(partMeshes)){ g.getObjectByName('fill').material=(l==='blueprint'?fillMat:reliefMat()); g.getObjectByName('edges').visible=true; g.getObjectByName('faint').visible=(l==='blueprint'); }   // white feature edges in both looks: the Relief keeps a blueprint outline over the colormap
   scene.remove(grid); grid=new THREE.GridHelper(400,40,0x2a2a2a,0x161616); grid.position.y=-0.5; scene.add(grid); updateRbCtl(); }
 $('look').onclick=e=>{ if(e.target.dataset.look) setLook(e.target.dataset.look); };
-async function load3d(man){ init3d(); stopRainbow(); rainbowCache=null; root.clear(); partMeshes={};   // drop the stale per-vertex cache before the old geometry goes
+async function load3d(man){ init3d(); root.clear(); partMeshes={};
   if(!man){ try{ man=await post('/api/build',buildBody()); } catch(ex){ status('3D failed · '+why(ex),false); return; } }
   kin=man.kinematics;
   if(man.print_joint){ posePivotY=man.print_joint.pivot_y_beyond_joint; posePivotZ=man.print_joint.pivot_z; }   // any print joint (ball/flexi); pin has none
