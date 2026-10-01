@@ -134,8 +134,9 @@
         <span class="seg" id="jointseg"><span class="on" data-joint="isopod">isopod model</span> · <span data-joint="ball">print · ball</span> · <span data-joint="flexi">print · flexi</span> · <span data-joint="pin">measure · pin</span></span>
         <span class="fillwrap off" id="fillwrap">· <input type="number" id="fill" min="0" max="3" step="0.5" value="0"> mm fill</span>
       </div>
-      <button class="primary" id="buildBtn">Build</button>
+      <button class="primary" id="buildBtn" style="grid-column:1/-1">Build</button>
       <button id="dl">Download STL</button>
+      <button id="share">Copy link</button>
     </div>
   </div>
   <div class="stage">
@@ -157,9 +158,11 @@
 <script type="module">
 import * as THREE from 'three'; import {OrbitControls} from 'three/addons/controls/OrbitControls.js'; import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 const S = await (await fetch('/api/schema')).json(); const META = Object.fromEntries(S.params.map(p=>[p.key,p]));
+const DFLT = Object.fromEntries(S.params.map(p=>[p.key,p.default]));   // schema defaults, for compact share links (encode only the changes)
 const _u=new URLSearchParams(location.search); const _q=_u.get('order')||_u.get('preset'); const START=(_q&&S.presets.includes(_q))?_q:S.default;   // tree deep link (?order= / ?preset=)
 let P = await (await fetch('/api/preset/'+START)).json(); let sel='frame', showMore=false, kin=null, partMeshes={}, buildKey=null, mode='sheet', lastMeas=null, threeReady=false;   // default view is the blueprint sheet, same as the other trilobites
 const _eye=_u.get('eye'); if(_eye){ const _t=(S.eye_types||[]).find(x=>x.key===_eye); if(_t) Object.assign(P,_t.set); }   // tree ?eye= deep link: apply the eye bundle
+const _pp=_u.get('p'); if(_pp){ try{ const d=JSON.parse(decodeURIComponent(escape(atob(_pp)))); if(d&&typeof d==='object') P=Object.assign({...DFLT},d); }catch(_){} }   // ?p= shared permalink: defaults + the encoded changes
 const $=id=>document.getElementById(id); const INK='#ffffff', MID='#9a9a9a', LINE='#262626', SOFT='#141414';
 const ROWOF={b1:'head',a1:'head',b2:'seg',a2:'seg',b3:'tail',a3:'tail'};
 const C=$('C');
@@ -597,6 +600,15 @@ const sheetDone=ok=>{ if(sheetWait){ const r=sheetWait; sheetWait=null; r(ok); }
 $('sheet').onload=()=>{ $('sheet').style.opacity=1; $('view3d').style.display='flex'; placeView3D(); sheetDone(true); };   // fade in; the toggle appears with the sheet it sits on
 $('sheet').onerror=()=>sheetDone(false);                                                      // sheet() decides whether to try again
 $('dl').onclick=()=>{ if(buildKey) window.location='/api/stl/'+buildKey; };
+// shareable permalink: the full parameter set encoded in the URL, so a specific animal can be bookmarked or sent
+function shareURL(){ try{ const d={}; for(const k in P) if(k in DFLT && P[k]!==DFLT[k]) d[k]=P[k];   // only the params changed from the schema defaults
+  return location.origin+location.pathname+'?p='+encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(d))))); }catch(_){ return location.href; } }
+$('share').onclick=async()=>{ const u=shareURL();
+  try{ await navigator.clipboard.writeText(u); status('link copied',false); }
+  catch(_){ const t=document.createElement('textarea'); t.value=u; document.body.appendChild(t); t.select();
+    try{ document.execCommand('copy'); status('link copied',false); }catch(__){ status('copy failed',false); } t.remove(); }
+  try{ history.replaceState(null,'','?p='+u.split('?p=')[1]); }catch(__){}   // reflect it in the address bar too
+};
 // print-mode toggle: ball (default) and flexi hand back a print joint; pin exposes the fill field and builds
 // the measurement shell (optionally thickened). Any choice rebuilds so the preview and the download agree.
 function setJoint(j){ if(j!=='pin'&&j!=='flexi'&&j!=='ball'&&j!=='isopod') return; joint=j;
