@@ -182,7 +182,7 @@ function tweenP(target,dur=600){ if(morphRAF) cancelAnimationFrame(morphRAF);
     && typeof start[k]==='number' && typeof target[k]==='number' && start[k]!==target[k]);
   function step(t){ const u=Math.min((t-t0)/dur,1), e=u<0.5?4*u*u*u:1-Math.pow(-2*u+2,3)/2;   // easeInOutCubic
     keys.forEach(k=>P[k]=start[k]+(target[k]-start[k])*e);
-    if(u>=1){ morphRAF=null; Object.assign(P,target); render(); } else { drawMap(); morphRAF=requestAnimationFrame(step); } }
+    if(u>=1){ morphRAF=null; Object.assign(P,target); render(); pushHist(); } else { drawMap(); morphRAF=requestAnimationFrame(step); } }
   morphRAF=requestAnimationFrame(step); }
 ps.onchange=async()=>{const target=await (await fetch('/api/preset/'+ps.value)).json(); lastMeas=null; dirty(); tweenP(target);};
 function fmt(v,m){return (m.kind==='int'||m.kind==='odd_int')?String(Math.round(v)):(+v).toFixed(m.step<0.01?3:m.step<0.1?2:m.step<1?1:0)+(m.unit?' '+m.unit:'');}
@@ -523,7 +523,21 @@ function render(){ const c=S.cells[sel]; $('cellname').textContent=c.label;
   if(showMore) [...c.primary,...c.more].filter(k=>!used.has(k)).forEach(k=>C.appendChild(slider(k)));
   $('more').textContent=showMore?'less':'more'; redraw(); pulseHandles(); }
 $('more').onclick=()=>{showMore=!showMore;render();};
-function dirty(){ status('edited',false); classify(); }
+function dirty(){ status('edited',false); classify(); pushHist(); }
+// undo / redo: a history of parameter snapshots. Every committed edit pushes one; Ctrl/Cmd-Z steps back, Ctrl-Y /
+// Ctrl-Shift-Z forward. Restoring does not push (no loops), and duplicate snapshots are skipped.
+let hist=[], hpos=-1, restoring=false;
+function pushHist(){ if(restoring) return; const snap=JSON.stringify(P);
+  if(hpos>=0 && JSON.stringify(hist[hpos])===snap) return;
+  hist=hist.slice(0,hpos+1); hist.push(JSON.parse(snap)); if(hist.length>60) hist.shift(); hpos=hist.length-1; }
+function restoreHist(i){ if(i<0||i>=hist.length) return; restoring=true; hpos=i; P=JSON.parse(JSON.stringify(hist[i]));
+  lastMeas=null; render(); classify(); status('edited',false); restoring=false; }
+function undo(){ if(hpos>0) restoreHist(hpos-1); }
+function redo(){ if(hpos<hist.length-1) restoreHist(hpos+1); }
+window.addEventListener('keydown',e=>{ if(!(e.ctrlKey||e.metaKey)||e.altKey) return;
+  const tag=(e.target.tagName||'').toLowerCase(); if(tag==='input'||tag==='textarea'||tag==='select') return;   // let fields keep their own undo
+  const k=e.key.toLowerCase();
+  if(k==='z'&&!e.shiftKey){ e.preventDefault(); undo(); } else if((k==='z'&&e.shiftKey)||k==='y'){ e.preventDefault(); redo(); } });
 // live classification: the morphological characters the animal expresses, and the order it reads as (schema.characters,
 // server-side so the thresholds live in one place). Debounced; cheap (no geometry).
 let classifT=null;
@@ -690,7 +704,7 @@ $('go').onclick=async()=>{ status('measuring',true); $('go').disabled=true;
   } catch(ex){ status('measure failed · '+why(ex),false); }
   finally { $('go').disabled=false; } };
 $('roll').max=P.maxAngle; $('roll').value=P.maxAngle; $('rollval').textContent=rollLabel(P.maxAngle);
-render(); build(); placeView3D(); classify();
+render(); build(); placeView3D(); classify(); pushHist();   // seed the undo history with the initial animal
 </script>
 </body>
 </html>
