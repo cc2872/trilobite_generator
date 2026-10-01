@@ -458,7 +458,7 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="magma"):
     ax2.text(y0, z1 + 5, "SECTION A–A · lateral relief (%s)" % cmap, color=INK, fontsize=8, family="monospace")
     ax2.set_xlim(y0 - 10, y1 + 26); ax2.set_ylim(z0 - 6, z1 + 10)
     # ---- CURLED: the chain enrolled on its ball joints (midline section + faint silhouette)
-    ax3 = fig.add_subplot(gs[0:3, 5:9]); ax3.set_facecolor(BG); ax3.set_aspect("equal"); ax3.axis("off")
+    ax3 = fig.add_subplot(gs[0:4, 5:9]); ax3.set_facecolor(BG); ax3.set_aspect("equal"); ax3.axis("off")
     try:
         s = flat.section(plane_origin=[0, 0, 0], plane_normal=[1, 0, 0])
         for e in s.entities: p = s.vertices[e.points]; ax3.plot(p[:, 1], p[:, 2], color=DIM, lw=0.5, alpha=0.6)   # flat, for reference
@@ -475,19 +475,8 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="magma"):
     (py0, pz0), (py1, pz1) = posed.bounds[0][1:], posed.bounds[1][1:]
     ax3.set_title(f"ENROLLED · {curl:.0f}°/joint · {curl * len(pivots):.0f}° over {len(pivots)} joints", color=INK, fontsize=8, family="monospace", loc="left")
     ax3.set_xlim(min(y0, py0) - 8, max(y1, py1) + 8); ax3.set_ylim(min(z0, pz0) - 6, max(z1, pz1) + 10)
-    # ---- HEAD / EYES: a colormapped relief portrait of the head (crescent, glabella, the two eyes)
-    axe = fig.add_subplot(gs[3:6, 5:7]); axe.set_facecolor(BG); axe.set_aspect("equal"); axe.axis("off")
-    head = parts[0].copy(); head.apply_translation([-head.centroid[0], 0, 0])
-    (hx0, hy0, hz0), (hx1, hy1, hz1) = head.bounds
-    HGX, HGY, HZ, HM = _relief_grid(head, view="top", n=240)
-    _field(axe, HGX, HGY, HZ, cmap)
-    for c in _contours(head, np.linspace(hz0 + 0.4, hz1 - 0.2, 16)):
-        axe.plot(c[:, 0], c[:, 1], color=INK, lw=0.4, alpha=0.28)
-    _strong_outline(axe, HGX, HGY, HM)
-    axe.text(hx0, hy1 + 4, "HEAD · EYES · relief portrait (%s)" % cmap, color=INK, fontsize=8, family="monospace")
-    axe.set_xlim(hx0 - 5, hx1 + 5); axe.set_ylim(hy0 - 5, hy1 + 7)
     # ---- TITLE BLOCK
-    ax4 = fig.add_subplot(gs[3:5, 7:9]); ax4.set_facecolor(BG); ax4.axis("off")
+    ax4 = fig.add_subplot(gs[4:6, 5:7]); ax4.set_facecolor(BG); ax4.axis("off")
     lines = ["    " + title, "", f"DRAWING  {info.get('params', '—')}", "",
              f"LENGTH   {L:.1f} mm", f"WIDTH    {W:.1f} mm", f"RELIEF   {z1 - z0:.1f} mm", "",
              f"PIECES   {len(parts)}", f"JOINTS   {len(pivots)} · ball", f"CURL     {curl:.0f}°/joint · {curl * len(pivots):.0f}° total", "",
@@ -497,14 +486,14 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="magma"):
     for s in ax4.spines.values(): s.set_visible(True); s.set_color(INK); s.set_linewidth(0.8)
     ax4.set_xticks([]); ax4.set_yticks([]); ax4.axis("on")
     # ---- PIECES + PIVOTS table
-    ax5 = fig.add_subplot(gs[5:6, 7:9]); ax5.set_facecolor(BG); ax5.axis("off")
+    ax5 = fig.add_subplot(gs[4:6, 7:9]); ax5.set_facecolor(BG); ax5.axis("off")
     vols = info.get("volumes") or [None] * len(parts)
     rows = ["PIECE        PIVOT y,z (mm)"]
     for k, nm in enumerate(names):
         piv = f"{pivots[k-1][0]:6.1f},{pivots[k-1][1]:5.1f}" if 0 < k <= len(pivots) else "   —  (head)"
         rows.append(f"{nm:<11} {piv}")
-    ax5.set_title("PIECES · joint pivots", color=INK, fontsize=7, family="monospace", loc="left")
-    ax5.text(0.0, 0.98, "\n".join(rows), color=INK, fontsize=5.6, family="monospace", va="top", ha="left", linespacing=1.3, transform=ax5.transAxes)
+    ax5.set_title("PIECES · joint pivots", color=INK, fontsize=7.5, family="monospace", loc="left")
+    ax5.text(0.0, 0.96, "\n".join(rows), color=INK, fontsize=6.6, family="monospace", va="top", ha="left", linespacing=1.5, transform=ax5.transAxes)
     fig.text(0.98, 0.018, "Claire Choi · Cornell", color=INK, fontsize=8, ha="right", va="bottom", family="monospace")
     import json as _json
     spec = _json.dumps({"hash": info.get("params", ""), "schema": info.get("schema", ""), "model": "isopod", "params": P}, sort_keys=True, default=str)
