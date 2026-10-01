@@ -12,6 +12,29 @@ INK, BG, DIM = "#ffffff", "#000000", "#9a9a9a"
 CMAPS = ("magma", "viridis", "twilight", "inferno", "cividis", "gray")   # scientific field colormaps (wave-optics look)
 RELIEF_ALPHA = 0.5   # the relief field sits semi-transparent under the blueprint lines — muted, not vibrant
 
+def _eye_lenses(ax, head, P, color=INK):
+    """Fill each eye on the dorsal plan with its lens packing (the packing factor, as circles): the eye outline and a
+    hex lattice of lenses sized by lensD and spaced by lensGap. The two eye domes are detected off-axis on the head."""
+    try:
+        if P.get("eyeSolid", 1) < 0.5 or P.get("eyeSize", 0) <= 0.01: return
+        V = head.vertices; hw = max(abs(V[:, 0].min()), V[:, 0].max())
+        eR = P["eyeSize"] * hw
+        sel = (V[:, 0] > 0.3 * hw) & (V[:, 0] < 0.97 * hw)                   # the right eye dome: off-axis, highest point
+        if sel.sum() < 20 or eR < 1: return
+        Vs = V[sel]; ex, ey = Vs[np.argmax(Vs[:, 2]), 0], Vs[np.argmax(Vs[:, 2]), 1]
+        D = max(P["lensD"] * eR, 0.4); pitch = D * (1 + P["lensGap"]); row = 0.87 * pitch
+        lens = []
+        for iy in range(-int(eR / row) - 1, int(eR / row) + 2):
+            yy = iy * row; offx = 0.5 * pitch * (iy & 1)
+            for ix in range(-int(eR / pitch) - 1, int(eR / pitch) + 2):
+                xx = ix * pitch + offx
+                if xx * xx + yy * yy <= (eR - 0.45 * D) ** 2: lens.append((xx, yy))
+        from matplotlib.patches import Circle
+        for sx in (1, -1):
+            ax.add_patch(Circle((sx * ex, ey), eR, fill=False, color=color, lw=0.9))
+            for lx, ly in lens: ax.add_patch(Circle((sx * ex + lx, ey + ly), 0.5 * D, fill=False, color=color, lw=0.35))
+    except Exception: pass
+
 def _field(ax, GA, GB, Z, cmap):
     """Draw a relief scalar field as a soft, semi-transparent colormapped image (the wave-optics look)."""
     if Z is None or not np.isfinite(Z).any(): return
@@ -438,7 +461,8 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="magma"):
     _field(ax, GX, GY, Z, cmap)                                                           # the dorsal relief field
     for c in _contours(flat, np.linspace(z0 + 0.4, z1 - 0.2, 14)):
         ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.4, alpha=0.22)                          # fine topographic lines over the colour
-    _strong_outline(ax, GX, GY, Mask)                                                     # the strong blueprint outline
+    _strong_outline(ax, GX, GY, Mask)                                                     # the strong blueprint outline (off)
+    _eye_lenses(ax, parts[0], P)                                                           # the eyes' lens packing, as circles
     for yc, _ in pivots: ax.axhline(yc, color=DIM, lw=0.35, ls=(0, (3, 4)), alpha=0.45)  # the joint lines across the axis
     ax.axvline(0, color=DIM, lw=0.4, ls=(0, (6, 4)), alpha=0.6)
     W, L = x1 - x0, y1 - y0
