@@ -3,10 +3,16 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Trilobite Morphospace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root{--bg:#000000;--ink:#ffffff;--mid:#9a9a9a;--line:#262626;--soft:#141414}
+  :root{--bg:#000000;--ink:#ffffff;--mid:#9a9a9a;--line:#262626;--soft:#141414;
+        --accent:#f6704f;--accent-dim:#7a3326;   /* magma-derived, used sparingly on active/primary states */
+        --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"IBM Plex Sans",system-ui,"Helvetica Neue",Arial,sans-serif}
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;overflow:hidden;font-size:12px}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;font-size:12px;-webkit-font-smoothing:antialiased}
+  /* instrument data reads in mono; descriptive text stays sans */
+  h1,.sect,.readout,.status,.printopt,.look,.rollbar .val,.loading .count,#classif,.ctrl .lab span:last-child,.pack div{font-family:var(--mono)}
   #app{display:grid;grid-template-columns:340px 1fr;height:100vh}
   .panel{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
   .controls{overflow-y:auto;padding:18px 20px;flex:1}
@@ -19,16 +25,16 @@
   input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--ink);cursor:pointer}
   input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--ink);border:none;cursor:pointer}
   input[type=text]{width:100%;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--line);padding:3px 0;font:inherit}
-  input[type=text]:focus{outline:none;border-bottom-color:var(--ink)}
+  input[type=text]:focus{outline:none;border-bottom-color:var(--accent)}
   select{width:100%;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--ink);padding:6px 0;font:inherit;border-radius:0}
   .hint{color:var(--mid);font-size:11px;margin:6px 0 0}
   .more{color:var(--mid);cursor:pointer;margin-top:14px;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
   .actions{padding:14px 20px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:8px}
   button{background:var(--bg);color:var(--ink);border:1px solid var(--ink);border-radius:0;padding:8px 6px;font:inherit;cursor:pointer}
-  button.primary{background:var(--ink);color:var(--bg)}
-  button:hover{background:var(--soft)} button.primary:hover{opacity:.85} button:disabled{opacity:.35;cursor:default}
+  button.primary{background:var(--accent);color:#120503;border-color:var(--accent);font-weight:500;letter-spacing:.04em}
+  button:hover{background:var(--soft)} button.primary:hover{opacity:.88} button:disabled{opacity:.35;cursor:default}
   .printopt{grid-column:1/-1;display:flex;align-items:center;gap:10px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mid);user-select:none;flex-wrap:wrap}
-  .printopt .seg span{cursor:pointer;padding:0 1px} .printopt .seg span.on{color:var(--ink);border-bottom:1px solid var(--ink)}
+  .printopt .seg span{cursor:pointer;padding:0 1px} .printopt .seg span.on{color:var(--accent);border-bottom:1px solid var(--accent)}
   .printopt .fillwrap{display:inline-flex;align-items:center;gap:5px} .printopt .fillwrap.off{opacity:.3;pointer-events:none}
   .printopt input[type=number]{width:42px;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--line);padding:2px 0;font:inherit;text-align:right}
   .printopt input[type=number]:focus{outline:none;border-bottom-color:var(--ink)}
@@ -45,7 +51,7 @@
   .readout b{font-weight:normal;border-bottom:1px solid var(--ink)}
   .status{position:absolute;right:16px;top:14px;color:var(--mid);text-shadow:0 0 6px #000} .status.busy{color:var(--ink)}
   .look{position:absolute;right:16px;top:36px;color:var(--mid);font-size:11px;letter-spacing:.06em;text-transform:uppercase;user-select:none;display:none}
-  .look span{cursor:pointer} .look span.on{color:var(--ink);border-bottom:1px solid var(--ink)}
+  .look span{cursor:pointer} .look span.on{color:var(--accent);border-bottom:1px solid var(--accent)}
   .rollbar{position:absolute;left:16px;right:16px;bottom:16px;display:none;grid-template-columns:1fr auto auto;gap:14px;align-items:center}
   .rollbar input[type=range]{height:1px} .rollbar input[type=range]::-webkit-slider-thumb{width:16px;height:16px}
   .rollbar .val{min-width:120px;text-align:right;font-variant-numeric:tabular-nums}
@@ -64,7 +70,7 @@
   svg.map text{fill:var(--mid);font-size:9px;letter-spacing:.06em;text-transform:uppercase;pointer-events:none}
   svg.map .reg{fill:#0b0b0b;stroke:var(--mid);stroke-width:1;cursor:pointer}
   svg.map .reg:hover{fill:var(--soft);stroke:var(--ink)}
-  svg.map .reg.on{fill:var(--soft);stroke:var(--ink);stroke-width:1.5}
+  svg.map .reg.on{fill:var(--soft);stroke:var(--accent);stroke-width:1.5}
   svg.map .mir{fill:none;stroke:var(--line);stroke-width:1;pointer-events:none}
   svg.map .ink{fill:none;stroke:var(--ink);stroke-width:1.2;pointer-events:none;stroke-linecap:round}
   svg.map .dim{fill:none;stroke:var(--mid);stroke-width:.8;pointer-events:none}
@@ -80,7 +86,7 @@
   svg.map .steplab{fill:var(--ink);font-size:12px;pointer-events:none}
   .pack{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin:2px 0 10px}
   .pack div{background:var(--bg);color:var(--mid);text-align:center;padding:7px 2px;font-size:9px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
-  .pack div.on{color:var(--ink);background:var(--soft)}
+  .pack div.on{color:var(--accent);background:var(--soft)}
   /* --- diagram feel: the drag-marks read as grabbable, and a value follows the cursor while dragging --- */
   svg.map .h{transition:r .1s ease, fill .1s ease}
   svg.map .h:hover{r:5.5;fill:var(--ink);filter:drop-shadow(0 0 3px rgba(255,255,255,.9))}
@@ -92,7 +98,7 @@
   #dragtip{position:fixed;z-index:30;pointer-events:none;display:none;background:#000;color:var(--ink);border:1px solid var(--ink);
            padding:3px 7px;font:11px/1.25 ui-monospace,Menlo,Consolas,monospace;white-space:nowrap;font-variant-numeric:tabular-nums}
   .ctrl{transition:box-shadow .25s ease,background .25s ease}
-  .ctrl.flash{box-shadow:-3px 0 0 var(--ink);background:var(--soft)}
+  .ctrl.flash{box-shadow:-3px 0 0 var(--accent);background:var(--soft)}
   #dhint{margin:8px 0 0;padding:7px 9px;border:1px solid var(--line);color:var(--mid);font-size:10.5px;line-height:1.45;
          display:none;position:relative}
   #dhint.on{display:block}
@@ -102,8 +108,8 @@
   #classif{margin:8px 0 0;font-size:10.5px;line-height:1.5;color:var(--mid);min-height:14px}
   #classif b{color:var(--ink);font-weight:normal}
   #classif .lab{letter-spacing:.1em;text-transform:uppercase;color:var(--mid);font-size:9px;margin-right:4px}
-  #classif .reads{color:var(--ink)}
-  #classif .reads b{border-bottom:1px solid var(--ink)}
+  #classif .reads{color:var(--accent)}
+  #classif .reads b{border-bottom:1px solid var(--accent)}
   @media (max-width: 720px), (pointer: coarse) and (max-width: 1024px) {
     html,body{overflow:auto;font-size:14px}
     #app{display:flex;flex-direction:column;height:auto;min-height:100vh}
