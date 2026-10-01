@@ -20,10 +20,12 @@ def test_preset_and_index(c):
     P = c.get("/api/preset/proetida").get_json(); assert len(P) == len(schema.PARAMS)
 
 def test_build_caches_and_serves_glb(c):
+    # the classic (pin) build: fast, with the pin's hinge kinematics. (The default joint is now the isopod model,
+    # whose build is minutes long and ships {names, pivots} kinematics — not what this classic test exercises.)
     P = c.get("/api/preset/proetida").get_json(); P["segCount"] = 4
-    m = c.post("/api/build", json={"P": P}).get_json()
+    m = c.post("/api/build", json={"P": P, "joint": "pin"}).get_json()
     assert len(m["parts"]) == 6 and all(p.get("bodies") == 1 for p in m["parts"]) and m["print"]["print_valid"] in (True, False)
-    assert c.post("/api/build", json={"P": P}).get_json()["key"] == m["key"]
+    assert c.post("/api/build", json={"P": P, "joint": "pin"}).get_json()["key"] == m["key"]
     g = c.get(m["parts"][1]["url"]); assert g.status_code == 200 and len(g.data) > 10000
     assert set(m["kinematics"]) == {"hinge_z", "offsets", "names"} and len(m["kinematics"]["offsets"]) == 5
 
