@@ -136,7 +136,7 @@
 import * as THREE from 'three'; import {OrbitControls} from 'three/addons/controls/OrbitControls.js'; import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 const S = await (await fetch('/api/schema')).json(); const META = Object.fromEntries(S.params.map(p=>[p.key,p]));
 const _u=new URLSearchParams(location.search); const _q=_u.get('order')||_u.get('preset'); const START=(_q&&S.presets.includes(_q))?_q:S.default;   // tree deep link (?order= / ?preset=)
-let P = await (await fetch('/api/preset/'+START)).json(); let sel='frame', showMore=false, kin=null, partMeshes={}, buildKey=null, mode='3d', lastMeas=null, threeReady=false;   // default build is the isopod model, shown in 3D; "View sheet" draws its blueprint
+let P = await (await fetch('/api/preset/'+START)).json(); let sel='frame', showMore=false, kin=null, partMeshes={}, buildKey=null, mode='sheet', lastMeas=null, threeReady=false;   // default view is the blueprint sheet, same as the other trilobites
 const _eye=_u.get('eye'); if(_eye){ const _t=(S.eye_types||[]).find(x=>x.key===_eye); if(_t) Object.assign(P,_t.set); }   // tree ?eye= deep link: apply the eye bundle
 const $=id=>document.getElementById(id); const INK='#ffffff', MID='#9a9a9a', LINE='#262626', SOFT='#141414';
 const ROWOF={b1:'head',a1:'head',b2:'seg',a2:'seg',b3:'tail',a3:'tail'};
@@ -588,7 +588,7 @@ $('go').onclick=async()=>{ status('measuring',true); $('go').disabled=true;
   } catch(ex){ status('measure failed · '+why(ex),false); }
   finally { $('go').disabled=false; } };
 $('roll').max=P.maxAngle; $('roll').value=P.maxAngle; $('rollval').textContent=rollLabel(P.maxAngle);
-render(); to3D(false); build(); placeView3D();   // boot into the 3D view: the default build is the isopod model
+render(); build(); placeView3D();
 </script>
 </body>
 </html>
