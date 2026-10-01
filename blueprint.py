@@ -11,6 +11,13 @@ from matplotlib.patches import Arc, Circle, Ellipse
 INK, BG, DIM = "#ffffff", "#000000", "#9a9a9a"
 CMAPS = ("magma", "viridis", "twilight", "inferno", "cividis", "gray")   # scientific field colormaps (wave-optics look)
 
+def _strong_outline(ax, GX, GY, Mask, color=INK, lw=1.9):
+    """A bold blueprint silhouette traced from the footprint mask's boundary (robust; no shapely / no topology errors)."""
+    if Mask is None or not Mask.any(): return
+    try:
+        ax.contour(GX, GY, Mask.astype(float), levels=[0.5], colors=[color], linewidths=lw, antialiased=True)
+    except Exception: pass
+
 def _relief_grid(m, n=300):
     """Top-surface height on a regular (x, y) grid over the mesh footprint, NaN outside the dorsal outline — the
     dorsal relief as a scalar field, for a colormapped (magma/viridis) rendering like a wave-optics intensity map."""
@@ -27,10 +34,11 @@ def _relief_grid(m, n=300):
         # (robust where projected-outline booleans fail on the isopod's 11 separate plates; the plate gaps stay dark.)
         d, _ = cKDTree(Vp[:, :2]).query(pts)
         cell = 2.5 * max(gx[1] - gx[0], gy[1] - gy[0])
-        Z = np.where((d < cell).reshape(GX.shape), Z, np.nan)
-        return GX, GY, Z
+        M = (d < cell).reshape(GX.shape)                           # the footprint mask; its boundary is the silhouette
+        Z = np.where(M, Z, np.nan)
+        return GX, GY, Z, M
     except Exception:
-        return None, None, None
+        return None, None, None, None
 
 def _contours(m, levels):
     """Horizontal sections (z = const): the topographic lines of the dorsal plan."""
@@ -230,7 +238,7 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None, cmap="
     for gy in np.linspace(0, 1, 29): bgax.axhline(gy, color="#1c1c1c", lw=0.4)
     # ---- plan view: relief as a colormapped field + fine contour lines
     ax = fig.add_subplot(gs[0:5, 0:4]); ax.set_facecolor(BG); ax.set_aspect("equal"); ax.axis("off")
-    GX, GY, Z = _relief_grid(m)
+    GX, GY, Z, Mask = _relief_grid(m)
     if Z is not None and np.isfinite(Z).any():
         from matplotlib.colors import PowerNorm
         vlo, vhi = np.nanmin(Z), np.nanmax(Z)
@@ -238,8 +246,9 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None, cmap="
                   norm=PowerNorm(0.6, vmin=vlo - 0.04 * (vhi - vlo), vmax=vhi), interpolation="bilinear", aspect="equal", zorder=0)
     for c in _contours(m, np.linspace(z0 + 0.4, z1 - 0.2, 14)):
         ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.4, alpha=0.22)
+    _strong_outline(ax, GX, GY, Mask)                                                      # the strong blueprint outline
     try:
-        poly = trimesh.path.polygons.projected(m, normal=[0, 0, 1])
+        poly = None
         for ring in ([poly.exterior] + list(poly.interiors)) if poly is not None else []:
             xy = np.array(ring.coords); ax.plot(xy[:, 0], xy[:, 1], color=INK, lw=1.0)
     except Exception: pass
@@ -409,21 +418,16 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="magma"):
     for gy in np.linspace(0, 1, 29): bgax.axhline(gy, color="#1c1c1c", lw=0.4)
     # ---- PLAN (dorsal): relief as a colormapped scalar field + fine contour lines + outline
     ax = fig.add_subplot(gs[0:4, 0:5]); ax.set_facecolor(BG); ax.set_aspect("equal"); ax.axis("off")
-    GX, GY, Z = _relief_grid(flat)
+    GX, GY, Z, Mask = _relief_grid(flat)
     if Z is not None and np.isfinite(Z).any():
         from matplotlib.colors import PowerNorm
         vlo, vhi = np.nanmin(Z), np.nanmax(Z)
         norm = PowerNorm(0.62, vmin=vlo - 0.04 * (vhi - vlo), vmax=vhi)                 # lift the low end off black so the field glows
         ax.imshow(np.ma.masked_invalid(Z), extent=[GX.min(), GX.max(), GY.min(), GY.max()], origin="lower",
                   cmap=cmap, norm=norm, interpolation="bilinear", aspect="equal", zorder=0)   # the relief as a smooth field
-    lc = "#ffffff"
     for c in _contours(flat, np.linspace(z0 + 0.4, z1 - 0.2, 14)):
-        ax.plot(c[:, 0], c[:, 1], color=lc, lw=0.4, alpha=0.22)                          # fine topographic lines over the colour
-    try:
-        poly = trimesh.path.polygons.projected(flat, normal=[0, 0, 1])
-        for ring in ([poly.exterior] + list(poly.interiors)) if poly is not None else []:
-            xy = np.array(ring.coords); ax.plot(xy[:, 0], xy[:, 1], color=INK, lw=1.0)
-    except Exception: pass
+        ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.4, alpha=0.22)                          # fine topographic lines over the colour
+    _strong_outline(ax, GX, GY, Mask)                                                     # the strong blueprint outline
     for yc, _ in pivots: ax.axhline(yc, color=DIM, lw=0.35, ls=(0, (3, 4)), alpha=0.45)  # the joint lines across the axis
     ax.axvline(0, color=DIM, lw=0.4, ls=(0, (6, 4)), alpha=0.6)
     W, L = x1 - x0, y1 - y0
