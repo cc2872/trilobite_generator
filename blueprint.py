@@ -20,9 +20,10 @@ def _field(ax, GA, GB, Z, cmap):
     ax.imshow(np.ma.masked_invalid(Z), extent=[GA.min(), GA.max(), GB.min(), GB.max()], origin="lower", cmap=cmap,
               norm=PowerNorm(0.6, vmin=vlo - 0.04 * (vhi - vlo), vmax=vhi), interpolation="bilinear", aspect="equal", zorder=0, alpha=RELIEF_ALPHA)
 
-def _strong_outline(ax, GX, GY, Mask, color=INK, lw=1.9):
-    """A bold blueprint silhouette traced from the footprint mask's boundary (robust; no shapely / no topology errors)."""
-    if Mask is None or not Mask.any(): return
+def _strong_outline(ax, GX, GY, Mask, color=INK, lw=1.9, draw=False):
+    """A silhouette traced from the footprint mask's boundary (robust; no shapely). Disabled by default — the bright
+    white line was too harsh over the soft relief field; the field + contour lines carry the shape. Set draw=True to show it."""
+    if not draw or Mask is None or not Mask.any(): return
     try:
         ax.contour(GX, GY, Mask.astype(float), levels=[0.5], colors=[color], linewidths=lw, antialiased=True)
     except Exception: pass
