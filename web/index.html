@@ -34,7 +34,7 @@
   .printopt input[type=number]:focus{outline:none;border-bottom-color:var(--ink)}
   .stage{position:relative;min-width:0;background:#000}
   canvas{display:block}
-  img.sheet{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+  img.sheet{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;opacity:1;transition:opacity .45s ease}
   .stage3d{position:absolute;inset:0;display:none}
   #view3d{position:absolute;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);color:var(--ink);border:1px solid rgba(255,255,255,.5);font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:0}
   #view3d.corner{background:var(--bg);border:1px solid var(--ink);padding:8px 14px;right:16px;top:16px;left:auto!important;bottom:auto!important;width:auto!important;height:auto!important}
@@ -164,7 +164,18 @@ const $=id=>document.getElementById(id); const INK='#ffffff', MID='#9a9a9a', LIN
 const ROWOF={b1:'head',a1:'head',b2:'seg',a2:'seg',b3:'tail',a3:'tail'};
 const C=$('C');
 const ps=$('preset'); S.presets.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;if(n===START)o.selected=true;ps.appendChild(o);});
-ps.onchange=async()=>{P=await (await fetch('/api/preset/'+ps.value)).json(); lastMeas=null; render(); dirty();};
+// morph between orders: tween the continuous parameters so the diagram flows from one body plan to the next
+// (discrete ones — segment count, expressions — snap at the end). Pure drawMap() per frame; no rebuild mid-tween.
+let morphRAF=null;
+function tweenP(target,dur=600){ if(morphRAF) cancelAnimationFrame(morphRAF);
+  const start={...P}, t0=performance.now();
+  const keys=Object.keys(target).filter(k=>META[k]&&META[k].kind!=='int'&&META[k].kind!=='odd_int'&&META[k].kind!=='expr'
+    && typeof start[k]==='number' && typeof target[k]==='number' && start[k]!==target[k]);
+  function step(t){ const u=Math.min((t-t0)/dur,1), e=u<0.5?4*u*u*u:1-Math.pow(-2*u+2,3)/2;   // easeInOutCubic
+    keys.forEach(k=>P[k]=start[k]+(target[k]-start[k])*e);
+    if(u>=1){ morphRAF=null; Object.assign(P,target); render(); } else { drawMap(); morphRAF=requestAnimationFrame(step); } }
+  morphRAF=requestAnimationFrame(step); }
+ps.onchange=async()=>{const target=await (await fetch('/api/preset/'+ps.value)).json(); lastMeas=null; dirty(); tweenP(target);};
 function fmt(v,m){return (m.kind==='int'||m.kind==='odd_int')?String(Math.round(v)):(+v).toFixed(m.step<0.01?3:m.step<0.1?2:m.step<1?1:0)+(m.unit?' '+m.unit:'');}
 function clampP(k,v){ const m=META[k]; v=Math.min(Math.max(+v,m.lo),m.hi); if(m.kind==='int') v=Math.round(v);
   if(m.kind==='odd_int'){ v=Math.round(v); if(v%2===0) v=Math.min(v+1,m.hi); } return v; }
@@ -572,7 +583,7 @@ async function sheet(){ status('drawing sheet',true);
       if(a>=SHEET_TRIES){ status('sheet failed · '+why(ex),false); return; }
       status(`sheet failed · retry ${a}/${SHEET_TRIES-1}`,true); await new Promise(z=>setTimeout(z,800*a)); continue; }
     const ok=await new Promise(res=>{ sheetWait=res; setTimeout(()=>{ if(sheetWait===res){ sheetWait=null; res(false); } },8000);
-                                      $('sheet').src=r.url+'?'+Date.now(); });
+                                      $('sheet').style.opacity=0; $('sheet').src=r.url+'?'+Date.now(); });   // fade the new sheet in on load
     if(ok){ status(r.measured?'sheet · measured':'sheet',false); return; }       // the image itself can fail or stall
     if(a>=SHEET_TRIES){ status('sheet image failed',false); return; }
     status(`sheet image failed · retry ${a}/${SHEET_TRIES-1}`,true); await new Promise(z=>setTimeout(z,800*a));
@@ -583,7 +594,7 @@ function placeView3D(){ const b=$('view3d'); if(mode!=='sheet'){ b.className='co
   b.style.left=(x0+V3D[0]*w)+'px'; b.style.top=(y0+V3D[1]*h)+'px'; b.style.width=(V3D[2]*w)+'px'; b.style.height=(V3D[3]*h)+'px'; }
 window.addEventListener('resize',placeView3D);
 const sheetDone=ok=>{ if(sheetWait){ const r=sheetWait; sheetWait=null; r(ok); } };
-$('sheet').onload=()=>{ $('view3d').style.display='flex'; placeView3D(); sheetDone(true); };   // the toggle appears with the sheet it sits on
+$('sheet').onload=()=>{ $('sheet').style.opacity=1; $('view3d').style.display='flex'; placeView3D(); sheetDone(true); };   // fade in; the toggle appears with the sheet it sits on
 $('sheet').onerror=()=>sheetDone(false);                                                      // sheet() decides whether to try again
 $('dl').onclick=()=>{ if(buildKey) window.location='/api/stl/'+buildKey; };
 // print-mode toggle: ball (default) and flexi hand back a print joint; pin exposes the fill field and builds
