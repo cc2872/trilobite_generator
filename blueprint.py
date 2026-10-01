@@ -51,12 +51,12 @@ def _strong_outline(ax, GX, GY, Mask, color=INK, lw=1.9, draw=False):
         ax.contour(GX, GY, Mask.astype(float), levels=[0.5], colors=[color], linewidths=lw, antialiased=True)
     except Exception: pass
 
-def _relief_grid(m, n=300, view="top"):
+def _relief_grid(m, n=300, view="top", field=True):
     """A relief scalar field on a regular grid, masked to the footprint (NaN outside), for a colormapped rendering.
     view='top': dorsal height z over (x, y). view='side': flank depth |x| (half-width) over (y, z) — the lateral relief.
-    Returns (GA, GB, field, mask); the mask boundary is the silhouette. Robust (KDTree mask, no shapely)."""
+    field=False skips the (expensive) interpolation and returns only the mask (for the blueprint silhouette).
+    Returns (GA, GB, field-or-None, mask); the mask boundary is the silhouette. Robust (KDTree mask, no shapely)."""
     try:
-        from scipy.interpolate import griddata
         from scipy.spatial import cKDTree
         V = m.vertices
         if view == "side":                                         # the right flank, depth = |x| over (y, z)
@@ -69,12 +69,14 @@ def _relief_grid(m, n=300, view="top"):
         a0, b0, a1, b1 = Pxy[:, 0].min(), Pxy[:, 1].min(), Pxy[:, 0].max(), Pxy[:, 1].max()
         ga = np.linspace(a0, a1, n); gb = np.linspace(b0, b1, max(2, int(n * (b1 - b0) / max(a1 - a0, 1e-6))))
         GA, GB = np.meshgrid(ga, gb); pts = np.c_[GA.ravel(), GB.ravel()]
-        Z = griddata(Pxy, val, (GA, GB), method="linear")
         # mask to the actual footprint: a grid cell is "on the animal" if a surface point sits within ~2 cells of it.
         d, _ = cKDTree(Pxy).query(pts)
         cell = 2.5 * max(ga[1] - ga[0], gb[1] - gb[0])
         M = (d < cell).reshape(GA.shape)
-        Z = np.where(M, Z, np.nan)
+        Z = None
+        if field:
+            from scipy.interpolate import griddata
+            Z = np.where(M, griddata(Pxy, val, (GA, GB), method="linear"), np.nan)
         return GA, GB, Z, M
     except Exception:
         return None, None, None, None
@@ -264,8 +266,8 @@ def _fov_lines(P):
     except Exception as ex:
         return [f"FOV      — ({str(ex)[:20]})"]
 
-def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None, cmap="magma"):
-    if cmap not in CMAPS: cmap = "magma"
+def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None, cmap="none"):
+    bw = cmap not in CMAPS                                                     # 'none'/invalid -> black & white blueprint (default)
     m = m.copy(); m.apply_translation([-m.centroid[0], 0, 0])
     (x0, y0, z0), (x1, y1, z1) = m.bounds
     fig = plt.figure(figsize=(16.5, 11.7), facecolor=BG)                      # A3 landscape
@@ -277,15 +279,11 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None, cmap="
     for gy in np.linspace(0, 1, 29): bgax.axhline(gy, color="#1c1c1c", lw=0.4)
     # ---- plan view: relief as a colormapped field + fine contour lines
     ax = fig.add_subplot(gs[0:5, 0:4]); ax.set_facecolor(BG); ax.set_aspect("equal"); ax.axis("off")
-    GX, GY, Z, Mask = _relief_grid(m)
-    if Z is not None and np.isfinite(Z).any():
-        from matplotlib.colors import PowerNorm
-        vlo, vhi = np.nanmin(Z), np.nanmax(Z)
-        ax.imshow(np.ma.masked_invalid(Z), extent=[GX.min(), GX.max(), GY.min(), GY.max()], origin="lower", cmap=cmap,
-                  norm=PowerNorm(0.6, vmin=vlo - 0.04 * (vhi - vlo), vmax=vhi), interpolation="bilinear", aspect="equal", zorder=0, alpha=RELIEF_ALPHA)
+    GX, GY, Z, Mask = _relief_grid(m, field=not bw)
+    if not bw: _field(ax, GX, GY, Z, cmap)                                                  # the dorsal relief field (heatmap mode)
     for c in _contours(m, np.linspace(z0 + 0.4, z1 - 0.2, 14)):
-        ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.4, alpha=0.22)
-    _strong_outline(ax, GX, GY, Mask)                                                      # the strong blueprint outline
+        ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.45 if bw else 0.4, alpha=0.9 if bw else 0.22)
+    _strong_outline(ax, GX, GY, Mask, draw=bw)                                             # the strong silhouette in blueprint mode
     try:
         poly = None
         for ring in ([poly.exterior] + list(poly.interiors)) if poly is not None else []:
@@ -301,7 +299,7 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None, cmap="
     _dim(ax, x1, y0, x1, y1, f"{L:.1f}", off=10)
     pitch = meas.get("pitch", 0)
     if pitch: _dim(ax, x0, y0 + P["cephFrac"] * P["length"] * 0 + 0, x0, y0 + pitch, f"p {pitch:.1f}", off=-18)
-    ax.text(x0, y1 + 6, "PLAN · relief field (%s)" % cmap, color=INK, fontsize=8, family="monospace")
+    ax.text(x0, y1 + 6, "PLAN · blueprint" if bw else "PLAN · relief field (%s)" % cmap, color=INK, fontsize=8, family="monospace")
     # axis triad, 10 mm long, at the front-left corner: x across, y along, z toward the viewer (dot)
     tx, ty = x0 - 20, y0 - 14
     ax.annotate("", xy=(tx + 10, ty), xytext=(tx, ty), arrowprops=dict(arrowstyle="->", color=INK, lw=0.8)); ax.text(tx + 11.5, ty, "x", color=INK, fontsize=7, va="center", family="monospace")
@@ -436,10 +434,10 @@ def _curl_mats(pivots, curl_deg):
         T.append(T[-1] @ trimesh.transformations.rotation_matrix(math.radians(-curl_deg), (1, 0, 0), (0, yc, zc)))
     return T
 
-def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="magma"):
+def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
     """parts: the pieces in their rest frame (print mm, head first). info: {names, pivots, curl_deg, params, schema,
-    build_seconds, volumes}. cmap: the colormap for the dorsal relief field. Writes a PNG and returns the path."""
-    if cmap not in CMAPS: cmap = "magma"
+    build_seconds, volumes}. cmap: a relief colormap, or 'none' for the black & white blueprint (default)."""
+    bw = cmap not in CMAPS                                                                  # 'none'/invalid -> black & white blueprint
     names = info.get("names") or [f"piece {i}" for i in range(len(parts))]
     pivots = info.get("pivots") or []
     curl = float(info.get("curl_deg", 30.0))
@@ -457,29 +455,29 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="magma"):
     for gy in np.linspace(0, 1, 29): bgax.axhline(gy, color="#1c1c1c", lw=0.4)
     # ---- PLAN (dorsal): relief as a colormapped scalar field + fine contour lines + outline
     ax = fig.add_subplot(gs[0:4, 0:5]); ax.set_facecolor(BG); ax.set_aspect("equal"); ax.axis("off")
-    GX, GY, Z, Mask = _relief_grid(flat, view="top")
-    _field(ax, GX, GY, Z, cmap)                                                           # the dorsal relief field
+    GX, GY, Z, Mask = _relief_grid(flat, view="top", field=not bw)
+    if not bw: _field(ax, GX, GY, Z, cmap)                                                 # the dorsal relief field (heatmap mode)
     for c in _contours(flat, np.linspace(z0 + 0.4, z1 - 0.2, 14)):
-        ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.4, alpha=0.22)                          # fine topographic lines over the colour
-    _strong_outline(ax, GX, GY, Mask)                                                     # the strong blueprint outline (off)
+        ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.45 if bw else 0.4, alpha=0.9 if bw else 0.22)   # topographic lines
+    _strong_outline(ax, GX, GY, Mask, draw=bw)                                            # the strong silhouette in blueprint mode
     _eye_lenses(ax, parts[0], P)                                                           # the eyes' lens packing, as circles
     for yc, _ in pivots: ax.axhline(yc, color=DIM, lw=0.35, ls=(0, (3, 4)), alpha=0.45)  # the joint lines across the axis
     ax.axvline(0, color=DIM, lw=0.4, ls=(0, (6, 4)), alpha=0.6)
     W, L = x1 - x0, y1 - y0
     _dim(ax, x0, y0, x1, y0, f"{W:.1f}", off=-8); _dim(ax, x1, y0, x1, y1, f"{L:.1f}", off=10)
-    ax.text(x0, y1 + 6, "PLAN · relief field (%s) · %.1f mm" % (cmap, z1 - z0), color=INK, fontsize=8, family="monospace")
+    ax.text(x0, y1 + 6, ("PLAN · blueprint · %.1f mm" % (z1 - z0)) if bw else ("PLAN · relief field (%s) · %.1f mm" % (cmap, z1 - z0)), color=INK, fontsize=8, family="monospace")
     ax.set_xlim(x0 - 20, x1 + 20); ax.set_ylim(y0 - 14, y1 + 12)
     # ---- LATERAL: the flank relief (depth from the side) + midline section + silhouette
     ax2 = fig.add_subplot(gs[4:6, 0:5]); ax2.set_facecolor(BG); ax2.set_aspect("equal"); ax2.axis("off")
-    GYs, GZs, Zs, Ms = _relief_grid(flat, view="side")
-    _field(ax2, GYs, GZs, Zs, cmap)                                                       # the lateral relief field
+    GYs, GZs, Zs, Ms = _relief_grid(flat, view="side", field=not bw)
+    if not bw: _field(ax2, GYs, GZs, Zs, cmap)                                             # the lateral relief field (heatmap mode)
     try:
         s = flat.section(plane_origin=[0, 0, 0], plane_normal=[1, 0, 0])
-        for e in s.entities: p = s.vertices[e.points]; ax2.plot(p[:, 1], p[:, 2], color=INK, lw=0.5, alpha=0.5)
+        for e in s.entities: p = s.vertices[e.points]; ax2.plot(p[:, 1], p[:, 2], color=INK, lw=0.6 if bw else 0.5, alpha=0.9 if bw else 0.5)
     except Exception: pass
-    _strong_outline(ax2, GYs, GZs, Ms)                                                    # the side silhouette
+    _strong_outline(ax2, GYs, GZs, Ms, draw=bw)                                           # the side silhouette in blueprint mode
     _dim(ax2, y1 + 10, z0, y1 + 10, z1, f"{z1 - z0:.1f}", off=0)
-    ax2.text(y0, z1 + 5, "SECTION A–A · lateral relief (%s)" % cmap, color=INK, fontsize=8, family="monospace")
+    ax2.text(y0, z1 + 5, ("SECTION A–A · lateral" if bw else "SECTION A–A · lateral relief (%s)" % cmap), color=INK, fontsize=8, family="monospace")
     ax2.set_xlim(y0 - 10, y1 + 26); ax2.set_ylim(z0 - 6, z1 + 10)
     # ---- CURLED: the chain enrolled on its ball joints (midline section + faint silhouette)
     ax3 = fig.add_subplot(gs[0:4, 5:9]); ax3.set_facecolor(BG); ax3.set_aspect("equal"); ax3.axis("off")

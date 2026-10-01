@@ -160,7 +160,7 @@
     <button id="view3d" style="display:none">View 3D</button>
     <div class="readout" id="readout"></div>
     <div class="status" id="status"></div>
-    <div class="look" id="look"><span data-look="blueprint">Blueprint</span> · <span class="on" data-look="model">Relief</span></div>
+    <div class="look" id="look"><span class="on" data-look="blueprint">Blueprint</span> · <span data-look="model">Relief</span></div>
     <div class="rollbar" id="rollbar"><input type="range" id="roll" min="0" max="45" step="0.1" value="0"><div class="val" id="rollval"></div><button id="go">Roll</button></div>
     <div class="loading" id="loading">
       <svg id="loadsvg" viewBox="0 0 280 200" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" aria-label="building"></svg>
@@ -567,11 +567,16 @@ let building=false, pending=false;
 // print mode: the site builds and hands back the print-ready ball joint by default (flexi is the one-axis
 // alternative); "pin" is the raw measurement shell (the geometry the sheet and the instrument describe),
 // with an optional fill (mm).
-let joint='isopod', fillMm=0, cmap='magma';
+let joint='isopod', fillMm=0, cmap='none';   // default: black & white blueprint; a colormap switches to the heatmap aesthetic
 const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0});
-// relief colormap picker (the wave-optics look): changing it just re-renders the sheet, no rebuild
-(function(){ const sel=$('cmap'); (S.colormaps||['magma']).forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;if(n===cmap)o.selected=true;sel.appendChild(o);});
-  sel.onchange=()=>{ cmap=sel.value; if(mode==='sheet') sheet(); else if(threeReady && look!=='blueprint') colorParts(); }; })();
+// relief style picker: "blueprint" (b&w, default) or a scientific colormap (the wave-optics heatmap). Just re-renders.
+(function(){ const sel=$('cmap');
+  const bp=document.createElement('option'); bp.value='none'; bp.textContent='blueprint'; bp.selected=true; sel.appendChild(bp);
+  const rb=document.createElement('option'); rb.value='rainbow'; rb.textContent='rainbow'; sel.appendChild(rb);   // the flowing all-hues loop (3D Relief only)
+  (S.colormaps||[]).forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);});
+  sel.onchange=()=>{ cmap=sel.value;
+    if(cmap==='rainbow'){ look='model'; if(mode!=='3d') to3D(true); else setLook('model'); return; }   // rainbow only animates in 3D — jump there
+    if(mode==='sheet') sheet(); else if(threeReady) setLook(cmap==='none'?'blueprint':'model'); }; })();
 const why=ex=>String(ex&&ex.message||ex).slice(0,60);
 async function post(url,body){ const r=await fetch(url,{method:'POST',body:JSON.stringify(body)});
   if(!r.ok) throw new Error(r.status+' '+url.split('/').pop()); return r.json(); }
@@ -663,7 +668,7 @@ function setJoint(j){ if(j!=='pin'&&j!=='flexi'&&j!=='ball'&&j!=='isopod') retur
 $('jointseg').onclick=e=>{ if(e.target.dataset.joint) setJoint(e.target.dataset.joint); };
 $('fill').onchange=e=>{ fillMm=Math.max(0,+e.target.value||0); if(joint==='pin') build(); };
 // ---- 3D — v1's model view: black fill with white feature edges (blueprint look) or shaded (model look), Z-up root, grid
-let scene,cam,ren,ctl,loader,root,grid,look='model';   // 3D default: the colormapped Relief look
+let scene,cam,ren,ctl,loader,root,grid,look='blueprint';   // 3D default: black & white blueprint (a colormap pick switches to Relief)
 // flexion pivot for the live pose: the instrument hinge for pin builds (y=0, z=hinge_z), the print
 // pivot for ball/flexi builds (behind the joint plane, above the bed) — set per build in load3d/measure.
 let posePivotY=0, posePivotZ=null;
@@ -690,6 +695,28 @@ function colorParts(){ if(!threeReady) return; let zmin=Infinity,zmax=-Infinity;
     for(let i=0;i<n;i++){ const t=Math.pow(Math.min(Math.max((pos.getZ(i)-zmin)/dz,0),1),0.75), c=cmapRGB(t,cmap);
       col[3*i]=c[0]*(1-MUTE)+0.45*MUTE; col[3*i+1]=c[1]*(1-MUTE)+0.45*MUTE; col[3*i+2]=c[2]*(1-MUTE)+0.45*MUTE; }
     geo.setAttribute('color',new THREE.BufferAttribute(col,3)); } }
+// ---- rainbow: a flowing full-spectrum relief. Every hue is on the shell at once, mapped by height, and the whole
+// band scrolls along the body and loops seamlessly — a repeating gif, not a still. Full saturation (no grey mute).
+// Lives only in the 3D Relief view; the matplotlib sheet renders one frame per request and can't animate.
+let rainbowRAF=null, rainbowCache=null;
+function hsv2rgb(h,s,v){ h=(h%1+1)%1; const i=Math.floor(h*6),f=h*6-i,p=v*(1-s),q=v*(1-f*s),t=v*(1-(1-f)*s);
+  switch(i%6){ case 0:return [v,t,p]; case 1:return [q,v,p]; case 2:return [p,v,t]; case 3:return [p,q,v]; case 4:return [t,p,v]; default:return [v,p,q]; } }
+function prepRainbow(){ const gs=Object.values(partMeshes); if(!gs.length){ rainbowCache=null; return; }
+  let zmin=Infinity,zmax=-Infinity;                                            // the hue ramp spans the whole animal's height
+  for(const g of gs){ const geo=g.getObjectByName('fill').geometry; geo.computeBoundingBox(); zmin=Math.min(zmin,geo.boundingBox.min.z); zmax=Math.max(zmax,geo.boundingBox.max.z); }
+  const dz=Math.max(zmax-zmin,1e-6); rainbowCache=[];
+  for(const g of gs){ const geo=g.getObjectByName('fill').geometry, pos=geo.attributes.position, n=pos.count, tArr=new Float32Array(n);
+    for(let i=0;i<n;i++) tArr[i]=Math.min(Math.max((pos.getZ(i)-zmin)/dz,0),1);   // cache the per-vertex height once; the frame loop only re-hues
+    let col=geo.getAttribute('color'); if(!col||col.count!==n){ col=new THREE.BufferAttribute(new Float32Array(n*3),3); geo.setAttribute('color',col); }
+    rainbowCache.push({tArr,col}); } }
+function rainbowTick(ts){ if(!rainbowCache){ rainbowRAF=null; return; }
+  const phase=(ts*0.00014)%1, SPAN=1.0;                                        // SPAN=1 → a full spectrum head-to-tail; phase scrolls it, time-based so dropped frames don't stutter
+  for(const {tArr,col} of rainbowCache){ const a=col.array, n=tArr.length;
+    for(let i=0;i<n;i++){ const c=hsv2rgb(tArr[i]*SPAN+phase,1,1); a[3*i]=c[0]; a[3*i+1]=c[1]; a[3*i+2]=c[2]; }
+    col.needsUpdate=true; }
+  rainbowRAF=requestAnimationFrame(rainbowTick); }
+function startRainbow(){ if(!threeReady) return; prepRainbow(); if(!rainbowRAF) rainbowRAF=requestAnimationFrame(rainbowTick); }
+function stopRainbow(){ if(rainbowRAF){ cancelAnimationFrame(rainbowRAF); rainbowRAF=null; } }
 function init3d(){ if(threeReady) return; threeReady=true; const view=$('stage3d'); scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
   cam=new THREE.PerspectiveCamera(40,1,1,5000); cam.position.set(140,110,190); ren=new THREE.WebGLRenderer({antialias:true}); view.appendChild(ren.domElement); ctl=new OrbitControls(cam,ren.domElement); ctl.target.set(0,10,0);
   scene.add(new THREE.HemisphereLight(0xffffff,0x888888,1.0)); const key=new THREE.DirectionalLight(0xffffff,1.2); key.position.set(80,160,120); scene.add(key);
@@ -702,11 +729,12 @@ function partGroup(geo){ const g=new THREE.Group(); const m=new THREE.Mesh(geo, 
   const e2=new THREE.LineSegments(new THREE.EdgesGeometry(geo,8), faintLine.clone()); e2.name='faint'; g.add(e2); return g; }
 function setLook(l){ look=l; [...$('look').children].forEach(s=>s.classList.toggle('on',s.dataset.look===l)); if(!threeReady) return;
   scene.background=new THREE.Color(0x000000);                                  // dark for both; the colormap glows on black
-  if(l!=='blueprint') colorParts();
+  stopRainbow();                                                              // leaving Relief (or re-entering) always restarts clean
+  if(l!=='blueprint'){ if(cmap==='rainbow') startRainbow(); else colorParts(); }
   for(const g of Object.values(partMeshes)){ g.getObjectByName('fill').material=(l==='blueprint'?fillMat:shaded); g.getObjectByName('edges').visible=true; g.getObjectByName('faint').visible=(l==='blueprint'); }   // white feature edges in both looks: the Relief keeps a blueprint outline over the colormap
   scene.remove(grid); grid=new THREE.GridHelper(400,40,0x2a2a2a,0x161616); grid.position.y=-0.5; scene.add(grid); }
 $('look').onclick=e=>{ if(e.target.dataset.look) setLook(e.target.dataset.look); };
-async function load3d(man){ init3d(); root.clear(); partMeshes={};
+async function load3d(man){ init3d(); stopRainbow(); rainbowCache=null; root.clear(); partMeshes={};   // drop the stale per-vertex cache before the old geometry goes
   if(!man){ try{ man=await post('/api/build',buildBody()); } catch(ex){ status('3D failed · '+why(ex),false); return; } }
   kin=man.kinematics;
   if(man.print_joint){ posePivotY=man.print_joint.pivot_y_beyond_joint; posePivotZ=man.print_joint.pivot_z; }   // any print joint (ball/flexi); pin has none

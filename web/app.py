@@ -253,8 +253,8 @@ def api_sheet():
     last instrument reading for these parameters if there is one (with the animal enrolled to its stop superimposed)."""
     import trimesh, blueprint
     body = request.get_json(force=True)
-    cmap = body.get("cmap", "magma")
-    if cmap not in blueprint.CMAPS: cmap = "magma"
+    cmap = body.get("cmap", "none")
+    if cmap not in blueprint.CMAPS and cmap != "none": cmap = "none"   # 'none' = black & white blueprint (default)
     if body.get("joint") == "isopod":                              # the isopod model has its own sheet (ball joints, crescent head, print-in-place)
         P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
         key = schema.param_hash(P) + "-i" + ISOPOD_SIG
