@@ -50,8 +50,11 @@
   .loading{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#000;z-index:6}
   .loading.on{display:flex}
   .loading img{width:150px;height:auto;image-rendering:auto;opacity:.9}
-  .loading .count{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--mid);font-variant-numeric:tabular-nums}
-  .loading .note{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-size:8px;letter-spacing:.06em;color:var(--line)}
+  #loadsvg{width:240px;height:172px}
+  #loadsvg .plate{fill:rgba(255,255,255,.045);stroke:var(--ink);stroke-width:1.4;stroke-linejoin:round;stroke-linecap:round}
+  #loadsvg .ax{fill:none;stroke:var(--ink);stroke-width:1;opacity:.55}
+  #loadsvg .eye{fill:var(--ink)}
+  .loading .count{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--mid);font-variant-numeric:tabular-nums;margin-top:4px}
   svg.arm{width:100%;height:120px;display:block;margin:6px 0 2px;border:1px solid var(--line)}
   svg.arm text{fill:var(--mid);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
   /* the anatomy map: the picker is the animal, traced from the dorsal sketch */
@@ -144,9 +147,8 @@
     <div class="look" id="look"><span class="on" data-look="blueprint">Blueprint</span> · <span data-look="model">Model</span></div>
     <div class="rollbar" id="rollbar"><input type="range" id="roll" min="0" max="45" step="0.1" value="0"><div class="val" id="rollval"></div><button id="go">Roll</button></div>
     <div class="loading" id="loading">
-      <img src="/loading.gif" alt="">
+      <svg id="loadsvg" viewBox="0 0 280 200" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" aria-label="building"></svg>
       <div class="count" id="lcount"></div>
-      <div class="note">(placeholder image until animation asset made)</div>
     </div>
   </div>
 </div>
@@ -519,14 +521,38 @@ async function retryPost(url,what,tries=2,body=null){  // covers a dropped conne
     try{ return await post(url,body||{P}); }
     catch(ex){ if(a>=tries) throw ex;
       status(`${what} failed · retry ${a}/${tries-1}`,true); await new Promise(r=>setTimeout(r,900*a)); } } }
+// ---- loading: a trilobite enrolling and unrolling (the paper's own subject), blueprint style. A chain of tergites,
+// the head fixed, each joint curling about the one ahead; re-centred and re-fit every frame so it stays framed as it
+// rolls into a ball and back. Pure SVG + requestAnimationFrame; runs only while a build is in flight.
+const LOAD=(()=>{
+  const N=11, PIT=20; let raf=null, groups=[], pivots=[], root=null, center=null;
+  const mul=(A,B)=>[A[0]*B[0]+A[2]*B[1],A[1]*B[0]+A[3]*B[1],A[0]*B[2]+A[2]*B[3],A[1]*B[2]+A[3]*B[3],A[0]*B[4]+A[2]*B[5]+A[4],A[1]*B[4]+A[3]*B[5]+A[5]];
+  const rotAbout=(px,py,th)=>{const c=Math.cos(th),s=Math.sin(th);return [c,s,-s,c,px-c*px+s*py,py-s*px-c*py];};
+  function build(){ const s=$('loadsvg'); if(!s||groups.length) return;
+    const x0=-(N*PIT)/2; let inner='';
+    for(let k=0;k<N;k++){ const xk=x0+k*PIT; pivots.push(xk);
+      const head=k===0, tail=k===N-1, w=PIT, h=head?20:tail?8:14;
+      let g=`<path class="plate" d="M${xk} 0 Q${xk+w/2} ${-h} ${xk+w} 0 Q${xk+w/2} ${-h*0.42} ${xk} 0 Z"/>`+
+            `<path class="ax" d="M${xk+2} ${-h*0.5} Q${xk+w/2} ${-h*0.85} ${xk+w-2} ${-h*0.5}"/>`;
+      if(head) g+=`<circle class="eye" cx="${xk+5}" cy="${-h*0.52}" r="1.7"/><circle class="eye" cx="${xk+w-5}" cy="${-h*0.52}" r="1.7"/>`;
+      inner+=`<g data-k="${k}">${g}</g>`; }
+    s.innerHTML=`<g id="loadcenter"><g id="loadroot">${inner}</g></g>`;
+    root=s.querySelector('#loadroot'); center=s.querySelector('#loadcenter'); groups=[...s.querySelectorAll('g[data-k]')]; }
+  function pose(th){ let M=[1,0,0,1,0,0]; groups[0].setAttribute('transform','matrix(1,0,0,1,0,0)');
+    for(let k=1;k<N;k++){ M=mul(M,rotAbout(pivots[k],0,th)); groups[k].setAttribute('transform',`matrix(${M.join(',')})`); }
+    try{ const b=root.getBBox(), sc=Math.min(230/(b.width+10),150/(b.height+10),1.8);
+      center.setAttribute('transform',`translate(140,98) scale(${sc.toFixed(3)}) translate(${(-(b.x+b.width/2)).toFixed(1)},${(-(b.y+b.height/2)).toFixed(1)})`); }catch(_){} }
+  function frame(t){ const PER=3600, ph=(t%PER)/PER, u=ph<0.5?ph*2:(1-ph)*2, e=u*u*(3-2*u); pose(e*0.52); raf=requestAnimationFrame(frame); }
+  return { start(){ build(); if(!raf) raf=requestAnimationFrame(frame); }, stop(){ if(raf){cancelAnimationFrame(raf); raf=null;} } };
+})();
 // ---- loading: the parts land one at a time on the server, so poll its count while the stage is blank
 let poll=null;
 function lcount(done,total){ $('lcount').textContent=`${done} part${done===1?'':'s'} out of ${total} built`; }
-function loadingOn(){ const total=Math.round(P.segCount)+2; lcount(0,total); $('loading').classList.add('on');
+function loadingOn(){ const total=Math.round(P.segCount)+2; lcount(0,total); $('loading').classList.add('on'); LOAD.start();
   clearInterval(poll); poll=setInterval(async()=>{
     try{ const r=await (await fetch('/api/progress')).json(); if(r.total) lcount(Math.min(r.done,r.total),r.total); }
     catch(ex){ /* the count is decoration; a dropped poll must not break the build */ } },400); }
-function loadingOff(){ clearInterval(poll); poll=null; $('loading').classList.remove('on'); }
+function loadingOff(){ clearInterval(poll); poll=null; $('loading').classList.remove('on'); LOAD.stop(); }
 async function build(){ if(building){pending=true;return;} building=true; status('building',true); loadingOn();
   try{
     let man;
