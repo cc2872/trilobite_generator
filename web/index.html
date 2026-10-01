@@ -76,6 +76,24 @@
   .pack{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin:2px 0 10px}
   .pack div{background:var(--bg);color:var(--mid);text-align:center;padding:7px 2px;font-size:9px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
   .pack div.on{color:var(--ink);background:var(--soft)}
+  /* --- diagram feel: the drag-marks read as grabbable, and a value follows the cursor while dragging --- */
+  svg.map .h{transition:r .1s ease, fill .1s ease}
+  svg.map .h:hover{r:5.5;fill:var(--ink);filter:drop-shadow(0 0 3px rgba(255,255,255,.9))}
+  svg.map .h.two:hover{r:6}
+  svg.map .h.grab:hover{fill:var(--ink);fill-opacity:.12;stroke:var(--ink);stroke-width:1}
+  @keyframes hpulse{0%,100%{opacity:.5}50%{opacity:1}}
+  svg.map.hint .h{animation:hpulse 1.5s ease-in-out 2}
+  svg.map.hint .step,svg.map.hint .reg.on{animation:hpulse 1.5s ease-in-out 2}
+  #dragtip{position:fixed;z-index:30;pointer-events:none;display:none;background:#000;color:var(--ink);border:1px solid var(--ink);
+           padding:3px 7px;font:11px/1.25 ui-monospace,Menlo,Consolas,monospace;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .ctrl{transition:box-shadow .25s ease,background .25s ease}
+  .ctrl.flash{box-shadow:-3px 0 0 var(--ink);background:var(--soft)}
+  #dhint{margin:8px 0 0;padding:7px 9px;border:1px solid var(--line);color:var(--mid);font-size:10.5px;line-height:1.45;
+         display:none;position:relative}
+  #dhint.on{display:block}
+  #dhint b{color:var(--ink);font-weight:normal}
+  #dhint .x{position:absolute;right:7px;top:5px;cursor:pointer;color:var(--mid)}
+  #dhint .x:hover{color:var(--ink)}
   @media (max-width: 720px), (pointer: coarse) and (max-width: 1024px) {
     html,body{overflow:auto;font-size:14px}
     #app{display:flex;flex-direction:column;height:auto;min-height:100vh}
@@ -102,6 +120,7 @@
       <button id="familytree" onclick="location.href='/tree'" title="browse the orders as a ring/spiral family tree">family tree</button>
       <div class="ctrl"><div class="lab"><span>Order</span></div><select id="preset"></select></div>
       <svg class="map" id="map" viewBox="0 0 384 396" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="dhint"><span class="x" id="dhintx" title="dismiss">×</span><b>Tip:</b> the diagram is the control. <b>Drag</b> the marks to shape the animal, <b>tap</b> a region to edit it, <b>tap</b> a prong to add a tine.</div>
       <div class="sect" id="cellname"></div>
       <div id="C"></div>
       <div class="more" id="more">more</div>
@@ -131,6 +150,7 @@
     </div>
   </div>
 </div>
+<div id="dragtip"></div>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
 <script type="module">
 import * as THREE from 'three'; import {OrbitControls} from 'three/addons/controls/OrbitControls.js'; import {STLLoader} from 'three/addons/loaders/STLLoader.js';
@@ -416,24 +436,38 @@ function drawMap(){
 const mapEl=$('map');
 function mpt(e){ const b=mapEl.getBoundingClientRect(), vb=mapEl.viewBox.baseVal;   // the box grows with the strip
   return {x:(e.clientX-b.left)*vb.width/b.width, y:(e.clientY-b.top)*vb.height/b.height}; }
+// --- drag feedback: a value follows the cursor, and the matching slider flashes so the diagram and the numbers read as one tool
+const keysOf=H=>H.k?[H.k]:[H.kx,H.ky];
+function flashCtrl(k){ const el=C.querySelector('.ctrl[data-k="'+k+'"]'); if(!el) return;
+  if(!el.classList.contains('flash')) el.scrollIntoView({block:'nearest'});   // scroll into view once, not on every drag move
+  el.classList.add('flash'); clearTimeout(el._ft); el._ft=setTimeout(()=>el.classList.remove('flash'),650); }
+function dragShow(e,H){ const dt=$('dragtip'); dt.textContent=keysOf(H).filter(k=>k&&META[k]).map(k=>META[k].label+' '+fmt(P[k],META[k])).join('  ·  ');
+  dt.style.left=(e.clientX+13)+'px'; dt.style.top=(e.clientY-10)+'px'; dt.style.display='block'; keysOf(H).forEach(k=>k&&flashCtrl(k)); }
+function dragHide(){ $('dragtip').style.display='none'; }
+// --- one-time hint: the diagram is the control
+try{ if(!localStorage.getItem('trilo_draghint')) $('dhint').classList.add('on'); }catch(_){ $('dhint').classList.add('on'); }
+function dismissHint(){ const d=$('dhint'); if(d.classList.contains('on')){ d.classList.remove('on'); $('map').classList.remove('hint'); try{localStorage.setItem('trilo_draghint','1');}catch(_){} } }
+$('dhintx').onclick=dismissHint;
+function pulseHandles(){ if(!$('dhint').classList.contains('on')) return; const m=$('map'); m.classList.add('hint'); clearTimeout(m._ht); m._ht=setTimeout(()=>m.classList.remove('hint'),3200); }
 mapEl.addEventListener('pointerdown',e=>{
   const h=e.target.closest('.h');
-  if(h){ const H=HND[+h.dataset.i]; drag={H, v0:H.k?P[H.k]:0, p0:mpt(e)}; mapEl.setPointerCapture(e.pointerId); e.preventDefault(); return; }
+  if(h){ const H=HND[+h.dataset.i]; drag={H, v0:H.k?P[H.k]:0, p0:mpt(e)}; mapEl.setPointerCapture(e.pointerId); e.preventDefault(); dragShow(e,H); dismissHint(); return; }
   const cyc=e.target.closest('[data-cyc]');
-  if(cyc){ const k=cyc.dataset.cyc; setP(k,(Math.round(P[k]||0)+1)%(META[k].hi+1)); sel=cyc.dataset.c||sel; render(); dirty(); return; }
+  if(cyc){ const k=cyc.dataset.cyc; setP(k,(Math.round(P[k]||0)+1)%(META[k].hi+1)); sel=cyc.dataset.c||sel; render(); dirty(); dismissHint(); return; }
   const st=e.target.closest('[data-seg]');
   if(st){ setP('segCount',Math.round(P.segCount)+(+st.dataset.seg)); render(); dirty(); return; }
   const pst=e.target.closest('[data-pstep]');
   if(pst){ const [k,dv]=pst.dataset.pstep.split(':'); setP(k,Math.round(P[k]||0)+(+dv)); render(); dirty(); return; }
   const r=e.target.closest('[data-c]');
-  if(r){ sel=r.dataset.c; render(); }
+  if(r){ sel=r.dataset.c; render(); dismissHint(); }
 });
 mapEl.addEventListener('pointermove',e=>{
   if(drag){ const q=mpt(e); q.dx=q.x-drag.p0.x; q.dy=q.y-drag.p0.y; q.v0=drag.v0; const H=drag.H;
-    if(H.k) setP(H.k,H.inv(q)); else setP2(H.kx,H.invx(q),H.ky,H.invy(q)); return; }
+    if(H.k) setP(H.k,H.inv(q)); else setP2(H.kx,H.invx(q),H.ky,H.invy(q)); dragShow(e,H); return; }
   const r=e.target.closest('[data-c]'); highlight(r&&ROWOF[r.dataset.c]?ROWOF[r.dataset.c]:null);
 });
-mapEl.addEventListener('pointerup',()=>{ if(drag){ drag=null; dirty(); } });
+mapEl.addEventListener('pointerup',()=>{ if(drag){ drag=null; dirty(); } dragHide(); });
+mapEl.addEventListener('pointercancel',()=>{ drag=null; dragHide(); });
 mapEl.addEventListener('pointerleave',()=>highlight(null));
 // ================================================================ cell panels
 // Lens packing as one tap (sketch_controls.PACKING). Style and lattice are not here: eye_solid builds a
@@ -462,7 +496,7 @@ function render(){ const c=S.cells[sel]; $('cellname').textContent=c.label;
   C.innerHTML=''; VISUAL[sel]().forEach(e=>C.appendChild(e));
   const used=new Set([...C.querySelectorAll('.ctrl[data-k]')].map(e=>e.dataset.k));
   if(showMore) [...c.primary,...c.more].filter(k=>!used.has(k)).forEach(k=>C.appendChild(slider(k)));
-  $('more').textContent=showMore?'less':'more'; redraw(); }
+  $('more').textContent=showMore?'less':'more'; redraw(); pulseHandles(); }
 $('more').onclick=()=>{showMore=!showMore;render();};
 function dirty(){ status('edited',false); }
 $('buildBtn').onclick=()=>build();
