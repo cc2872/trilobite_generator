@@ -304,6 +304,26 @@ N.forEach((n,i)=>{
   n.el=g; gNodes.append(g);
 });
 
+// ---- eye types as timeline nodes: whole-clade characters placed on the trunk at first appearance, each a preset
+// that opens the generator with that eye configuration (?eye=<key> -> the generator applies the CHARACTERS bundle).
+const EYES = [
+  {id:'eyeHolo',    name:'holochroal eyes',    t:542, key:'holochroalEyes',   glyph:'eye'},
+  {id:'eyeBlind',   name:'eyes lost',          t:522, key:'eyesLost',         glyph:'blind'},
+  {id:'eyePelagic', name:'pelagic eyes',       t:478, key:'pelagicEyes',      glyph:'big'},
+  {id:'eyeSchiz',   name:'schizochroal eyes',  t:465, key:'schizochroalEyes', glyph:'schiz'},
+];
+EYES.forEach(e=>{
+  const theta=th(e.t), sc=rad(theta,0)/R_OUT, [dx,dy]=XY(theta,0), [mx,my]=XY(theta,-0.9);
+  const deg=(theta-Math.PI/2)*180/Math.PI+90;
+  const g=el('g',{class:'node eyenode',tabindex:0,role:'button','aria-label':e.name});
+  g.append(el('circle',{cx:dx,cy:dy,r:(3.0*sc).toFixed(2)}));
+  const m=el('g',{class:'mark',transform:`translate(${mx.toFixed(2)},${my.toFixed(2)}) rotate(${deg.toFixed(1)}) scale(${(6.5*sc).toFixed(2)},${(-6.5*sc).toFixed(2)})`});
+  const ti=el('title'); ti.textContent=e.name; m.append(ti); (GLYPH[e.glyph]||(()=>{}))(m); g.append(m);
+  g.addEventListener('click',ev=>{ if(!moved) selectEye(e); });
+  g.addEventListener('keydown',ev=>{ if(ev.key==='Enter'||ev.key===' '){ev.preventDefault(); selectEye(e);} });
+  e.el=g; gNodes.append(g);
+});
+
 // the time cursor: a radial line across every lane at the present date, and the point on the trunk
 const cLine = el('line',{class:'cursor'}), cHalo = el('circle',{class:'cursor-halo',r:9}), cDot = el('circle',{class:'cursor-dot',r:4});
 gCursor.append(cLine,cHalo,cDot);
@@ -421,8 +441,22 @@ function locate(){
 // ---- the panel
 const longName = c => LONG[c[0]]+' '+LONG[c.slice(1)];
 function ancestorWithPreset(n){ let p=n; while(p && !p.has) p = byId[p.parent]; return p; }
+function selectEye(x){   // an eye-type node: a preset that opens the generator with that eye configuration
+  N.forEach(m=>m.el.classList.remove('sel')); EYES.forEach(y=>y.el&&y.el.classList.toggle('sel',y===x));
+  document.getElementById('p-name').textContent = x.name;
+  document.getElementById('p-rank').textContent = 'eye character';
+  document.getElementById('p-range').textContent = epochOf(x.t)+'  '+Math.round(x.t)+' Ma';
+  document.getElementById('p-parent').innerHTML = '<span class="dim">trilobite-wide</span>';
+  document.getElementById('p-preset').innerHTML = x.key;
+  document.getElementById('p-reading').innerHTML = '<span class="dim">—</span>';
+  document.getElementById('p-diff').innerHTML = '<span class="dim">—</span>';
+  document.getElementById('p-feat').innerHTML = x.name;
+  const open=document.getElementById('p-open'); open.textContent='Open'; open.href='/?eye='+encodeURIComponent(x.key);
+  document.getElementById('p-child').textContent='Save as child';
+  setTime(x.t);
+}
 function select(n){
-  N.forEach(m=>m.el.classList.toggle('sel',m===n));
+  N.forEach(m=>m.el.classList.toggle('sel',m===n)); EYES.forEach(y=>y.el&&y.el.classList.remove('sel'));
   const anc = ancestorWithPreset(n), par = n.parent ? byId[n.parent] : null;
   const abbr = c => c[0]+' '+LONG[c.slice(1)];
   document.getElementById('p-name').textContent = n.name;
