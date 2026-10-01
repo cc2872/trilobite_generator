@@ -32,6 +32,8 @@
   .printopt .fillwrap{display:inline-flex;align-items:center;gap:5px} .printopt .fillwrap.off{opacity:.3;pointer-events:none}
   .printopt input[type=number]{width:42px;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--line);padding:2px 0;font:inherit;text-align:right}
   .printopt input[type=number]:focus{outline:none;border-bottom-color:var(--ink)}
+  .printopt .cmapwrap{display:inline-flex;align-items:center;gap:5px}
+  .printopt select{width:auto;display:inline-block;padding:1px 2px;font:inherit;font-size:11px;border-bottom:1px solid var(--line);text-transform:lowercase}
   .stage{position:relative;min-width:0;background:#000}
   canvas{display:block}
   img.sheet{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;opacity:1;transition:opacity .45s ease}
@@ -139,6 +141,7 @@
         <span>Joint</span>
         <span class="seg" id="jointseg"><span class="on" data-joint="isopod">isopod model</span> · <span data-joint="ball">print · ball</span> · <span data-joint="flexi">print · flexi</span> · <span data-joint="pin">measure · pin</span></span>
         <span class="fillwrap off" id="fillwrap">· <input type="number" id="fill" min="0" max="3" step="0.5" value="0"> mm fill</span>
+        <span class="cmapwrap">· <span>relief</span> <select id="cmap" title="colormap for the blueprint's relief field"></select></span>
       </div>
       <button class="primary" id="buildBtn" style="grid-column:1/-1">Build</button>
       <button id="dl">Download STL</button>
@@ -558,8 +561,11 @@ let building=false, pending=false;
 // print mode: the site builds and hands back the print-ready ball joint by default (flexi is the one-axis
 // alternative); "pin" is the raw measurement shell (the geometry the sheet and the instrument describe),
 // with an optional fill (mm).
-let joint='isopod', fillMm=0;
+let joint='isopod', fillMm=0, cmap='magma';
 const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0});
+// relief colormap picker (the wave-optics look): changing it just re-renders the sheet, no rebuild
+(function(){ const sel=$('cmap'); (S.colormaps||['magma']).forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;if(n===cmap)o.selected=true;sel.appendChild(o);});
+  sel.onchange=()=>{ cmap=sel.value; if(mode==='sheet') sheet(); }; })();
 const why=ex=>String(ex&&ex.message||ex).slice(0,60);
 async function post(url,body){ const r=await fetch(url,{method:'POST',body:JSON.stringify(body)});
   if(!r.ok) throw new Error(r.status+' '+url.split('/').pop()); return r.json(); }
@@ -614,7 +620,7 @@ const SHEET_TRIES=3;                       // so the overlay lifts on the painte
 async function sheet(){ status('drawing sheet',true);
   for(let a=1;a<=SHEET_TRIES;a++){
     let r;
-    try{ r=await retryPost('/api/sheet','sheet',2,{P,joint}); if(!r.url) throw new Error(r.error||'no sheet'); }
+    try{ r=await retryPost('/api/sheet','sheet',2,{P,joint,cmap}); if(!r.url) throw new Error(r.error||'no sheet'); }
     catch(ex){
       if(a>=SHEET_TRIES){ status('sheet failed · '+why(ex),false); return; }
       status(`sheet failed · retry ${a}/${SHEET_TRIES-1}`,true); await new Promise(z=>setTimeout(z,800*a)); continue; }

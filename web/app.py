@@ -131,7 +131,8 @@ def api_schema():
     eye_types = [dict(key=k, name=schema.CHARACTERS[k]["name"], set=schema.CHARACTERS[k]["set"]) for k in EYE_TYPES]
     return jsonify(dict(version=schema.SCHEMA_VERSION, instrument=I.INSTRUMENT_VERSION, params=_params_meta(), cells=schema.CELLS,
                         vertical_spines=schema.VERTICAL_SPINES, presets=sorted(_presets()), default=schema.DEFAULT_PRESET,
-                        eye_types=eye_types, characters=_characters_list()))
+                        eye_types=eye_types, characters=_characters_list(),
+                        colormaps=["magma", "viridis", "twilight", "inferno", "cividis", "gray"]))
 
 _PRESET_CHARS = None
 @app.post("/api/classify")
@@ -252,14 +253,16 @@ def api_sheet():
     last instrument reading for these parameters if there is one (with the animal enrolled to its stop superimposed)."""
     import trimesh, blueprint
     body = request.get_json(force=True)
+    cmap = body.get("cmap", "magma")
+    if cmap not in blueprint.CMAPS: cmap = "magma"
     if body.get("joint") == "isopod":                              # the isopod model has its own sheet (ball joints, crescent head, print-in-place)
         P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
         key = schema.param_hash(P) + "-i" + ISOPOD_SIG
         folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
         if not os.path.exists(manifest):
             with app.test_request_context(json={"P": P, "joint": "isopod"}): api_build()
-        man = json.load(open(manifest)); png = os.path.join(folder, "sheet_isopod.png")
-        if os.path.exists(png): return jsonify(url=f"/files/{key}/sheet_isopod.png", measured=False)
+        man = json.load(open(manifest)); png = os.path.join(folder, f"sheet_isopod_{cmap}.png")   # cache per colormap
+        if os.path.exists(png): return jsonify(url=f"/files/{key}/sheet_isopod_{cmap}.png", measured=False)
         with LOCK:
             parts = [p for p in man.get("parts", []) if "error" not in p]
             if not parts: return jsonify(error="isopod build failed — no parts to draw"), 500
@@ -268,16 +271,16 @@ def api_sheet():
             info = dict(names=[p["name"] for p in parts], pivots=kin.get("pivots", []), curl_deg=getattr(IB, "CURL", 30.0),
                         params=key, schema=man.get("schema", ""), build_seconds=man.get("build_seconds"),
                         volumes=[p.get("volume") for p in parts])
-            blueprint.isopod_sheet(meshes, P, info, png)
-        return jsonify(url=f"/files/{key}/sheet_isopod.png", measured=False)
+            blueprint.isopod_sheet(meshes, P, info, png, cmap=cmap)
+        return jsonify(url=f"/files/{key}/sheet_isopod_{cmap}.png", measured=False)
     P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
     phash = schema.param_hash(P); key = phash + "-b" + BUILD_SIG   # the sheet draws the default (pin) build; key must match api_build's
     folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
     if not os.path.exists(manifest):
         with app.test_request_context(json={"P": P, "joint": "pin"}): api_build()   # the sheet draws the pin build; be explicit now the default is isopod
     man = json.load(open(manifest)); meas = MEASURED.get(phash)   # MEASURED is keyed by the plain param hash (set in /api/measure)
-    tag = "measured" if meas else "flat"; png = os.path.join(folder, f"sheet_{tag}.png")
-    if os.path.exists(png): return jsonify(url=f"/files/{key}/sheet_{tag}.png", measured=bool(meas))
+    tag = "measured" if meas else "flat"; png = os.path.join(folder, f"sheet_{tag}_{cmap}.png")   # cache per colormap
+    if os.path.exists(png): return jsonify(url=f"/files/{key}/sheet_{tag}_{cmap}.png", measured=bool(meas))
     with LOCK:
         names = [p["name"] for p in man["parts"] if "error" not in p]
         meshes = [trimesh.load(os.path.join(folder, f"{n}.stl")) for n in names]
@@ -291,8 +294,8 @@ def api_sheet():
         if meas and meas.get("theta_joint_deg") is not None:
             mats = I.transforms_deg(P, float(meas["theta_joint_deg"]))
             enrolled = trimesh.util.concatenate([mm.copy().apply_transform(T) for mm, T in zip(meshes, mats)])
-        blueprint.sheet(flat, P, m, png, enrolled=enrolled)
-    return jsonify(url=f"/files/{key}/sheet_{tag}.png", measured=bool(meas))
+        blueprint.sheet(flat, P, m, png, enrolled=enrolled, cmap=cmap)
+    return jsonify(url=f"/files/{key}/sheet_{tag}_{cmap}.png", measured=bool(meas))
 
 @app.get("/api/stl/<key>")
 def api_stl(key):

@@ -9,6 +9,28 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Arc, Circle, Ellipse
 
 INK, BG, DIM = "#ffffff", "#000000", "#9a9a9a"
+CMAPS = ("magma", "viridis", "twilight", "inferno", "cividis", "gray")   # scientific field colormaps (wave-optics look)
+
+def _relief_grid(m, n=300):
+    """Top-surface height on a regular (x, y) grid over the mesh footprint, NaN outside the dorsal outline — the
+    dorsal relief as a scalar field, for a colormapped (magma/viridis) rendering like a wave-optics intensity map."""
+    try:
+        from scipy.interpolate import griddata
+        from scipy.spatial import cKDTree
+        V = m.vertices; up = m.vertex_normals[:, 2] > 0.15          # the dorsal (upward-facing) surface
+        Vp = V[up] if up.sum() > 50 else V
+        x0, y0, x1, y1 = V[:, 0].min(), V[:, 1].min(), V[:, 0].max(), V[:, 1].max()
+        gx = np.linspace(x0, x1, n); gy = np.linspace(y0, y1, max(2, int(n * (y1 - y0) / max(x1 - x0, 1e-6))))
+        GX, GY = np.meshgrid(gx, gy); pts = np.c_[GX.ravel(), GY.ravel()]
+        Z = griddata(Vp[:, :2], Vp[:, 2], (GX, GY), method="linear")
+        # mask to the actual footprint: a grid cell is "on the animal" if a surface vertex sits within ~2 cells of it.
+        # (robust where projected-outline booleans fail on the isopod's 11 separate plates; the plate gaps stay dark.)
+        d, _ = cKDTree(Vp[:, :2]).query(pts)
+        cell = 2.5 * max(gx[1] - gx[0], gy[1] - gy[0])
+        Z = np.where((d < cell).reshape(GX.shape), Z, np.nan)
+        return GX, GY, Z
+    except Exception:
+        return None, None, None
 
 def _contours(m, levels):
     """Horizontal sections (z = const): the topographic lines of the dorsal plan."""
@@ -195,7 +217,8 @@ def _fov_lines(P):
     except Exception as ex:
         return [f"FOV      — ({str(ex)[:20]})"]
 
-def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None):
+def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None, cmap="magma"):
+    if cmap not in CMAPS: cmap = "magma"
     m = m.copy(); m.apply_translation([-m.centroid[0], 0, 0])
     (x0, y0, z0), (x1, y1, z1) = m.bounds
     fig = plt.figure(figsize=(16.5, 11.7), facecolor=BG)                      # A3 landscape
@@ -205,10 +228,16 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None):
     for s in bgax.spines.values(): s.set_visible(False)
     for gx in np.linspace(0, 1, 41): bgax.axvline(gx, color="#1c1c1c", lw=0.4)
     for gy in np.linspace(0, 1, 29): bgax.axhline(gy, color="#1c1c1c", lw=0.4)
-    # ---- plan view: contour lines
+    # ---- plan view: relief as a colormapped field + fine contour lines
     ax = fig.add_subplot(gs[0:5, 0:4]); ax.set_facecolor(BG); ax.set_aspect("equal"); ax.axis("off")
+    GX, GY, Z = _relief_grid(m)
+    if Z is not None and np.isfinite(Z).any():
+        from matplotlib.colors import PowerNorm
+        vlo, vhi = np.nanmin(Z), np.nanmax(Z)
+        ax.imshow(np.ma.masked_invalid(Z), extent=[GX.min(), GX.max(), GY.min(), GY.max()], origin="lower", cmap=cmap,
+                  norm=PowerNorm(0.6, vmin=vlo - 0.04 * (vhi - vlo), vmax=vhi), interpolation="bilinear", aspect="equal", zorder=0)
     for c in _contours(m, np.linspace(z0 + 0.4, z1 - 0.2, 14)):
-        ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.45, alpha=0.9)
+        ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.4, alpha=0.22)
     try:
         poly = trimesh.path.polygons.projected(m, normal=[0, 0, 1])
         for ring in ([poly.exterior] + list(poly.interiors)) if poly is not None else []:
@@ -224,7 +253,7 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None):
     _dim(ax, x1, y0, x1, y1, f"{L:.1f}", off=10)
     pitch = meas.get("pitch", 0)
     if pitch: _dim(ax, x0, y0 + P["cephFrac"] * P["length"] * 0 + 0, x0, y0 + pitch, f"p {pitch:.1f}", off=-18)
-    ax.text(x0, y1 + 6, "PLAN · contours %.1f mm" % ((z1 - z0) / 14), color=INK, fontsize=8, family="monospace")
+    ax.text(x0, y1 + 6, "PLAN · relief field (%s)" % cmap, color=INK, fontsize=8, family="monospace")
     # axis triad, 10 mm long, at the front-left corner: x across, y along, z toward the viewer (dot)
     tx, ty = x0 - 20, y0 - 14
     ax.annotate("", xy=(tx + 10, ty), xytext=(tx, ty), arrowprops=dict(arrowstyle="->", color=INK, lw=0.8)); ax.text(tx + 11.5, ty, "x", color=INK, fontsize=7, va="center", family="monospace")
@@ -359,9 +388,10 @@ def _curl_mats(pivots, curl_deg):
         T.append(T[-1] @ trimesh.transformations.rotation_matrix(math.radians(-curl_deg), (1, 0, 0), (0, yc, zc)))
     return T
 
-def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE"):
+def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="magma"):
     """parts: the pieces in their rest frame (print mm, head first). info: {names, pivots, curl_deg, params, schema,
-    build_seconds, volumes}. Writes a PNG and returns the path."""
+    build_seconds, volumes}. cmap: the colormap for the dorsal relief field. Writes a PNG and returns the path."""
+    if cmap not in CMAPS: cmap = "magma"
     names = info.get("names") or [f"piece {i}" for i in range(len(parts))]
     pivots = info.get("pivots") or []
     curl = float(info.get("curl_deg", 30.0))
@@ -377,20 +407,28 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE"):
     for s in bgax.spines.values(): s.set_visible(False)
     for gx in np.linspace(0, 1, 41): bgax.axvline(gx, color="#1c1c1c", lw=0.4)
     for gy in np.linspace(0, 1, 29): bgax.axhline(gy, color="#1c1c1c", lw=0.4)
-    # ---- PLAN (dorsal): contour lines + outline
+    # ---- PLAN (dorsal): relief as a colormapped scalar field + fine contour lines + outline
     ax = fig.add_subplot(gs[0:4, 0:5]); ax.set_facecolor(BG); ax.set_aspect("equal"); ax.axis("off")
+    GX, GY, Z = _relief_grid(flat)
+    if Z is not None and np.isfinite(Z).any():
+        from matplotlib.colors import PowerNorm
+        vlo, vhi = np.nanmin(Z), np.nanmax(Z)
+        norm = PowerNorm(0.62, vmin=vlo - 0.04 * (vhi - vlo), vmax=vhi)                 # lift the low end off black so the field glows
+        ax.imshow(np.ma.masked_invalid(Z), extent=[GX.min(), GX.max(), GY.min(), GY.max()], origin="lower",
+                  cmap=cmap, norm=norm, interpolation="bilinear", aspect="equal", zorder=0)   # the relief as a smooth field
+    lc = "#ffffff"
     for c in _contours(flat, np.linspace(z0 + 0.4, z1 - 0.2, 14)):
-        ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.45, alpha=0.9)
+        ax.plot(c[:, 0], c[:, 1], color=lc, lw=0.4, alpha=0.22)                          # fine topographic lines over the colour
     try:
         poly = trimesh.path.polygons.projected(flat, normal=[0, 0, 1])
         for ring in ([poly.exterior] + list(poly.interiors)) if poly is not None else []:
             xy = np.array(ring.coords); ax.plot(xy[:, 0], xy[:, 1], color=INK, lw=1.0)
     except Exception: pass
-    for yc, _ in pivots: ax.axhline(yc, color=DIM, lw=0.35, ls=(0, (3, 4)), alpha=0.6)   # the joint lines across the axis
-    ax.axvline(0, color=DIM, lw=0.4, ls=(0, (6, 4)))
+    for yc, _ in pivots: ax.axhline(yc, color=DIM, lw=0.35, ls=(0, (3, 4)), alpha=0.45)  # the joint lines across the axis
+    ax.axvline(0, color=DIM, lw=0.4, ls=(0, (6, 4)), alpha=0.6)
     W, L = x1 - x0, y1 - y0
     _dim(ax, x0, y0, x1, y0, f"{W:.1f}", off=-8); _dim(ax, x1, y0, x1, y1, f"{L:.1f}", off=10)
-    ax.text(x0, y1 + 6, "PLAN · contours %.1f mm · joint lines" % ((z1 - z0) / 14), color=INK, fontsize=8, family="monospace")
+    ax.text(x0, y1 + 6, "PLAN · relief field (%s) · %.1f mm" % (cmap, z1 - z0), color=INK, fontsize=8, family="monospace")
     ax.set_xlim(x0 - 20, x1 + 20); ax.set_ylim(y0 - 14, y1 + 12)
     # ---- LATERAL: silhouette + midline section
     ax2 = fig.add_subplot(gs[4:6, 0:5]); ax2.set_facecolor(BG); ax2.set_aspect("equal"); ax2.axis("off")
