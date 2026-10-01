@@ -12,6 +12,14 @@ INK, BG, DIM = "#ffffff", "#000000", "#9a9a9a"
 CMAPS = ("magma", "viridis", "twilight", "inferno", "cividis", "gray")   # scientific field colormaps (wave-optics look)
 RELIEF_ALPHA = 0.5   # the relief field sits semi-transparent under the blueprint lines — muted, not vibrant
 
+def _field(ax, GA, GB, Z, cmap):
+    """Draw a relief scalar field as a soft, semi-transparent colormapped image (the wave-optics look)."""
+    if Z is None or not np.isfinite(Z).any(): return
+    from matplotlib.colors import PowerNorm
+    vlo, vhi = np.nanmin(Z), np.nanmax(Z)
+    ax.imshow(np.ma.masked_invalid(Z), extent=[GA.min(), GA.max(), GB.min(), GB.max()], origin="lower", cmap=cmap,
+              norm=PowerNorm(0.6, vmin=vlo - 0.04 * (vhi - vlo), vmax=vhi), interpolation="bilinear", aspect="equal", zorder=0, alpha=RELIEF_ALPHA)
+
 def _strong_outline(ax, GX, GY, Mask, color=INK, lw=1.9):
     """A bold blueprint silhouette traced from the footprint mask's boundary (robust; no shapely / no topology errors)."""
     if Mask is None or not Mask.any(): return
@@ -19,25 +27,31 @@ def _strong_outline(ax, GX, GY, Mask, color=INK, lw=1.9):
         ax.contour(GX, GY, Mask.astype(float), levels=[0.5], colors=[color], linewidths=lw, antialiased=True)
     except Exception: pass
 
-def _relief_grid(m, n=300):
-    """Top-surface height on a regular (x, y) grid over the mesh footprint, NaN outside the dorsal outline — the
-    dorsal relief as a scalar field, for a colormapped (magma/viridis) rendering like a wave-optics intensity map."""
+def _relief_grid(m, n=300, view="top"):
+    """A relief scalar field on a regular grid, masked to the footprint (NaN outside), for a colormapped rendering.
+    view='top': dorsal height z over (x, y). view='side': flank depth |x| (half-width) over (y, z) — the lateral relief.
+    Returns (GA, GB, field, mask); the mask boundary is the silhouette. Robust (KDTree mask, no shapely)."""
     try:
         from scipy.interpolate import griddata
         from scipy.spatial import cKDTree
-        V = m.vertices; up = m.vertex_normals[:, 2] > 0.15          # the dorsal (upward-facing) surface
-        Vp = V[up] if up.sum() > 50 else V
-        x0, y0, x1, y1 = V[:, 0].min(), V[:, 1].min(), V[:, 0].max(), V[:, 1].max()
-        gx = np.linspace(x0, x1, n); gy = np.linspace(y0, y1, max(2, int(n * (y1 - y0) / max(x1 - x0, 1e-6))))
-        GX, GY = np.meshgrid(gx, gy); pts = np.c_[GX.ravel(), GY.ravel()]
-        Z = griddata(Vp[:, :2], Vp[:, 2], (GX, GY), method="linear")
-        # mask to the actual footprint: a grid cell is "on the animal" if a surface vertex sits within ~2 cells of it.
-        # (robust where projected-outline booleans fail on the isopod's 11 separate plates; the plate gaps stay dark.)
-        d, _ = cKDTree(Vp[:, :2]).query(pts)
-        cell = 2.5 * max(gx[1] - gx[0], gy[1] - gy[0])
-        M = (d < cell).reshape(GX.shape)                           # the footprint mask; its boundary is the silhouette
+        V = m.vertices
+        if view == "side":                                         # the right flank, depth = |x| over (y, z)
+            sel = V[:, 0] > 0.5
+            if sel.sum() < 50: sel = np.ones(len(V), bool)
+            Pxy = V[sel][:, [1, 2]]; val = np.abs(V[sel][:, 0])
+        else:                                                      # the dorsal (upward-facing) surface, height z over (x, y)
+            up = m.vertex_normals[:, 2] > 0.15; sel = up if up.sum() > 50 else np.ones(len(V), bool)
+            Pxy = V[sel][:, [0, 1]]; val = V[sel][:, 2]
+        a0, b0, a1, b1 = Pxy[:, 0].min(), Pxy[:, 1].min(), Pxy[:, 0].max(), Pxy[:, 1].max()
+        ga = np.linspace(a0, a1, n); gb = np.linspace(b0, b1, max(2, int(n * (b1 - b0) / max(a1 - a0, 1e-6))))
+        GA, GB = np.meshgrid(ga, gb); pts = np.c_[GA.ravel(), GB.ravel()]
+        Z = griddata(Pxy, val, (GA, GB), method="linear")
+        # mask to the actual footprint: a grid cell is "on the animal" if a surface point sits within ~2 cells of it.
+        d, _ = cKDTree(Pxy).query(pts)
+        cell = 2.5 * max(ga[1] - ga[0], gb[1] - gb[0])
+        M = (d < cell).reshape(GA.shape)
         Z = np.where(M, Z, np.nan)
-        return GX, GY, Z, M
+        return GA, GB, Z, M
     except Exception:
         return None, None, None, None
 
@@ -419,13 +433,8 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="magma"):
     for gy in np.linspace(0, 1, 29): bgax.axhline(gy, color="#1c1c1c", lw=0.4)
     # ---- PLAN (dorsal): relief as a colormapped scalar field + fine contour lines + outline
     ax = fig.add_subplot(gs[0:4, 0:5]); ax.set_facecolor(BG); ax.set_aspect("equal"); ax.axis("off")
-    GX, GY, Z, Mask = _relief_grid(flat)
-    if Z is not None and np.isfinite(Z).any():
-        from matplotlib.colors import PowerNorm
-        vlo, vhi = np.nanmin(Z), np.nanmax(Z)
-        norm = PowerNorm(0.62, vmin=vlo - 0.04 * (vhi - vlo), vmax=vhi)                 # lift the low end off black so the field glows
-        ax.imshow(np.ma.masked_invalid(Z), extent=[GX.min(), GX.max(), GY.min(), GY.max()], origin="lower",
-                  cmap=cmap, norm=norm, interpolation="bilinear", aspect="equal", zorder=0, alpha=RELIEF_ALPHA)   # a soft, semi-transparent field under the blueprint
+    GX, GY, Z, Mask = _relief_grid(flat, view="top")
+    _field(ax, GX, GY, Z, cmap)                                                           # the dorsal relief field
     for c in _contours(flat, np.linspace(z0 + 0.4, z1 - 0.2, 14)):
         ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.4, alpha=0.22)                          # fine topographic lines over the colour
     _strong_outline(ax, GX, GY, Mask)                                                     # the strong blueprint outline
@@ -435,22 +444,20 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="magma"):
     _dim(ax, x0, y0, x1, y0, f"{W:.1f}", off=-8); _dim(ax, x1, y0, x1, y1, f"{L:.1f}", off=10)
     ax.text(x0, y1 + 6, "PLAN · relief field (%s) · %.1f mm" % (cmap, z1 - z0), color=INK, fontsize=8, family="monospace")
     ax.set_xlim(x0 - 20, x1 + 20); ax.set_ylim(y0 - 14, y1 + 12)
-    # ---- LATERAL: silhouette + midline section
+    # ---- LATERAL: the flank relief (depth from the side) + midline section + silhouette
     ax2 = fig.add_subplot(gs[4:6, 0:5]); ax2.set_facecolor(BG); ax2.set_aspect("equal"); ax2.axis("off")
-    try:
-        poly = trimesh.path.polygons.projected(flat, normal=[1, 0, 0])
-        for ring in ([poly.exterior] + list(poly.interiors)) if poly is not None else []:
-            xy = np.array(ring.coords); ax2.plot(xy[:, 0], xy[:, 1], color=DIM, lw=0.6)
-    except Exception: pass
+    GYs, GZs, Zs, Ms = _relief_grid(flat, view="side")
+    _field(ax2, GYs, GZs, Zs, cmap)                                                       # the lateral relief field
     try:
         s = flat.section(plane_origin=[0, 0, 0], plane_normal=[1, 0, 0])
-        for e in s.entities: p = s.vertices[e.points]; ax2.plot(p[:, 1], p[:, 2], color=INK, lw=0.7)
+        for e in s.entities: p = s.vertices[e.points]; ax2.plot(p[:, 1], p[:, 2], color=INK, lw=0.5, alpha=0.5)
     except Exception: pass
+    _strong_outline(ax2, GYs, GZs, Ms)                                                    # the side silhouette
     _dim(ax2, y1 + 10, z0, y1 + 10, z1, f"{z1 - z0:.1f}", off=0)
-    ax2.text(y0, z1 + 5, "SECTION A–A · lateral", color=INK, fontsize=8, family="monospace")
+    ax2.text(y0, z1 + 5, "SECTION A–A · lateral relief (%s)" % cmap, color=INK, fontsize=8, family="monospace")
     ax2.set_xlim(y0 - 10, y1 + 26); ax2.set_ylim(z0 - 6, z1 + 10)
     # ---- CURLED: the chain enrolled on its ball joints (midline section + faint silhouette)
-    ax3 = fig.add_subplot(gs[0:4, 5:9]); ax3.set_facecolor(BG); ax3.set_aspect("equal"); ax3.axis("off")
+    ax3 = fig.add_subplot(gs[0:3, 5:9]); ax3.set_facecolor(BG); ax3.set_aspect("equal"); ax3.axis("off")
     try:
         s = flat.section(plane_origin=[0, 0, 0], plane_normal=[1, 0, 0])
         for e in s.entities: p = s.vertices[e.points]; ax3.plot(p[:, 1], p[:, 2], color=DIM, lw=0.5, alpha=0.6)   # flat, for reference
@@ -467,8 +474,19 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="magma"):
     (py0, pz0), (py1, pz1) = posed.bounds[0][1:], posed.bounds[1][1:]
     ax3.set_title(f"ENROLLED · {curl:.0f}°/joint · {curl * len(pivots):.0f}° over {len(pivots)} joints", color=INK, fontsize=8, family="monospace", loc="left")
     ax3.set_xlim(min(y0, py0) - 8, max(y1, py1) + 8); ax3.set_ylim(min(z0, pz0) - 6, max(z1, pz1) + 10)
+    # ---- HEAD / EYES: a colormapped relief portrait of the head (crescent, glabella, the two eyes)
+    axe = fig.add_subplot(gs[3:6, 5:7]); axe.set_facecolor(BG); axe.set_aspect("equal"); axe.axis("off")
+    head = parts[0].copy(); head.apply_translation([-head.centroid[0], 0, 0])
+    (hx0, hy0, hz0), (hx1, hy1, hz1) = head.bounds
+    HGX, HGY, HZ, HM = _relief_grid(head, view="top", n=240)
+    _field(axe, HGX, HGY, HZ, cmap)
+    for c in _contours(head, np.linspace(hz0 + 0.4, hz1 - 0.2, 16)):
+        axe.plot(c[:, 0], c[:, 1], color=INK, lw=0.4, alpha=0.28)
+    _strong_outline(axe, HGX, HGY, HM)
+    axe.text(hx0, hy1 + 4, "HEAD · EYES · relief portrait (%s)" % cmap, color=INK, fontsize=8, family="monospace")
+    axe.set_xlim(hx0 - 5, hx1 + 5); axe.set_ylim(hy0 - 5, hy1 + 7)
     # ---- TITLE BLOCK
-    ax4 = fig.add_subplot(gs[4:6, 5:7]); ax4.set_facecolor(BG); ax4.axis("off")
+    ax4 = fig.add_subplot(gs[3:5, 7:9]); ax4.set_facecolor(BG); ax4.axis("off")
     lines = ["    " + title, "", f"DRAWING  {info.get('params', '—')}", "",
              f"LENGTH   {L:.1f} mm", f"WIDTH    {W:.1f} mm", f"RELIEF   {z1 - z0:.1f} mm", "",
              f"PIECES   {len(parts)}", f"JOINTS   {len(pivots)} · ball", f"CURL     {curl:.0f}°/joint · {curl * len(pivots):.0f}° total", "",
@@ -478,14 +496,14 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="magma"):
     for s in ax4.spines.values(): s.set_visible(True); s.set_color(INK); s.set_linewidth(0.8)
     ax4.set_xticks([]); ax4.set_yticks([]); ax4.axis("on")
     # ---- PIECES + PIVOTS table
-    ax5 = fig.add_subplot(gs[4:6, 7:9]); ax5.set_facecolor(BG); ax5.axis("off")
+    ax5 = fig.add_subplot(gs[5:6, 7:9]); ax5.set_facecolor(BG); ax5.axis("off")
     vols = info.get("volumes") or [None] * len(parts)
     rows = ["PIECE        PIVOT y,z (mm)"]
     for k, nm in enumerate(names):
         piv = f"{pivots[k-1][0]:6.1f},{pivots[k-1][1]:5.1f}" if 0 < k <= len(pivots) else "   —  (head)"
         rows.append(f"{nm:<11} {piv}")
-    ax5.set_title("PIECES · joint pivots", color=INK, fontsize=7.5, family="monospace", loc="left")
-    ax5.text(0.0, 0.96, "\n".join(rows), color=INK, fontsize=6.6, family="monospace", va="top", ha="left", linespacing=1.5, transform=ax5.transAxes)
+    ax5.set_title("PIECES · joint pivots", color=INK, fontsize=7, family="monospace", loc="left")
+    ax5.text(0.0, 0.98, "\n".join(rows), color=INK, fontsize=5.6, family="monospace", va="top", ha="left", linespacing=1.3, transform=ax5.transAxes)
     fig.text(0.98, 0.018, "Claire Choi · Cornell", color=INK, fontsize=8, ha="right", va="bottom", family="monospace")
     import json as _json
     spec = _json.dumps({"hash": info.get("params", ""), "schema": info.get("schema", ""), "model": "isopod", "params": P}, sort_keys=True, default=str)
