@@ -55,6 +55,14 @@
   .rollbar{position:absolute;left:16px;right:16px;bottom:16px;display:none;grid-template-columns:1fr auto auto;gap:14px;align-items:center}
   .rollbar input[type=range]{height:1px} .rollbar input[type=range]::-webkit-slider-thumb{width:16px;height:16px}
   .rollbar .val{min-width:120px;text-align:right;font-variant-numeric:tabular-nums}
+  /* rainbow controls: the flow/enrollment mode, speed & band dials, a direction flip, and the loop recorder */
+  .rbctl{position:absolute;left:16px;bottom:52px;display:none;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--mid);letter-spacing:.04em;text-transform:uppercase;background:rgba(0,0,0,.45);padding:5px 10px;border:1px solid var(--line);user-select:none}
+  .rbctl label{display:inline-flex;align-items:center;gap:6px}
+  .rbctl input[type=range]{width:70px;height:1px}
+  .rbctl .rbmode span{cursor:pointer} .rbctl .rbmode span.on{color:var(--accent);border-bottom:1px solid var(--accent)}
+  .rbctl .rbdir{cursor:pointer;font-size:13px;display:inline-block;transition:transform .2s} .rbctl .rbdir.flip{transform:scaleY(-1)}
+  .rbctl button{background:var(--bg);color:var(--ink);border:1px solid var(--ink);padding:3px 8px;font:inherit;font-size:10px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+  .rbctl button:hover{background:var(--soft)} .rbctl button:disabled{opacity:.4;cursor:default}
   .loading{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#000;z-index:6}
   .loading.on{display:flex}
   .loading img{width:150px;height:auto;image-rendering:auto;opacity:.9}
@@ -162,6 +170,13 @@
     <div class="status" id="status"></div>
     <div class="look" id="look"><span class="on" data-look="blueprint">Blueprint</span> · <span data-look="model">Relief</span></div>
     <div class="rollbar" id="rollbar"><input type="range" id="roll" min="0" max="45" step="0.1" value="0"><div class="val" id="rollval"></div><button id="go">Roll</button></div>
+    <div class="rbctl" id="rbctl">
+      <span class="rbmode" id="rbmode"><span class="on" data-m="flow">flow</span> · <span data-m="roll">enrollment</span></span>
+      <label>speed <input type="range" id="rbspeed" min="0.1" max="3" step="0.1" value="1"></label>
+      <label>bands <input type="range" id="rbbands" min="0.5" max="6" step="0.5" value="1"></label>
+      <span class="rbdir" id="rbdir" title="reverse the flow direction">⇵</span>
+      <button id="rbrec" title="record one seamless loop as a video">Record loop</button>
+    </div>
     <div class="loading" id="loading">
       <svg id="loadsvg" viewBox="0 0 280 200" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" aria-label="building"></svg>
       <div class="count" id="lcount"></div>
@@ -676,6 +691,20 @@ const fillMat=new THREE.MeshBasicMaterial({color:0x000000,polygonOffset:true,pol
 const inkLine=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.9});
 const faintLine=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.18});
 const shaded=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.78,metalness:0.0});   // the Relief look: per-vertex colormap by height
+// ---- rainbow (GPU): the hue is computed per-fragment on the card, from the rest-frame height and a time uniform.
+// Smooth on dense meshes, free while the animal also rolls, and whatever is on screen is exactly what gets recorded.
+// uMode 0 = flow (hues scroll by height), 1 = enrollment (hue tracks the roll fraction). Full saturation, no grey.
+const rbU={ uTime:{value:0}, uSpeed:{value:1}, uDir:{value:1}, uBands:{value:1}, uZmin:{value:0}, uZmax:{value:1}, uMode:{value:0}, uRoll:{value:0} };
+const rainbowMat=new THREE.MeshStandardMaterial({roughness:0.62,metalness:0.0});   // lit for depth; diffuse replaced by the hue below
+rainbowMat.onBeforeCompile=sh=>{ for(const k in rbU) sh.uniforms[k]=rbU[k];
+  sh.vertexShader='varying float vRBh;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\n  vRBh=position.z;');   // rest-frame height, matching the sheet's field
+  sh.fragmentShader=('varying float vRBh;\nuniform float uTime,uSpeed,uDir,uBands,uZmin,uZmax,uRoll;\nuniform int uMode;\n'
+    +'vec3 rbHue(float h){ vec3 p=abs(fract(vec3(h)+vec3(1.0,0.6666667,0.3333333))*6.0-3.0); return clamp(p-1.0,0.0,1.0); }\n'
+    +sh.fragmentShader).replace('#include <color_fragment>',
+      '#include <color_fragment>\n  float rbT=clamp((vRBh-uZmin)/max(uZmax-uZmin,1e-4),0.0,1.0);\n'
+      +'  float rbHueV=(uMode==1)?(uRoll+0.15*rbT):(rbT*uBands+uDir*uTime*uSpeed*0.14);\n'
+      +'  diffuseColor.rgb=rbHue(rbHueV);'); };
+function reliefMat(){ return cmap==='rainbow'?rainbowMat:shaded; }
 // scientific colormaps (matplotlib anchors) for the 3D relief, matching the blueprint's field
 const CMAP_HEX={magma:['#000004','#180f3e','#451077','#721f81','#9f2f7f','#cd4071','#f1605d','#fd9567','#fec98d','#fcfdbf'],
   viridis:['#440154','#482878','#3e4a89','#31688e','#26828e','#1f9e89','#35b779','#6ece58','#b5de2b','#fde725'],
@@ -695,44 +724,62 @@ function colorParts(){ if(!threeReady) return; let zmin=Infinity,zmax=-Infinity;
     for(let i=0;i<n;i++){ const t=Math.pow(Math.min(Math.max((pos.getZ(i)-zmin)/dz,0),1),0.75), c=cmapRGB(t,cmap);
       col[3*i]=c[0]*(1-MUTE)+0.45*MUTE; col[3*i+1]=c[1]*(1-MUTE)+0.45*MUTE; col[3*i+2]=c[2]*(1-MUTE)+0.45*MUTE; }
     geo.setAttribute('color',new THREE.BufferAttribute(col,3)); } }
-// ---- rainbow: a flowing full-spectrum relief. Every hue is on the shell at once, mapped by height, and the whole
-// band scrolls along the body and loops seamlessly — a repeating gif, not a still. Full saturation (no grey mute).
-// Lives only in the 3D Relief view; the matplotlib sheet renders one frame per request and can't animate.
-let rainbowRAF=null, rainbowCache=null;
-function hsv2rgb(h,s,v){ h=(h%1+1)%1; const i=Math.floor(h*6),f=h*6-i,p=v*(1-s),q=v*(1-f*s),t=v*(1-(1-f)*s);
-  switch(i%6){ case 0:return [v,t,p]; case 1:return [q,v,p]; case 2:return [p,v,t]; case 3:return [p,q,v]; case 4:return [t,p,v]; default:return [v,p,q]; } }
-function prepRainbow(){ const gs=Object.values(partMeshes); if(!gs.length){ rainbowCache=null; return; }
-  let zmin=Infinity,zmax=-Infinity;                                            // the hue ramp spans the whole animal's height
+// ---- rainbow driver: the shader does the colouring; here we just feed it the animal's height range and the
+// controls, bump a time uniform each frame (in the render loop), and record one seamless loop on demand. 3D only.
+function prepRainbow(){ const gs=Object.values(partMeshes); if(!gs.length) return;   // the hue ramp spans the whole animal's height
+  let zmin=Infinity,zmax=-Infinity;
   for(const g of gs){ const geo=g.getObjectByName('fill').geometry; geo.computeBoundingBox(); zmin=Math.min(zmin,geo.boundingBox.min.z); zmax=Math.max(zmax,geo.boundingBox.max.z); }
-  const dz=Math.max(zmax-zmin,1e-6); rainbowCache=[];
-  for(const g of gs){ const geo=g.getObjectByName('fill').geometry, pos=geo.attributes.position, n=pos.count, tArr=new Float32Array(n);
-    for(let i=0;i<n;i++) tArr[i]=Math.min(Math.max((pos.getZ(i)-zmin)/dz,0),1);   // cache the per-vertex height once; the frame loop only re-hues
-    let col=geo.getAttribute('color'); if(!col||col.count!==n){ col=new THREE.BufferAttribute(new Float32Array(n*3),3); geo.setAttribute('color',col); }
-    rainbowCache.push({tArr,col}); } }
-function rainbowTick(ts){ if(!rainbowCache){ rainbowRAF=null; return; }
-  const phase=(ts*0.00014)%1, SPAN=1.0;                                        // SPAN=1 → a full spectrum head-to-tail; phase scrolls it, time-based so dropped frames don't stutter
-  for(const {tArr,col} of rainbowCache){ const a=col.array, n=tArr.length;
-    for(let i=0;i<n;i++){ const c=hsv2rgb(tArr[i]*SPAN+phase,1,1); a[3*i]=c[0]; a[3*i+1]=c[1]; a[3*i+2]=c[2]; }
-    col.needsUpdate=true; }
-  rainbowRAF=requestAnimationFrame(rainbowTick); }
-function startRainbow(){ if(!threeReady) return; prepRainbow(); if(!rainbowRAF) rainbowRAF=requestAnimationFrame(rainbowTick); }
-function stopRainbow(){ if(rainbowRAF){ cancelAnimationFrame(rainbowRAF); rainbowRAF=null; } }
+  rbU.uZmin.value=zmin; rbU.uZmax.value=zmax; }
+function startRainbow(){ if(threeReady) prepRainbow(); }
+function stopRainbow(){}                                                       // the shader is inert unless rainbowMat is bound; nothing to tear down
+function updateRbCtl(){ $('rbctl').style.display=(mode==='3d'&&cmap==='rainbow')?'flex':'none'; }
+// control strip: mode / speed / bands / direction, each feeding a shader uniform (wired once; the strip is static HTML)
+$('rbspeed').oninput=e=>rbU.uSpeed.value=+e.target.value;
+$('rbbands').oninput=e=>rbU.uBands.value=+e.target.value;
+$('rbdir').onclick=()=>{ rbU.uDir.value*=-1; $('rbdir').classList.toggle('flip'); };
+$('rbmode').onclick=e=>{ const m=e.target.dataset.m; if(!m) return; rbU.uMode.value=(m==='roll'?1:0);
+  [...$('rbmode').children].forEach(s=>s.classList.toggle('on',s.dataset.m===m)); };
+// record one seamless loop off the live canvas into a WebM. Flow: one full hue cycle (so the first and last frame
+// match). Enrollment: one roll out-and-back. MediaRecorder on captureStream — no libraries, no server round-trip.
+let recording=false;
+async function recordLoop(){ if(recording||!threeReady) return;
+  if(!window.MediaRecorder||!ren.domElement.captureStream){ status('recording unsupported here',false); return; }
+  recording=true; const btn=$('rbrec'), label=btn.textContent; btn.disabled=true;
+  const roll=rbU.uMode.value===1, cyc=Math.min(Math.max(1/Math.max(rbU.uSpeed.value*0.14,0.05),2),10);   // seconds for the hue to return to its start
+  const dur=roll?Math.max(cyc,3.2):cyc, mx=+$('roll').max||1; let rafid;
+  try{
+    const stream=ren.domElement.captureStream(30), chunks=[];
+    const mime=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(m=>MediaRecorder.isTypeSupported(m))||'video/webm';
+    const rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:12e6});
+    rec.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); };
+    const stopped=new Promise(r=>rec.onstop=r); const t0=performance.now()*0.001; rec.start(); btn.textContent='recording…';
+    (function drive(){ const u=Math.min((performance.now()*0.001-t0)/dur,1);   // in enrollment mode, roll out and back so the clip loops
+      if(roll) pose(mx*(u<0.5?u*2:(1-u)*2));
+      if(u<1) rafid=requestAnimationFrame(drive); })();
+    await new Promise(r=>setTimeout(r,dur*1000+120)); cancelAnimationFrame(rafid); rec.stop(); await stopped;
+    if(roll) pose(+$('roll').value);                                           // restore the posed angle the slider was at
+    const blob=new Blob(chunks,{type:mime}), url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=`trilobite-${ps.value}-rainbow.webm`; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),15000); status('loop saved · '+(blob.size/1e6).toFixed(1)+' MB',false);
+  }catch(ex){ cancelAnimationFrame(rafid); status('record failed · '+why(ex),false); }
+  finally{ recording=false; btn.disabled=false; btn.textContent=label; } }
+$('rbrec').onclick=recordLoop;
 function init3d(){ if(threeReady) return; threeReady=true; const view=$('stage3d'); scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
-  cam=new THREE.PerspectiveCamera(40,1,1,5000); cam.position.set(140,110,190); ren=new THREE.WebGLRenderer({antialias:true}); view.appendChild(ren.domElement); ctl=new OrbitControls(cam,ren.domElement); ctl.target.set(0,10,0);
+  cam=new THREE.PerspectiveCamera(40,1,1,5000); cam.position.set(140,110,190); ren=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true}); view.appendChild(ren.domElement);   // preserveDrawingBuffer: captureStream can grab clean frames for the recorder ctl=new OrbitControls(cam,ren.domElement); ctl.target.set(0,10,0);
   scene.add(new THREE.HemisphereLight(0xffffff,0x888888,1.0)); const key=new THREE.DirectionalLight(0xffffff,1.2); key.position.set(80,160,120); scene.add(key);
   grid=new THREE.GridHelper(400,40,0x2a2a2a,0x161616); grid.position.y=-0.5; scene.add(grid);
   root=new THREE.Group(); root.rotation.x=-Math.PI/2; scene.add(root); loader=new STLLoader();
   const rs=()=>{ren.setSize(view.clientWidth,view.clientHeight); cam.aspect=view.clientWidth/view.clientHeight; cam.updateProjectionMatrix();}; window.addEventListener('resize',rs); rs();
-  (function loop(){requestAnimationFrame(loop); ctl.update(); ren.render(scene,cam);})(); }
-function partGroup(geo){ const g=new THREE.Group(); const m=new THREE.Mesh(geo, look==='blueprint'?fillMat:shaded); m.name='fill'; g.add(m);
+  (function loop(){requestAnimationFrame(loop); rbU.uTime.value=performance.now()*0.001; ctl.update(); ren.render(scene,cam);})(); }   // one clock drives the flow; any window of a full cycle is a seamless loop
+function partGroup(geo){ const g=new THREE.Group(); const m=new THREE.Mesh(geo, look==='blueprint'?fillMat:reliefMat()); m.name='fill'; g.add(m);
   const e1=new THREE.LineSegments(new THREE.EdgesGeometry(geo,24), inkLine.clone()); e1.name='edges'; g.add(e1);
   const e2=new THREE.LineSegments(new THREE.EdgesGeometry(geo,8), faintLine.clone()); e2.name='faint'; g.add(e2); return g; }
 function setLook(l){ look=l; [...$('look').children].forEach(s=>s.classList.toggle('on',s.dataset.look===l)); if(!threeReady) return;
   scene.background=new THREE.Color(0x000000);                                  // dark for both; the colormap glows on black
   stopRainbow();                                                              // leaving Relief (or re-entering) always restarts clean
   if(l!=='blueprint'){ if(cmap==='rainbow') startRainbow(); else colorParts(); }
-  for(const g of Object.values(partMeshes)){ g.getObjectByName('fill').material=(l==='blueprint'?fillMat:shaded); g.getObjectByName('edges').visible=true; g.getObjectByName('faint').visible=(l==='blueprint'); }   // white feature edges in both looks: the Relief keeps a blueprint outline over the colormap
-  scene.remove(grid); grid=new THREE.GridHelper(400,40,0x2a2a2a,0x161616); grid.position.y=-0.5; scene.add(grid); }
+  for(const g of Object.values(partMeshes)){ g.getObjectByName('fill').material=(l==='blueprint'?fillMat:reliefMat()); g.getObjectByName('edges').visible=true; g.getObjectByName('faint').visible=(l==='blueprint'); }   // white feature edges in both looks: the Relief keeps a blueprint outline over the colormap
+  scene.remove(grid); grid=new THREE.GridHelper(400,40,0x2a2a2a,0x161616); grid.position.y=-0.5; scene.add(grid); updateRbCtl(); }
 $('look').onclick=e=>{ if(e.target.dataset.look) setLook(e.target.dataset.look); };
 async function load3d(man){ init3d(); stopRainbow(); rainbowCache=null; root.clear(); partMeshes={};   // drop the stale per-vertex cache before the old geometry goes
   if(!man){ try{ man=await post('/api/build',buildBody()); } catch(ex){ status('3D failed · '+why(ex),false); return; } }
@@ -744,7 +791,8 @@ async function load3d(man){ init3d(); stopRainbow(); rainbowCache=null; root.cle
   pose(+$('roll').value); fit(); $('view3d').style.display='flex'; }
 function fit(){ const box=new THREE.Box3().setFromObject(root); if(box.isEmpty()) return; const c=box.getCenter(new THREE.Vector3()), s=box.getSize(new THREE.Vector3()).length();
   ctl.target.copy(c); cam.position.copy(c).add(new THREE.Vector3(0.6,0.55,0.95).multiplyScalar(s*0.9)); cam.near=s/100; cam.far=s*10; cam.updateProjectionMatrix(); }
-function pose(th){ if(!kin||!threeReady) return; const rot=new THREE.Matrix4().makeRotationX(-th*Math.PI/180);
+function pose(th){ if(!kin||!threeReady) return; rbU.uRoll.value=((+$('roll').max>0)?th/(+$('roll').max):0);   // enrollment-hue mode reads the roll fraction
+  const rot=new THREE.Matrix4().makeRotationX(-th*Math.PI/180);
   if(kin.pivots){ // isopod model: parts are in one frame; each joint curls about its own pivot (y,z) in print mm
     let M=new THREE.Matrix4();
     kin.names.forEach((n,i)=>{ if(i>0){ const p=kin.pivots[i-1]; M=M.clone().multiply(new THREE.Matrix4().makeTranslation(0,p[0],p[1])).multiply(rot).multiply(new THREE.Matrix4().makeTranslation(0,-p[0],-p[1])); } const g=partMeshes[n]; if(g){g.matrixAutoUpdate=false; g.matrix.copy(M);} });
@@ -752,8 +800,8 @@ function pose(th){ if(!kin||!threeReady) return; const rot=new THREE.Matrix4().m
   const pz=(posePivotZ!=null?posePivotZ:kin.hinge_z), py=posePivotY, offs=kin.offsets; let M=new THREE.Matrix4();
   kin.names.forEach((n,i)=>{ if(i>0){ M=M.clone().multiply(new THREE.Matrix4().makeTranslation(0,offs[i-1],0)).multiply(new THREE.Matrix4().makeTranslation(0,py,pz)).multiply(rot).multiply(new THREE.Matrix4().makeTranslation(0,-py,-pz)); } const g=partMeshes[n]; if(g){g.matrixAutoUpdate=false; g.matrix.copy(M);} }); }
 function highlight(row){ if(!threeReady) return; for(const [n,g] of Object.entries(partMeshes)){ const on=row&&(row==='seg'?n.startsWith('seg'):n===row); const e=g.getObjectByName('edges'); if(e) e.material.opacity=on?1.0:(row?0.35:0.9); } }
-async function to3D(load){ mode='3d'; $('sheet').style.display='none'; $('stage3d').style.display='block'; $('rollbar').style.display='grid'; $('look').style.display='block'; $('view3d').textContent='View sheet'; placeView3D(); if(load) await load3d(null); }
-async function toSheet(){ mode='sheet'; $('stage3d').style.display='none'; $('rollbar').style.display='none'; $('look').style.display='none'; $('sheet').style.display='block'; $('view3d').textContent='View 3D'; placeView3D(); await sheet(); }
+async function to3D(load){ mode='3d'; $('sheet').style.display='none'; $('stage3d').style.display='block'; $('rollbar').style.display='grid'; $('look').style.display='block'; $('view3d').textContent='View sheet'; placeView3D(); updateRbCtl(); if(load) await load3d(null); }
+async function toSheet(){ mode='sheet'; $('stage3d').style.display='none'; $('rollbar').style.display='none'; $('look').style.display='none'; $('sheet').style.display='block'; $('view3d').textContent='View 3D'; placeView3D(); updateRbCtl(); await sheet(); }
 $('view3d').onclick=async()=>{ if(mode==='sheet') await to3D(true);
   else await toSheet(); };
 function rollLabel(v){ const mx=+$('roll').max||1; return Math.round(100*v/mx)+'% · '+(+v).toFixed(1)+'° / joint'; }
