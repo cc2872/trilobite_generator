@@ -686,7 +686,9 @@ function colorParts(){ if(!threeReady) return; let zmin=Infinity,zmax=-Infinity;
   for(const g of gs){ const geo=g.getObjectByName('fill').geometry; geo.computeBoundingBox(); zmin=Math.min(zmin,geo.boundingBox.min.z); zmax=Math.max(zmax,geo.boundingBox.max.z); }
   const dz=Math.max(zmax-zmin,1e-6);
   for(const g of gs){ const geo=g.getObjectByName('fill').geometry, pos=geo.attributes.position, n=pos.count, col=new Float32Array(n*3);
-    for(let i=0;i<n;i++){ const t=Math.pow(Math.min(Math.max((pos.getZ(i)-zmin)/dz,0),1),0.75), c=cmapRGB(t,cmap); col[3*i]=c[0];col[3*i+1]=c[1];col[3*i+2]=c[2]; }
+    const MUTE=0.4;   // blend toward grey so the 3D relief is muted, matching the sheet's soft field
+    for(let i=0;i<n;i++){ const t=Math.pow(Math.min(Math.max((pos.getZ(i)-zmin)/dz,0),1),0.75), c=cmapRGB(t,cmap);
+      col[3*i]=c[0]*(1-MUTE)+0.45*MUTE; col[3*i+1]=c[1]*(1-MUTE)+0.45*MUTE; col[3*i+2]=c[2]*(1-MUTE)+0.45*MUTE; }
     geo.setAttribute('color',new THREE.BufferAttribute(col,3)); } }
 function init3d(){ if(threeReady) return; threeReady=true; const view=$('stage3d'); scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
   cam=new THREE.PerspectiveCamera(40,1,1,5000); cam.position.set(140,110,190); ren=new THREE.WebGLRenderer({antialias:true}); view.appendChild(ren.domElement); ctl=new OrbitControls(cam,ren.domElement); ctl.target.set(0,10,0);

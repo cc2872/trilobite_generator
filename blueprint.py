@@ -10,6 +10,7 @@ from matplotlib.patches import Arc, Circle, Ellipse
 
 INK, BG, DIM = "#ffffff", "#000000", "#9a9a9a"
 CMAPS = ("magma", "viridis", "twilight", "inferno", "cividis", "gray")   # scientific field colormaps (wave-optics look)
+RELIEF_ALPHA = 0.5   # the relief field sits semi-transparent under the blueprint lines — muted, not vibrant
 
 def _strong_outline(ax, GX, GY, Mask, color=INK, lw=1.9):
     """A bold blueprint silhouette traced from the footprint mask's boundary (robust; no shapely / no topology errors)."""
@@ -243,7 +244,7 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None, cmap="
         from matplotlib.colors import PowerNorm
         vlo, vhi = np.nanmin(Z), np.nanmax(Z)
         ax.imshow(np.ma.masked_invalid(Z), extent=[GX.min(), GX.max(), GY.min(), GY.max()], origin="lower", cmap=cmap,
-                  norm=PowerNorm(0.6, vmin=vlo - 0.04 * (vhi - vlo), vmax=vhi), interpolation="bilinear", aspect="equal", zorder=0)
+                  norm=PowerNorm(0.6, vmin=vlo - 0.04 * (vhi - vlo), vmax=vhi), interpolation="bilinear", aspect="equal", zorder=0, alpha=RELIEF_ALPHA)
     for c in _contours(m, np.linspace(z0 + 0.4, z1 - 0.2, 14)):
         ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.4, alpha=0.22)
     _strong_outline(ax, GX, GY, Mask)                                                      # the strong blueprint outline
@@ -424,7 +425,7 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="magma"):
         vlo, vhi = np.nanmin(Z), np.nanmax(Z)
         norm = PowerNorm(0.62, vmin=vlo - 0.04 * (vhi - vlo), vmax=vhi)                 # lift the low end off black so the field glows
         ax.imshow(np.ma.masked_invalid(Z), extent=[GX.min(), GX.max(), GY.min(), GY.max()], origin="lower",
-                  cmap=cmap, norm=norm, interpolation="bilinear", aspect="equal", zorder=0)   # the relief as a smooth field
+                  cmap=cmap, norm=norm, interpolation="bilinear", aspect="equal", zorder=0, alpha=RELIEF_ALPHA)   # a soft, semi-transparent field under the blueprint
     for c in _contours(flat, np.linspace(z0 + 0.4, z1 - 0.2, 14)):
         ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.4, alpha=0.22)                          # fine topographic lines over the colour
     _strong_outline(ax, GX, GY, Mask)                                                     # the strong blueprint outline
