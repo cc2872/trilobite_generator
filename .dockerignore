@@ -1,0 +1,11 @@
+.git
+.venv
+.testvenv
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+*.log
+web_out
+# NOTE: web/cache is intentionally NOT ignored — if the build host already has a warm cache,
+# COPY brings it in and the warm_cache step below is then instant. On a clean host it bakes.
