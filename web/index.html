@@ -136,7 +136,7 @@
 import * as THREE from 'three'; import {OrbitControls} from 'three/addons/controls/OrbitControls.js'; import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 const S = await (await fetch('/api/schema')).json(); const META = Object.fromEntries(S.params.map(p=>[p.key,p]));
 const _u=new URLSearchParams(location.search); const _q=_u.get('order')||_u.get('preset'); const START=(_q&&S.presets.includes(_q))?_q:S.default;   // tree deep link (?order= / ?preset=)
-let P = await (await fetch('/api/preset/'+START)).json(); let sel='frame', showMore=false, kin=null, partMeshes={}, buildKey=null, mode='3d', lastMeas=null, threeReady=false;   // default build is the isopod model, shown in 3D (it has no blueprint sheet)
+let P = await (await fetch('/api/preset/'+START)).json(); let sel='frame', showMore=false, kin=null, partMeshes={}, buildKey=null, mode='3d', lastMeas=null, threeReady=false;   // default build is the isopod model, shown in 3D; "View sheet" draws its blueprint
 const _eye=_u.get('eye'); if(_eye){ const _t=(S.eye_types||[]).find(x=>x.key===_eye); if(_t) Object.assign(P,_t.set); }   // tree ?eye= deep link: apply the eye bundle
 const $=id=>document.getElementById(id); const INK='#ffffff', MID='#9a9a9a', LINE='#262626', SOFT='#141414';
 const ROWOF={b1:'head',a1:'head',b2:'seg',a2:'seg',b3:'tail',a3:'tail'};
@@ -500,14 +500,14 @@ async function build(){ if(building){pending=true;return;} building=true; status
     catch(ex){ status('build failed · '+why(ex),false); return; }
     kin=man.kinematics; buildKey=man.key; readout();
     status(`built in ${man.build_seconds}s · ${man.print.print_valid?'printable':man.print.violations.join('; ')}`,false);
-    if(mode==='sheet' && joint!=='isopod') await sheet(); else await load3d(man);
+    if(mode==='sheet') await sheet(); else await load3d(man);
   } finally { building=false; loadingOff(); if(pending){pending=false; build();} } }
 let sheetWait=null;                        // resolved true by the img's load, false by its error or the timeout,
 const SHEET_TRIES=3;                       // so the overlay lifts on the painted sheet, not on the response
 async function sheet(){ status('drawing sheet',true);
   for(let a=1;a<=SHEET_TRIES;a++){
     let r;
-    try{ r=await retryPost('/api/sheet','sheet',2); if(!r.url) throw new Error(r.error||'no sheet'); }
+    try{ r=await retryPost('/api/sheet','sheet',2,{P,joint}); if(!r.url) throw new Error(r.error||'no sheet'); }
     catch(ex){
       if(a>=SHEET_TRIES){ status('sheet failed · '+why(ex),false); return; }
       status(`sheet failed · retry ${a}/${SHEET_TRIES-1}`,true); await new Promise(z=>setTimeout(z,800*a)); continue; }
@@ -531,7 +531,6 @@ $('dl').onclick=()=>{ if(buildKey) window.location='/api/stl/'+buildKey; };
 function setJoint(j){ if(j!=='pin'&&j!=='flexi'&&j!=='ball'&&j!=='isopod') return; joint=j;
   [...$('jointseg').querySelectorAll('span[data-joint]')].forEach(s=>s.classList.toggle('on',s.dataset.joint===j));
   $('fillwrap').classList.toggle('off',j!=='pin');
-  if(j==='isopod' && mode==='sheet'){ to3D(false); }   // the isopod has no sheet — switch to 3D (build() below loads it)
   build(); }
 $('jointseg').onclick=e=>{ if(e.target.dataset.joint) setJoint(e.target.dataset.joint); };
 $('fill').onchange=e=>{ fillMm=Math.max(0,+e.target.value||0); if(joint==='pin') build(); };
@@ -578,7 +577,7 @@ function highlight(row){ if(!threeReady) return; for(const [n,g] of Object.entri
 async function to3D(load){ mode='3d'; $('sheet').style.display='none'; $('stage3d').style.display='block'; $('rollbar').style.display='grid'; $('look').style.display='block'; $('view3d').textContent='View sheet'; placeView3D(); if(load) await load3d(null); }
 async function toSheet(){ mode='sheet'; $('stage3d').style.display='none'; $('rollbar').style.display='none'; $('look').style.display='none'; $('sheet').style.display='block'; $('view3d').textContent='View 3D'; placeView3D(); await sheet(); }
 $('view3d').onclick=async()=>{ if(mode==='sheet') await to3D(true);
-  else { if(joint==='isopod'){ status('the isopod model has no blueprint sheet',false); return; } await toSheet(); } };
+  else await toSheet(); };
 function rollLabel(v){ const mx=+$('roll').max||1; return Math.round(100*v/mx)+'% · '+(+v).toFixed(1)+'° / joint'; }
 $('roll').oninput=e=>{ $('rollval').textContent=rollLabel(+e.target.value); pose(+e.target.value); };
 // ---- measure

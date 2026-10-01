@@ -346,6 +346,109 @@ if __name__ == "__main__" and len(__import__("sys").argv) > 1 and __import__("sy
     sheet(m, P, meas, sys.argv[4] if len(sys.argv) > 4 else "sheet.png", enrolled=en)
 
 
+# ---------------------------------------------------------------- the isopod model's sheet (30 Sep 2026)
+# The isopod model is a different animal from the pin build: ball joints, a crescent head on the isopod's head piece,
+# print-in-place at the isopod's own size. The pin sheet above (hinge z, knuckles, the enrollment instrument, the eye
+# lattice) does not describe it, so it gets its own sheet: dorsal plan, lateral + midline section, the chain curled on
+# its ball joints, and a title block with the print size, the pieces, and the per-joint pivots.
+def _curl_mats(pivots, curl_deg):
+    """Rest -> posed transform per piece: each joint curled by curl_deg about its pivot (y, z), the chain behind down.
+    The isopod kinematics (isopod_model/body.pose), in the exported print-mm frame."""
+    T = [np.eye(4)]
+    for (yc, zc) in pivots:
+        T.append(T[-1] @ trimesh.transformations.rotation_matrix(math.radians(-curl_deg), (1, 0, 0), (0, yc, zc)))
+    return T
+
+def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE"):
+    """parts: the pieces in their rest frame (print mm, head first). info: {names, pivots, curl_deg, params, schema,
+    build_seconds, volumes}. Writes a PNG and returns the path."""
+    names = info.get("names") or [f"piece {i}" for i in range(len(parts))]
+    pivots = info.get("pivots") or []
+    curl = float(info.get("curl_deg", 30.0))
+    flat = trimesh.util.concatenate([p.copy() for p in parts]); flat.apply_translation([-flat.centroid[0], 0, 0])
+    (x0, y0, z0), (x1, y1, z1) = flat.bounds
+    T = _curl_mats(pivots, curl)
+    posed = trimesh.util.concatenate([parts[k].copy().apply_transform(T[k]) for k in range(len(parts))])
+    posed.apply_translation([-posed.centroid[0], 0, 0])
+
+    fig = plt.figure(figsize=(16.5, 11.7), facecolor=BG)                       # A3 landscape
+    gs = fig.add_gridspec(6, 9, left=0.03, right=0.98, top=0.95, bottom=0.05, wspace=0.25, hspace=0.35)
+    bgax = fig.add_axes([0, 0, 1, 1], zorder=-1); bgax.set_facecolor(BG); bgax.set_xticks([]); bgax.set_yticks([])
+    for s in bgax.spines.values(): s.set_visible(False)
+    for gx in np.linspace(0, 1, 41): bgax.axvline(gx, color="#1c1c1c", lw=0.4)
+    for gy in np.linspace(0, 1, 29): bgax.axhline(gy, color="#1c1c1c", lw=0.4)
+    # ---- PLAN (dorsal): contour lines + outline
+    ax = fig.add_subplot(gs[0:4, 0:5]); ax.set_facecolor(BG); ax.set_aspect("equal"); ax.axis("off")
+    for c in _contours(flat, np.linspace(z0 + 0.4, z1 - 0.2, 14)):
+        ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.45, alpha=0.9)
+    try:
+        poly = trimesh.path.polygons.projected(flat, normal=[0, 0, 1])
+        for ring in ([poly.exterior] + list(poly.interiors)) if poly is not None else []:
+            xy = np.array(ring.coords); ax.plot(xy[:, 0], xy[:, 1], color=INK, lw=1.0)
+    except Exception: pass
+    for yc, _ in pivots: ax.axhline(yc, color=DIM, lw=0.35, ls=(0, (3, 4)), alpha=0.6)   # the joint lines across the axis
+    ax.axvline(0, color=DIM, lw=0.4, ls=(0, (6, 4)))
+    W, L = x1 - x0, y1 - y0
+    _dim(ax, x0, y0, x1, y0, f"{W:.1f}", off=-8); _dim(ax, x1, y0, x1, y1, f"{L:.1f}", off=10)
+    ax.text(x0, y1 + 6, "PLAN · contours %.1f mm · joint lines" % ((z1 - z0) / 14), color=INK, fontsize=8, family="monospace")
+    ax.set_xlim(x0 - 20, x1 + 20); ax.set_ylim(y0 - 14, y1 + 12)
+    # ---- LATERAL: silhouette + midline section
+    ax2 = fig.add_subplot(gs[4:6, 0:5]); ax2.set_facecolor(BG); ax2.set_aspect("equal"); ax2.axis("off")
+    try:
+        poly = trimesh.path.polygons.projected(flat, normal=[1, 0, 0])
+        for ring in ([poly.exterior] + list(poly.interiors)) if poly is not None else []:
+            xy = np.array(ring.coords); ax2.plot(xy[:, 0], xy[:, 1], color=DIM, lw=0.6)
+    except Exception: pass
+    try:
+        s = flat.section(plane_origin=[0, 0, 0], plane_normal=[1, 0, 0])
+        for e in s.entities: p = s.vertices[e.points]; ax2.plot(p[:, 1], p[:, 2], color=INK, lw=0.7)
+    except Exception: pass
+    _dim(ax2, y1 + 10, z0, y1 + 10, z1, f"{z1 - z0:.1f}", off=0)
+    ax2.text(y0, z1 + 5, "SECTION A–A · lateral", color=INK, fontsize=8, family="monospace")
+    ax2.set_xlim(y0 - 10, y1 + 26); ax2.set_ylim(z0 - 6, z1 + 10)
+    # ---- CURLED: the chain enrolled on its ball joints (midline section + faint silhouette)
+    ax3 = fig.add_subplot(gs[0:4, 5:9]); ax3.set_facecolor(BG); ax3.set_aspect("equal"); ax3.axis("off")
+    try:
+        s = flat.section(plane_origin=[0, 0, 0], plane_normal=[1, 0, 0])
+        for e in s.entities: p = s.vertices[e.points]; ax3.plot(p[:, 1], p[:, 2], color=DIM, lw=0.5, alpha=0.6)   # flat, for reference
+    except Exception: pass
+    try:
+        poly = trimesh.path.polygons.projected(posed, normal=[1, 0, 0])
+        for ring in ([poly.exterior] + list(poly.interiors)) if poly is not None else []:
+            xy = np.array(ring.coords); ax3.plot(xy[:, 0], xy[:, 1], color=INK, lw=0.5, alpha=0.35)
+    except Exception: pass
+    try:
+        s = posed.section(plane_origin=[0, 0, 0], plane_normal=[1, 0, 0])
+        for e in s.entities: p = s.vertices[e.points]; ax3.plot(p[:, 1], p[:, 2], color=INK, lw=0.9)
+    except Exception: pass
+    (py0, pz0), (py1, pz1) = posed.bounds[0][1:], posed.bounds[1][1:]
+    ax3.set_title(f"ENROLLED · {curl:.0f}°/joint · {curl * len(pivots):.0f}° over {len(pivots)} joints", color=INK, fontsize=8, family="monospace", loc="left")
+    ax3.set_xlim(min(y0, py0) - 8, max(y1, py1) + 8); ax3.set_ylim(min(z0, pz0) - 6, max(z1, pz1) + 10)
+    # ---- TITLE BLOCK
+    ax4 = fig.add_subplot(gs[4:6, 5:7]); ax4.set_facecolor(BG); ax4.axis("off")
+    lines = ["    " + title, "", f"DRAWING  {info.get('params', '—')}", "",
+             f"LENGTH   {L:.1f} mm", f"WIDTH    {W:.1f} mm", f"RELIEF   {z1 - z0:.1f} mm", "",
+             f"PIECES   {len(parts)}", f"JOINTS   {len(pivots)} · ball", f"CURL     {curl:.0f}°/joint · {curl * len(pivots):.0f}° total", "",
+             f"HEAD     crescent on isopod head piece", f"BODY     isopod-style, print-in-place", "",
+             f"SCHEMA   {info.get('schema', '—')}", f"BUILD    {info.get('build_seconds', '—')} s"]
+    ax4.text(0.02, 0.98, "\n".join(lines), color=INK, fontsize=8, family="monospace", va="top", ha="left", linespacing=1.5)
+    for s in ax4.spines.values(): s.set_visible(True); s.set_color(INK); s.set_linewidth(0.8)
+    ax4.set_xticks([]); ax4.set_yticks([]); ax4.axis("on")
+    # ---- PIECES + PIVOTS table
+    ax5 = fig.add_subplot(gs[4:6, 7:9]); ax5.set_facecolor(BG); ax5.axis("off")
+    vols = info.get("volumes") or [None] * len(parts)
+    rows = ["PIECE        PIVOT y,z (mm)"]
+    for k, nm in enumerate(names):
+        piv = f"{pivots[k-1][0]:6.1f},{pivots[k-1][1]:5.1f}" if 0 < k <= len(pivots) else "   —  (head)"
+        rows.append(f"{nm:<11} {piv}")
+    ax5.set_title("PIECES · joint pivots", color=INK, fontsize=7.5, family="monospace", loc="left")
+    ax5.text(0.0, 0.96, "\n".join(rows), color=INK, fontsize=6.6, family="monospace", va="top", ha="left", linespacing=1.5, transform=ax5.transAxes)
+    fig.text(0.98, 0.018, "Claire Choi · Cornell", color=INK, fontsize=8, ha="right", va="bottom", family="monospace")
+    import json as _json
+    spec = _json.dumps({"hash": info.get("params", ""), "schema": info.get("schema", ""), "model": "isopod", "params": P}, sort_keys=True, default=str)
+    fig.savefig(path, dpi=110, facecolor=BG, metadata={"trilobite": spec}); plt.close(fig); return path
+
+
 # ---------------------------------------------------------------- gallery mode (prompt 8: absorbs legacy/sheet10.py)
 def gallery(out_dir="out", path=None, title="TEN ORDERS — instrument 2.1"):
     """One sheet for every order in out_dir/<name>/ (written by `python sweep.py presets`): dorsal silhouette of the

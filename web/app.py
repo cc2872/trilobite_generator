@@ -223,8 +223,24 @@ def api_sheet():
     last instrument reading for these parameters if there is one (with the animal enrolled to its stop superimposed)."""
     import trimesh, blueprint
     body = request.get_json(force=True)
-    if body.get("joint") == "isopod":                              # the blueprint sheet is the classic instrument's artifact; view the isopod model in 3D
-        return jsonify(error="no blueprint sheet for the isopod model — use the 3D view"), 400
+    if body.get("joint") == "isopod":                              # the isopod model has its own sheet (ball joints, crescent head, print-in-place)
+        P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
+        key = schema.param_hash(P) + "-i" + ISOPOD_SIG
+        folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
+        if not os.path.exists(manifest):
+            with app.test_request_context(json={"P": P, "joint": "isopod"}): api_build()
+        man = json.load(open(manifest)); png = os.path.join(folder, "sheet_isopod.png")
+        if os.path.exists(png): return jsonify(url=f"/files/{key}/sheet_isopod.png", measured=False)
+        with LOCK:
+            parts = [p for p in man.get("parts", []) if "error" not in p]
+            if not parts: return jsonify(error="isopod build failed — no parts to draw"), 500
+            meshes = [trimesh.load(os.path.join(folder, f"{p['name']}.stl")) for p in parts]
+            IB = _isopod_body(); kin = man.get("kinematics", {})
+            info = dict(names=[p["name"] for p in parts], pivots=kin.get("pivots", []), curl_deg=getattr(IB, "CURL", 30.0),
+                        params=key, schema=man.get("schema", ""), build_seconds=man.get("build_seconds"),
+                        volumes=[p.get("volume") for p in parts])
+            blueprint.isopod_sheet(meshes, P, info, png)
+        return jsonify(url=f"/files/{key}/sheet_isopod.png", measured=False)
     P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
     phash = schema.param_hash(P); key = phash + "-b" + BUILD_SIG   # the sheet draws the default (pin) build; key must match api_build's
     folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
