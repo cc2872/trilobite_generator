@@ -39,6 +39,7 @@
   .printopt input[type=number]{width:42px;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--line);padding:2px 0;font:inherit;text-align:right}
   .printopt input[type=number]:focus{outline:none;border-bottom-color:var(--ink)}
   .printopt .cmapwrap{display:inline-flex;align-items:center;gap:5px}
+  .printopt .headwrap{display:inline-flex;align-items:center;gap:5px} .printopt .headwrap.off{opacity:.3;pointer-events:none}
   .printopt select{width:auto;display:inline-block;padding:1px 2px;font:inherit;font-size:11px;border-bottom:1px solid var(--line);text-transform:lowercase}
   .stage{position:relative;min-width:0;background:#000}
   canvas{display:block}
@@ -154,6 +155,7 @@
       <div class="printopt">
         <span>Joint</span>
         <span class="seg" id="jointseg"><span class="on" data-joint="isopod">isopod model</span> · <span data-joint="ball">print · ball</span> · <span data-joint="flexi">print · flexi</span> · <span data-joint="pin">measure · pin</span></span>
+        <span class="headwrap" id="headwrap">· <span>head</span> <select id="headstyle" title="named head after Gon (2009) — isopod model only"></select></span>
         <span class="fillwrap off" id="fillwrap">· <input type="number" id="fill" min="0" max="3" step="0.5" value="0"> mm fill</span>
         <span class="cmapwrap">· <span>relief</span> <select id="cmap" title="colormap for the blueprint's relief field"></select></span>
       </div>
@@ -583,8 +585,13 @@ let building=false, pending=false;
 // print mode: the site builds and hands back the print-ready ball joint by default (flexi is the one-axis
 // alternative); "pin" is the raw measurement shell (the geometry the sheet and the instrument describe),
 // with an optional fill (mm).
-let joint='isopod', fillMm=0, cmap='none';   // default: black & white blueprint; a colormap switches to the heatmap aesthetic
-const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0});
+let joint='isopod', fillMm=0, cmap='none', headStyle='';   // default: black & white blueprint; a colormap switches to the heatmap aesthetic. headStyle '' = the default crescent head
+const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0, head_style: joint==='isopod'?headStyle:''});
+// head style picker: a named head (Gon 2009) for the isopod model only — its own silhouette + sculpt keys. '' = the default crescent.
+(function(){ const sel=$('headstyle'); if(!sel) return;
+  const d=document.createElement('option'); d.value=''; d.textContent='default'; d.selected=true; sel.appendChild(d);
+  (S.head_styles||[]).forEach(h=>{const o=document.createElement('option'); o.value=h.name; o.textContent=h.name; if(h.doc) o.title=h.doc+(h.page?`  (Gon p. ${h.page})`:''); sel.appendChild(o);});
+  sel.onchange=()=>{ headStyle=sel.value; if(joint==='isopod') build(); }; })();
 // relief style picker: "blueprint" (b&w, default) or a scientific colormap (the wave-optics heatmap). Just re-renders.
 (function(){ const sel=$('cmap');
   const bp=document.createElement('option'); bp.value='none'; bp.textContent='blueprint'; bp.selected=true; sel.appendChild(bp);
@@ -684,6 +691,7 @@ $('share').onclick=async()=>{ const u=shareURL();
 function setJoint(j){ if(j!=='pin'&&j!=='flexi'&&j!=='ball'&&j!=='isopod') return; joint=j;
   [...$('jointseg').querySelectorAll('span[data-joint]')].forEach(s=>s.classList.toggle('on',s.dataset.joint===j));
   $('fillwrap').classList.toggle('off',j!=='pin');
+  $('headwrap').classList.toggle('off',j!=='isopod');   // the head styles apply to the isopod model only
   build(); }
 $('jointseg').onclick=e=>{ if(e.target.dataset.joint) setJoint(e.target.dataset.joint); };
 $('fill').onchange=e=>{ fillMm=Math.max(0,+e.target.value||0); if(joint==='pin') build(); };
