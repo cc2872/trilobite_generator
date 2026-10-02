@@ -1,6 +1,8 @@
-# trilobite generator 6.1 · instrument 2.1
+# trilobite generator 6.1, instrument 2.1 by Claire Choi the trilobiter
+<img width="1815" height="1287" alt="sheet_isopod_none (2)" src="https://github.com/user-attachments/assets/20b9d050-8d7a-4a14-af05-db476dc755d4" />
 
-A parametric generator for articulated dorsal plate chains trilobites first with a fixed-ruler enrolment
+A parametric generator for articulated dorsal plat
+e chains trilobites first with a fixed-ruler enrolment
 instrument, a printable animal, a labeled blueprint sheet, and a website. No OpenCascade: numpy height fields and
 Manifold booleans, mirror-symmetric by construction.
 
