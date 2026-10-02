@@ -88,5 +88,5 @@ the instrument version and the parameter hash. `bound` and `invalid` are censori
 reproduces them: proetida 22.81 / 22.81, corynexochida 22.66 / 22.58, harpetida 30.39 / 30.31 deg. Where the two
 builders disagree on a surface (domed heads, up to 1.6 mm), the spline fit was the biased one; where they disagreed on
 a body count (harpetida seg7), the spline's retry loop had hidden a real bevel-band bug, fixed in the pin joint's band rule (`joints/pin._band`).
-Noise floor: proetida reads 22.81 at every grid, scan step and bisection setting tried — the floor is the 0.1 deg
+Noise floor: proetida reads 22.81 at every grid, scan step and bisection setting tried, the floor is the 0.1 deg
 resolution. See `CHANGES_2026-09-10.md` for every finding in order.
