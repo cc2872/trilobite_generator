@@ -1,7 +1,21 @@
 {
  "base": "asaphid",
- "blurb": "Asaphida \u2014 Gon p. __. Effaced, broad, 8 segments, isopygous.",
+ "blurb": "Asaphida \u2014 Gon p. 79. Effaced, broad, 8 segments, isopygous.",
  "expect": {},
+ "guide_edits_2026-10-02": {
+  "sutureEnd": [
+   null,
+   1.0
+  ],
+  "sutureDepth": [
+   null,
+   0.3
+  ],
+  "glabInflate": [
+   1.25,
+   1.0
+  ]
+ },
  "eye_source": "photos, \u00b115\u201320 % (8 Sep 2026)",
  "length_policy": "pitch>=8: 150.0->161 mm",
  "order": "asaphida",
@@ -39,7 +53,7 @@
   "tailRelief": 1.0,
   "tailDomeExp": 2.0,
   "cephParallel": 0.05,
-  "glabInflate": 1.25,
+  "glabInflate": 1.0,
   "glabRise": 0.06,
   "glabLobes": 3,
   "eyeSize": 0.1,
@@ -91,7 +105,9 @@
   "clearance": 0.3,
   "boreDia": 1.95,
   "barrelR": 2.6,
-  "nKnuckles": 3
+  "nKnuckles": 3,
+  "sutureEnd": 1.0,
+  "sutureDepth": 0.3
  },
- "schema": "6.0"
+ "schema": "6.2"
 }

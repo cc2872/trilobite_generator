@@ -212,7 +212,10 @@ def suture_path(P, S):
     if G is not None:                                                         # the palpebral loop, axial side: front -> inner -> rear
         for ang in np.linspace(-90.0, 90.0, 19):
             th = math.radians(ang)
-            pts.append((xi - loop_r * math.cos(th), ye - loop_r * math.sin(th)))   # ang=-90: (xi, y_ef); 0: (xi-loop_r, ye); 90: (xi, y_er)
+            pts.append((xi - loop_r * math.cos(th), ye + loop_r * math.sin(th)))   # ang=-90: (xi, y_ef); 0: (xi-loop_r, ye); 90: (xi, y_er)
+            # 2 Oct 2026: the sign of the sine was reversed (ye - ...), so the loop ran rear -> front: the front branch
+            # ran from the margin straight through the eye to its REAR, and the rear branch left from the eye's FRONT and
+            # crossed the eye again. The comment above always described the intended order; the code now matches it.
     else:
         pts.append((xi, y_ef))
     if end <= 0.0:                                                            # lateral margin: from the eye's rear (-1) to the genal angle (0)

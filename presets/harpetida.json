@@ -1,7 +1,25 @@
 {
  "base": "harpetid",
- "blurb": "Harpetida (fitted 6 Sep) \u2014 Gon p. __. Horseshoe brim, prolongations to the tail, narrow thorax. Brim pits not modelled.",
+ "blurb": "Harpetida (fitted 6 Sep) \u2014 Gon p. 72. Horseshoe brim, prolongations to the tail, narrow thorax. Brim pits not modelled.",
  "expect": {},
+ "guide_edits_2026-10-02": {
+  "lensD": [
+   0.16,
+   0.05
+  ],
+  "lensGap": [
+   0.3,
+   0.0
+  ],
+  "eyeRidge": [
+   null,
+   0.8
+  ],
+  "glabInflate": [
+   1.35,
+   0.85
+  ]
+ },
  "length_policy": "pitch>=8: 150.0->151 mm",
  "order": "harpetida",
  "params": {
@@ -38,7 +56,7 @@
   "tailRelief": 1.0,
   "tailDomeExp": 2.0,
   "cephParallel": 0.02,
-  "glabInflate": 1.35,
+  "glabInflate": 0.85,
   "glabRise": 0.12,
   "glabLobes": 3,
   "eyeSize": 0.05,
@@ -50,8 +68,8 @@
   "eyeSolid": 0,
   "eyeSlope": 15.0,
   "eyeShade": 0.0,
-  "lensD": 0.16,
-  "lensGap": 0.3,
+  "lensD": 0.05,
+  "lensGap": 0.0,
   "lensRise": 0.35,
   "genalSweep": 0.05,
   "borderWidth": 0.0,
@@ -90,7 +108,8 @@
   "clearance": 0.3,
   "boreDia": 1.95,
   "barrelR": 2.6,
-  "nKnuckles": 3
+  "nKnuckles": 3,
+  "eyeRidge": 0.8
  },
- "schema": "6.0"
+ "schema": "6.2"
 }

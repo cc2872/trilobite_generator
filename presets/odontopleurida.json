@@ -1,7 +1,37 @@
 {
  "base": "spiny",
- "blurb": "Odontopleurida \u2014 Gon p. __. Spines everywhere: pleural, marginal, occipital, axial; 9 segments.",
+ "blurb": "Odontopleurida \u2014 Gon p. 63. Spines everywhere: pleural, marginal, occipital, axial; 9 segments.",
  "expect": {},
+ "guide_edits_2026-10-02": {
+  "sutureEnd": [
+   null,
+   1.0
+  ],
+  "sutureDepth": [
+   null,
+   0.3
+  ],
+  "lensD": [
+   0.16,
+   0.05
+  ],
+  "lensGap": [
+   0.3,
+   0.0
+  ],
+  "eyeRidge": [
+   null,
+   0.6
+  ],
+  "glabInflate": [
+   1.25,
+   0.95
+  ],
+  "pygRings": [
+   4,
+   3
+  ]
+ },
  "eye_source": "photos, \u00b115\u201320 % (8 Sep 2026)",
  "length_policy": "pitch>=8: 130.0->139 mm",
  "order": "odontopleurida",
@@ -39,7 +69,7 @@
   "tailRelief": 1.0,
   "tailDomeExp": 2.0,
   "cephParallel": 0.05,
-  "glabInflate": 1.25,
+  "glabInflate": 0.95,
   "glabRise": 0.18,
   "glabLobes": 3,
   "eyeSize": 0.11,
@@ -51,8 +81,8 @@
   "eyeSolid": 1,
   "eyeSlope": 0.0,
   "eyeShade": 0.15,
-  "lensD": 0.16,
-  "lensGap": 0.3,
+  "lensD": 0.05,
+  "lensGap": 0.0,
   "lensRise": 0.35,
   "genalSweep": 0.3,
   "borderWidth": 0.1,
@@ -73,7 +103,7 @@
   "macroAmp": 0.8,
   "spineSweep": 40.0,
   "pygWidth": 0.82,
-  "pygRings": 4,
+  "pygRings": 3,
   "pygSpine": 1.0,
   "pygSplay": 14.0,
   "termSpine": 0.0,
@@ -91,7 +121,10 @@
   "clearance": 0.3,
   "boreDia": 1.95,
   "barrelR": 2.6,
-  "nKnuckles": 3
+  "nKnuckles": 3,
+  "sutureEnd": 1.0,
+  "sutureDepth": 0.3,
+  "eyeRidge": 0.6
  },
- "schema": "6.0"
+ "schema": "6.2"
 }

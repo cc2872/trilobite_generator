@@ -1,7 +1,17 @@
 {
  "base": "phacopid",
- "blurb": "Phacopida (Phacops, fitted 6 Sep) \u2014 Gon p. __. Schizochroal eyes, 11 segments, no genal spines.",
+ "blurb": "Phacopida (Phacops, fitted 6 Sep) \u2014 Gon p. 73. Schizochroal eyes, 11 segments, no genal spines.",
  "expect": {},
+ "guide_edits_2026-10-02": {
+  "sutureEnd": [
+   null,
+   -1.0
+  ],
+  "sutureDepth": [
+   null,
+   0.3
+  ]
+ },
  "length_policy": "pitch>=8: 205.0->205.0 mm",
  "order": "phacopida",
  "params": {
@@ -90,7 +100,9 @@
   "clearance": 0.3,
   "boreDia": 1.95,
   "barrelR": 2.6,
-  "nKnuckles": 3
+  "nKnuckles": 3,
+  "sutureEnd": -1.0,
+  "sutureDepth": 0.3
  },
- "schema": "6.0"
+ "schema": "6.2"
 }

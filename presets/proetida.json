@@ -1,7 +1,29 @@
 {
  "base": "textured",
- "blurb": "Proetida \u2014 Gon p. __. Wide bordered head, short genal spines, 9 segments, well-furrowed tail.",
+ "blurb": "Proetida \u2014 Gon p. 85. Wide bordered head, short genal spines, 9 segments, well-furrowed tail.",
  "expect": {},
+ "guide_edits_2026-10-02": {
+  "sutureEnd": [
+   null,
+   1.0
+  ],
+  "sutureDepth": [
+   null,
+   0.3
+  ],
+  "lensD": [
+   0.16,
+   0.05
+  ],
+  "lensGap": [
+   0.3,
+   0.0
+  ],
+  "glabInflate": [
+   1.15,
+   0.9
+  ]
+ },
  "length_policy": "pitch>=8: 150.0->158 mm",
  "order": "proetida",
  "params": {
@@ -38,7 +60,7 @@
   "tailRelief": 1.0,
   "tailDomeExp": 2.0,
   "cephParallel": 0.05,
-  "glabInflate": 1.15,
+  "glabInflate": 0.9,
   "glabRise": 0.18,
   "glabLobes": 3,
   "eyeSize": 0.16,
@@ -50,8 +72,8 @@
   "eyeSolid": 0,
   "eyeSlope": 15.0,
   "eyeShade": 0.0,
-  "lensD": 0.16,
-  "lensGap": 0.3,
+  "lensD": 0.05,
+  "lensGap": 0.0,
   "lensRise": 0.35,
   "genalSweep": 0.3,
   "borderWidth": 0.12,
@@ -90,7 +112,9 @@
   "clearance": 0.3,
   "boreDia": 1.95,
   "barrelR": 2.6,
-  "nKnuckles": 3
+  "nKnuckles": 3,
+  "sutureEnd": 1.0,
+  "sutureDepth": 0.3
  },
- "schema": "6.0"
+ "schema": "6.2"
 }

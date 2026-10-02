@@ -1,7 +1,13 @@
 {
  "base": "agnostid",
- "blurb": "Agnostida \u2014 Gon p. __. Two segments, head and tail alike, blind.",
+ "blurb": "Agnostida \u2014 Gon p. 57. Two segments, head and tail alike, blind.",
  "expect": {},
+ "guide_edits_2026-10-02": {
+  "glabInflate": [
+   1.25,
+   0.8
+  ]
+ },
  "length_policy": "pitch>=8: 90.0->90.0 mm",
  "order": "agnostida",
  "params": {
@@ -38,7 +44,7 @@
   "tailRelief": 1.0,
   "tailDomeExp": 2.0,
   "cephParallel": 0.05,
-  "glabInflate": 1.25,
+  "glabInflate": 0.8,
   "glabRise": 0.12,
   "glabLobes": 3,
   "eyeSize": 0.0,
@@ -92,5 +98,5 @@
   "barrelR": 2.6,
   "nKnuckles": 3
  },
- "schema": "6.0"
+ "schema": "6.2"
 }

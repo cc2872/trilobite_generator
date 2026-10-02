@@ -225,12 +225,19 @@ HEAD_RIM = 0.15                  # the rim's height / the head's crown height (b
 CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "source", "cache")
 
 
-def face_of(P):
+def face_of(P, extra=None):
     """The crescent head's face from the generator's own parameters (head_crescent.FACE was set from the default
     preset's values, so the default preset gives the approved face exactly)."""
-    return dict(eye_size=float(P["eyeSize"]), eye_pos=float(P["eyePos"]), eye_height=float(P["eyeHeight"]),
+    f = dict(eye_size=float(P["eyeSize"]), eye_pos=float(P["eyePos"]), eye_height=float(P["eyeHeight"]),
                 eye_lat=float(P["eyeLat"]), glab_inflate=float(P["glabInflate"]), glab_rise=float(P["glabRise"]),
                 glab_front=float(P["glabFront"]), glab_lobes=int(P["glabLobes"]))   # nose shape + furrow pairs: were defaulting, now live on the print model (head_crescent._z reads them)
+    if float(P.get("sutureDepth", 0.0)) > 1e-9:                             # 2 Oct 2026: the facial suture and the eye ridge, on the crescent as on
+        f.update(suture_end=float(P["sutureEnd"]), suture_depth=float(P["sutureDepth"]))   # the classic head. Added only when set, so a face
+    if float(P.get("eyeRidge", 0.0)) > 1e-9: f.update(eye_ridge=float(P["eyeRidge"]))      # without them keeps its key in source/cache.
+    if extra: f.update(extra)                                               # a head style's sculpt keys (head_styles.py)
+    return f
+
+BASE_FACE_KEYS = ("eye_size", "eye_pos", "eye_height", "eye_lat", "glab_inflate", "glab_rise", "glab_front", "glab_lobes")
 
 
 def head_piece(face):
@@ -257,7 +264,7 @@ def _surface_z(mesh, x, y, search=0.0):
     return None
 
 
-def isopod_head(P, plans, J, PV, K, step=0.25):
+def isopod_head(P, plans, J, PV, K, step=0.25, face=None):
     """The crescent head made on the isopod's head piece, set by the preset:
       * face: eye size / place / height and the glabella from the preset (face_of), as the crescent's detail skin;
       * size: scaled across (x, y) so it stands to our first segment as it stood to the isopod's (first segment's
@@ -268,7 +275,12 @@ def isopod_head(P, plans, J, PV, K, step=0.25):
       * the preset's eye solid (eyeSolid: the generator's eye, its lens lattice, stalk, brim), at full size (never
         squashed), on the crescent's eye; the occipital spine and head prongs where the preset has them.
     Returns the head (model mm) and its underside for the lip under it."""
-    head, info = head_piece(face_of(P))                                     # work frame, isopod size
+    fc = face_of(P, face)
+    head, info = head_piece(fc)                                             # work frame, isopod size
+    # the head's height is set from its crown. A sculpted face (boss, tubercles, bullae ...) can stand above the crown,
+    # and scaling by ITS top would squash the whole head under one bump: scale by the same face without the sculpt keys.
+    sculpt = [k for k in fc if k not in BASE_FACE_KEYS and k not in ("suture_end", "suture_depth", "eye_ridge")]
+    z_ref = head_piece({k: fc[k] for k in BASE_FACE_KEYS})[0].bounds[1][2] if sculpt else head.bounds[1][2]
     iso = _iso_load(); z0 = iso.bounds[0][2]; xc = 0.5 * (iso.bounds[0][0] + iso.bounds[1][0])
     iso.apply_translation((-xc, 0, -z0))
     pieces = sorted(iso.split(only_watertight=False), key=lambda p: p.bounds[0][1])
@@ -278,7 +290,7 @@ def isopod_head(P, plans, J, PV, K, step=0.25):
     w_seg = max(abs(S1["outline"](u, v)[0]) for u in np.linspace(-1, 1, 401) for v in (0.0, 0.5, 1.0)) / s
     f = w_seg / pieces[1].bounds[1][0]; fxy = f * s
     z_thorax = max(float(M.sample_grid(Sk["outline"], Sk["zfun"], 61, 31)[2].max()) for _, _, Sk, _ in plans[1:-1])
-    fz = HEAD_HEIGHT * z_thorax * float(P.get("headRelief", 1.0)) / head.bounds[1][2]
+    fz = HEAD_HEIGHT * z_thorax * float(P.get("headRelief", 1.0)) / z_ref
     yr = PV[0][0] + K["col_rear"]                                           # our head's rear face (model)
     ty = yr - fxy * y_rear
     head.apply_transform(np.diag([fxy, fxy, fz, 1.0])); head.apply_translation((0, ty, 0))
@@ -288,7 +300,7 @@ def isopod_head(P, plans, J, PV, K, step=0.25):
     # horns) and the crown height are unchanged.
     g = 1.5 / float(P.get("headDomeExp", 1.5))
     if abs(g - 1.0) > 1e-3:
-        V = head.vertices.copy(); top = V[:, 2].max()
+        V = head.vertices.copy(); top = z_ref * fz                         # the crown (a sculpted bump above it keeps going up)
         rim = HEAD_RIM * top
         t = np.clip((V[:, 2] - rim) / (top - rim), 0, None); up = V[:, 2] > rim
         V[up, 2] = rim + (top - rim) * t[up] ** g
@@ -395,13 +407,58 @@ def body_ornaments(P, plans, parts):
         if solids: parts[k] = M.union(parts[k], *solids)
 
 
-def build(P, head="isopod"):
-    """head: 'isopod' (the crescent head made on the isopod's head piece, crescent_head.py; the default) or
-    'generator' (the anatomy head, drawn like the rest)."""
+def shaped_head(P, plans, PV, K, J, outline, face):
+    """The head drawn whole on a parametric outline (shaped_head.py), as a height-field solid like every other part:
+    solid to the bed, except where it lies over the body behind its rear joint plane, where it is a WALL-thick plate.
+    A genal spine that runs BESIDE the body (outside every segment's reach there) stays solid to the bed, so it
+    prints without supports."""
+    import shaped_head as SH
+    fc = face_of(P, face); S = SH.plan(P, plans, K, outline, fc); off = plans[0][3]
+    plans[0] = ("head", HEAD, S, off)
+    nu, nv = 401, 201                                                       # sampled directly: the generator's smoothing
+    sh = S["shape"]; k = S["scale"]                                         # (mesh.sample_grid's blur) would wipe the sculpt
+    Ug, Vg = np.meshgrid(np.linspace(-1, 1, nu), np.linspace(0, 1, nv))
+    xa = Ug * sh.Xmax; yf_, yr_ = sh.edges(np.abs(xa))
+    xs = k * xa; ys = S["flap"] + k * (yr_ - Vg * (yr_ - yf_)); zs = S["zfun"](xs, ys)
+    y = ys + off; ga = J["gap_axial"]
+    yr = plans[1][3] - 0.5 * ga
+    reach = np.zeros_like(y)                                                # the body's half-width at each y behind the head
+    for name, mod, Sk, offk in plans[1:]:
+        e = np.array([Sk["outline"](u, v) for u in np.linspace(-1, 1, 81) for v in (0.0, 1.0)])
+        y0, y1 = e[:, 1].min() + offk - 4.0, e[:, 1].max() + offk + 4.0      # + the curl's fore-aft travel
+        reach = np.where((y >= y0) & (y <= y1), np.maximum(reach, np.abs(e[:, 0]).max()), reach)
+    beside = np.abs(xs) > reach + 0.8 * ga + 0.6
+    bot = np.where((y > yr) & ~beside, zs - WALL, 0.0)
+    bot = np.clip(np.minimum(bot, zs - 0.6), 0.0, None); top = np.maximum(zs, bot + 0.6)
+    head = M._closed(np.c_[xs.ravel(), y.ravel(), top.ravel()], np.c_[xs.ravel(), y.ravel(), bot.ravel()], zs.shape[0], zs.shape[1])
+    # the preset's ornaments, as isopod_head places them: on this head's own surface
+    zt = lambda x_, y_: float(S["zfun"](np.array([abs(x_)]), np.array([y_ - off]))[0])
+    extra = []; Lc = float(S["Lc"]); margin = float(S["margin"]); E = S["eye"]
+    if P.get("eyeSolid", 0) > 0.5 and P["eyeSize"] > 0.01 and not E["blind"]:
+        x, ye, R = E["xe"], E["ye"] + off, E["eR"]
+        EP = HEAD.eye_params(P, R); eye, n_lens = HEAD.eye_solid(**EP)
+        if EP["stalk"] > 0.05: z = zt(x, ye) - 0.3 + EP["stalk"]
+        else: z = min([zt(x, ye)] + [zt(x + R * np.cos(a), ye + R * np.sin(a)) for a in np.linspace(0, 2 * np.pi, 12, endpoint=False)]) - 0.3
+        e = eye.copy(); e.apply_translation((x, ye, z)); extra += [e, M.mirror_x(e)]
+    y_rear = S["flap"] + off; y_front = float(S["outline"](0.0, 1.0)[1]) + off
+    if P["occipitalSpine"] > 0.02:
+        yo = y_rear - 0.07 * Lc
+        extra.append(spine_solid(0.6 * margin + 0.4, 0.5, P["occipitalSpine"] * Lc, (0, yo, zt(0.0, yo) - 1.0), 0, pitch_deg=55))
+    if int(P.get("headProngs", 0)) > 0:
+        extra.append(prong(int(P["headProngs"]), P["headProngLen"] * Lc, P["headProngSplay"], P.get("headProngWidth", 0.45) * margin + 0.6,
+                           0.45, (0, y_front + 1.5, 0.6 * margin + 0.5), yaw_deg=180.0, pitch_deg=8.0, stem_frac=P.get("headProngStem", 0.0),
+                           center_bias=P.get("headProngCenter", 1.0), curl_deg=P.get("headProngCurl", 0.0)))
+    return M.union(head, *extra) if extra else head
+
+
+def build(P, head="isopod", face=None, outline=None):
+    """head: 'isopod' (the crescent head made on the isopod's head piece, crescent_head.py; the default), 'shaped'
+    (a parametric outline, shaped_head.py, with `outline` and `face`), or 'generator' (the classic anatomy head)."""
     plans = placed_plans(P)
     J, d, zj, y_piv = BALL.geometry(P); K = iso_kit(P); PV = pivots(plans, J, K)
-    U = None
-    if head == "isopod": H, U = isopod_head(P, plans, J, PV, K)
+    U = None; H = None
+    if head == "shaped": H = shaped_head(P, plans, PV, K, J, outline, face)   # replaces plans[0] with its own plan
+    if head == "isopod": H, U = isopod_head(P, plans, J, PV, K, face=face)   # face: a head style's sculpt keys
     parts = [build_part(k, plans, P, J, PV, U) for k in range(len(plans))]
     for k in range(1, len(plans)):
         parts[k] = M.from_manifold(BALL._force(M.to_manifold(parts[k]) - M.to_manifold(front_cutter(k, plans, J, PV, K, U=U))))
@@ -410,7 +467,7 @@ def build(P, head="isopod"):
         bits = sorted(parts[k].split(only_watertight=False), key=lambda m: -m.volume); parts[k] = bits[0]   # no flakes
         if len(bits) > 1: J["_dropped"][k] = J["_dropped"].get(k, 0.0) + float(sum(b.volume for b in bits[1:]))
     ga = J["gap_axial"]
-    if head == "isopod":
+    if head in ("isopod", "shaped"):
         parts[0] = H
         # the horns ride back over the first segments: each keeps clear of the head (dilated by the clearances) through
         # the whole curl
