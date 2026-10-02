@@ -65,7 +65,7 @@
   .rbctl button:hover{background:var(--soft)} .rbctl button:disabled{opacity:.4;cursor:default}
   .loading{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#000;z-index:6}
   .loading.on{display:flex}
-  .loading img{width:150px;height:auto;image-rendering:auto;opacity:.9}
+  .loading img{width:min(60%,480px);height:auto;image-rendering:auto;opacity:.95}
   #loadsvg{width:240px;height:172px}
   #loadsvg .plate{fill:rgba(255,255,255,.045);stroke:var(--ink);stroke-width:1.4;stroke-linejoin:round;stroke-linecap:round}
   #loadsvg .ax{fill:none;stroke:var(--ink);stroke-width:1;opacity:.55}
@@ -179,7 +179,7 @@
       <button id="rbrec" title="record one seamless loop as a video">Record loop</button>
     </div>
     <div class="loading" id="loading">
-      <svg id="loadsvg" viewBox="0 0 280 200" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" aria-label="building"></svg>
+      <img id="loadimg" src="/loading.gif" alt="building">
       <div class="count" id="lcount"></div>
     </div>
   </div>
@@ -627,11 +627,11 @@ const LOAD=(()=>{
 // ---- loading: the parts land one at a time on the server, so poll its count while the stage is blank
 let poll=null;
 function lcount(done,total){ $('lcount').textContent=`${done} part${done===1?'':'s'} out of ${total} built`; }
-function loadingOn(){ const total=Math.round(P.segCount)+2; lcount(0,total); $('loading').classList.add('on'); LOAD.start();
+function loadingOn(){ const total=Math.round(P.segCount)+2; lcount(0,total); $('loading').classList.add('on');
   clearInterval(poll); poll=setInterval(async()=>{
     try{ const r=await (await fetch('/api/progress')).json(); if(r.total) lcount(Math.min(r.done,r.total),r.total); }
     catch(ex){ /* the count is decoration; a dropped poll must not break the build */ } },400); }
-function loadingOff(){ clearInterval(poll); poll=null; $('loading').classList.remove('on'); LOAD.stop(); }
+function loadingOff(){ clearInterval(poll); poll=null; $('loading').classList.remove('on'); }
 async function build(){ if(building){pending=true;return;} building=true; status('building',true); loadingOn();
   try{
     let man;
