@@ -31,6 +31,9 @@ R, ARM_W, ARM_LEN, DIP = 20.0, 4.0, 20.0, 2.0
 RELIEF, RIM, FURROW = 10.0, 1.5, 1.1
 DOME_EXP, DOME_FILL = 1.5, 0.82
 AXIS_FRAC, GLAB_INFLATE, GLAB_RISE, GLAB_FRONT, GLAB_LOBES = 0.28, 1.35, 0.18, 2.5, 2
+GLAB_RISE_GAIN = 2.0      # bold-glabella lever (2 Oct 2026): amplify glab_rise so the slider sculpts a distinct, raised
+                          # glabella instead of a gentle broad bulge. 2.0 = bold-but-rounded across the slider; 3.0 slabs out
+                          # at the horn-height envelope by ~0.3. Print-model only (isopod); the measured pin head is unchanged.
 BORDER_W = 0.10
 EYE_SIZE, EYE_POS, EYE_HEIGHT = 0.16, 0.62, 0.85
 # the face, as one settable set (27 Sep 2026): every _z / _glab_half / _eye call takes face=dict(...) overriding these
@@ -92,7 +95,7 @@ def _z(x, y, face=None):
     rD = (ax / aD) ** DOME_EXP + (np.abs(y - yc) / bD) ** DOME_EXP
     z = rim + (h - rim) * np.clip(1 - rD, 0, 1) ** (1 / DOME_EXP)
     g = _glab_half(f, face)
-    z = z + F_["glab_rise"] * h * f * plateau(ax, g) * (1 - smoothstep(0.80, 0.92, f))
+    z = z + GLAB_RISE_GAIN * F_["glab_rise"] * h * f * plateau(ax, g) * (1 - smoothstep(0.80, 0.92, f))
     z = z - F * trough(ax - (g + 0.7), 0.9) * (f < 0.9)
     z = z - 0.8 * F * trough(f - 0.13, 0.8 / LC) * plateau(ax, g + 1.5, 1.0)
     for k in range(int(F_["glab_lobes"])):
