@@ -229,7 +229,8 @@ def face_of(P):
     """The crescent head's face from the generator's own parameters (head_crescent.FACE was set from the default
     preset's values, so the default preset gives the approved face exactly)."""
     return dict(eye_size=float(P["eyeSize"]), eye_pos=float(P["eyePos"]), eye_height=float(P["eyeHeight"]),
-                eye_lat=float(P["eyeLat"]), glab_inflate=float(P["glabInflate"]), glab_rise=float(P["glabRise"]))
+                eye_lat=float(P["eyeLat"]), glab_inflate=float(P["glabInflate"]), glab_rise=float(P["glabRise"]),
+                glab_front=float(P["glabFront"]), glab_lobes=int(P["glabLobes"]))   # nose shape + furrow pairs: were defaulting, now live on the print model (head_crescent._z reads them)
 
 
 def head_piece(face):
