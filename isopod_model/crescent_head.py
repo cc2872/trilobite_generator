@@ -400,24 +400,6 @@ if __name__ == "__main__":
 SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "source")
 
 
-def _solidify_underside(p0, step=0.5):
-    """Fill the giant-isopod head piece's naturally hollow underside flat to the bed, so the printed head has no
-    ventral cavities (the pockets under the glabella and eyes). Raycast its top surface over a grid, fill each
-    footprint column bed->top, clip to the (convex) footprint so there is no off-head brim. The source carapace is
-    watertight, so this is a clean one-time boolean; the result is cached on disk (source/head_piece_solid.stl)."""
-    import scipy.spatial, shapely.geometry
-    (x0, y0, _), (x1, y1, z1) = p0.bounds
-    FX, FY = np.meshgrid(np.arange(x0, x1 + step, step), np.arange(y0, y1 + step, step))
-    o = np.c_[FX.ravel(), FY.ravel(), np.full(FX.size, z1 + 10)]
-    locs, ri, _ = p0.ray.intersects_location(o, np.tile((0, 0, -1.0), (len(o), 1)), multiple_hits=True)
-    top = np.zeros(FX.size); np.maximum.at(top, ri, np.asarray(locs)[:, 2]); top = np.clip(top, 0.3, None)
-    fill = M._closed(np.c_[FX.ravel(), FY.ravel(), top], np.c_[FX.ravel(), FY.ravel(), np.zeros(FX.size)], FX.shape[0], FX.shape[1])
-    hull = scipy.spatial.ConvexHull(p0.vertices[:, :2]); poly = shapely.geometry.Polygon(p0.vertices[hull.vertices][:, :2])
-    col = trimesh.creation.extrude_polygon(poly, 400.0); col.apply_translation((0, 0, -200.0))
-    fill = M.from_manifold(M.to_manifold(fill) ^ M.to_manifold(col))
-    return max(M.from_manifold(M.to_manifold(p0) + M.to_manifold(fill)).split(only_watertight=False), key=lambda b: b.volume)
-
-
 def head_piece(face=None, fit="face"):
     """The approved head piece with the crescent's face set by `face` (head_crescent.FACE keys: eye size, place and
     height, glabella inflation and rise, ...): the isopod's head piece + the rim-level band (cached in
@@ -427,9 +409,6 @@ def head_piece(face=None, fit="face"):
     placed it (scripts/isopod_face.py, isopod_eyes.py), so the eyes sit on the cheeks; "widest": the widest lines
     together, as the first approved head (27 Sep 2026: face=None with fit="widest" is that head exactly)."""
     parts, _ = load(); p0 = parts[0]
-    solid_f = os.path.join(SOURCE, "head_piece_solid.stl")                  # solid-underside head piece: no ventral cavities (cached, like the band)
-    if os.path.exists(solid_f): p0 = trimesh.load(solid_f)
-    else: p0 = _solidify_underside(p0); p0.export(solid_f)
     xs = np.arange(-45, 45 + STEP, STEP); ys = np.arange(5, 100 + STEP, STEP)
     top0, bot0 = head_surface(p0, xs, ys)
     present = np.isfinite(top0); W0 = np.array([np.abs(xs[r]).max() if r.any() else 0.0 for r in present])
