@@ -485,10 +485,7 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
     ax2.set_xlim(y0 - 10, y1 + 26); ax2.set_ylim(z0 - 6, z1 + 10)
     # ---- CURLED: the chain enrolled on its ball joints (midline section + faint silhouette)
     ax3 = fig.add_subplot(gs[0:4, 5:9]); ax3.set_facecolor(BG); ax3.set_aspect("equal"); ax3.axis("off")
-    try:
-        s = flat.section(plane_origin=[0, 0, 0], plane_normal=[1, 0, 0])
-        for e in s.entities: p = s.vertices[e.points]; ax3.plot(p[:, 1], p[:, 2], color=DIM, lw=0.5, alpha=0.6)   # flat, for reference
-    except Exception: pass
+    # (the flat rest state is already shown in PLAN and SECTION A-A; drawing it here only clutters the coil)
     try:
         poly = trimesh.path.polygons.projected(posed, normal=[1, 0, 0])
         for ring in ([poly.exterior] + list(poly.interiors)) if poly is not None else []:
@@ -503,11 +500,17 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
     ax3.set_xlim(min(y0, py0) - 8, max(y1, py1) + 8); ax3.set_ylim(min(z0, pz0) - 6, max(z1, pz1) + 10)
     # ---- TITLE BLOCK
     ax4 = fig.add_subplot(gs[4:6, 5:7]); ax4.set_facecolor(BG); ax4.axis("off")
+    gv = lambda k, d=0.0: float(P.get(k, d))
     lines = ["    " + title, "", f"DRAWING  {info.get('params', '—')}", "",
-             f"LENGTH   {L:.1f} mm", f"WIDTH    {W:.1f} mm", f"RELIEF   {z1 - z0:.1f} mm", "",
-             f"PIECES   {len(parts)}", f"JOINTS   {len(pivots)} · ball", f"CURL     {curl:.0f}°/joint · {curl * len(pivots):.0f}° total", "",
-             f"HEAD     crescent on isopod head piece", f"BODY     isopod-style, print-in-place", "",
-             f"SCHEMA   {info.get('schema', '—')}", f"BUILD    {info.get('build_seconds', '—')} s"]
+             f"LENGTH   {L:.1f} mm", f"WIDTH    {W:.1f} mm", f"RELIEF   {z1 - z0:.1f} mm", f"CLEAR    {gv('clearance'):.2f} mm",
+             f"PIECES   {len(parts)}  ·  JOINTS {len(pivots)} ball", f"CURL     {curl:.0f}°/joint · {curl * len(pivots):.0f}° total", "",
+             "MORPHOSPACE COORDINATES",                                                 # the specimen's place in the space, not just its hash
+             f" cephFrac {gv('cephFrac'):.2f}   pygFrac  {gv('pygFrac'):.2f}",
+             f" axisFrac {gv('axisFrac'):.2f}   glabInfl {gv('glabInflate'):.2f}",
+             f" eyeSize  {gv('eyeSize'):.2f}   eyePos   {gv('eyePos'):.2f}",
+             f" genalSp  {gv('genalSpine'):.2f}   pygSp    {gv('pygSpine'):.2f}", "",
+             f"SCHEMA   {info.get('schema', '—')}  ·  REV A",
+             f"BUILD    {info.get('build_seconds', '—')} s  ·  mm  ·  3rd-angle"]
     ax4.text(0.02, 0.98, "\n".join(lines), color=INK, fontsize=8, family="monospace", va="top", ha="left", linespacing=1.5)
     for s in ax4.spines.values(): s.set_visible(True); s.set_color(INK); s.set_linewidth(0.8)
     ax4.set_xticks([]); ax4.set_yticks([]); ax4.axis("on")
