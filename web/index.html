@@ -764,7 +764,7 @@ async function recordLoop(){ if(recording||!threeReady) return;
   finally{ recording=false; btn.disabled=false; btn.textContent=label; } }
 $('rbrec').onclick=recordLoop;
 function init3d(){ if(threeReady) return; threeReady=true; const view=$('stage3d'); scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
-  cam=new THREE.PerspectiveCamera(40,1,1,5000); cam.position.set(140,110,190); ren=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true}); view.appendChild(ren.domElement);   // preserveDrawingBuffer: captureStream can grab clean frames for the recorder ctl=new OrbitControls(cam,ren.domElement); ctl.target.set(0,10,0);
+  cam=new THREE.PerspectiveCamera(40,1,1,5000); cam.position.set(140,110,190); ren=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true}); view.appendChild(ren.domElement); ctl=new OrbitControls(cam,ren.domElement); ctl.target.set(0,10,0);   // preserveDrawingBuffer lets captureStream grab clean frames for the recorder
   scene.add(new THREE.HemisphereLight(0xffffff,0x888888,1.0)); const key=new THREE.DirectionalLight(0xffffff,1.2); key.position.set(80,160,120); scene.add(key);
   grid=new THREE.GridHelper(400,40,0x2a2a2a,0x161616); grid.position.y=-0.5; scene.add(grid);
   root=new THREE.Group(); root.rotation.x=-Math.PI/2; scene.add(root); loader=new STLLoader();
