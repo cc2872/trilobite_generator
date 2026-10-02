@@ -27,6 +27,11 @@
   .node.dead{opacity:.22}
   .node circle{fill:var(--bg);stroke:var(--ink);stroke-width:1;vector-effect:non-scaling-stroke}
   .node.has circle{fill:var(--ink)}
+  .node .sil .body{fill:var(--ink);fill-opacity:.14;stroke:var(--ink);stroke-width:1.4;vector-effect:non-scaling-stroke}
+  .node .sil .ax,.node .sil .seg{fill:none;stroke:var(--ink);stroke-width:1;vector-effect:non-scaling-stroke}
+  .node.empty .sil .body,.node.empty .sil .ax,.node.empty .sil .seg{stroke:var(--ink-dim)}
+  .node:hover .sil .body,.node.sel .sil .body{fill-opacity:.22;stroke:#fff}
+  .node:hover .sil .ax,.node:hover .sil .seg,.node.sel .sil .ax,.node.sel .sil .seg{stroke:#fff}
   .node.empty .lane{stroke:var(--ink-dim)}
   .node.empty .branch{stroke:var(--ink-dim)}
   .node text{fill:var(--ink);font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase}
@@ -303,6 +308,45 @@ N.forEach((n,i)=>{
   g.addEventListener('click',e=>{ if(!moved) select(n); }); g.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();select(n);} });
   n.el=g; gNodes.append(g);
 });
+
+// ---- visual atlas: draw each modelled taxon's dorsal silhouette at its node, from the generator's own params.
+// Client-side (no build): a clean body outline — rounded cephalon, tapering thorax by segment, rounded pygidium.
+function silhouette(P){
+  const g=(k,d)=>{const v=+P[k]; return isFinite(v)?v:d;}, F=v=>(+v).toFixed(1);
+  const L=100, hw=Math.max(10, Math.min(46, 0.5*L*g('width',70)/g('length',150)));
+  const hL=g('cephFrac',0.33)*L, tL=g('pygFrac',0.2)*L, thL=Math.max(L-hL-tL,8);
+  const yH=hL, yT=yH+thL, seg=Math.max(2,Math.round(g('segCount',8)));
+  const wf=g('widthThoraxFront',1.0), wr=g('widthThoraxRear',0.82), tw=Math.max(hw*wr*g('pygWidth',0.6),3);
+  const a=Math.max(g('axisFrac',0.28)*hw,2), aT=Math.max(a*0.55,1.5);
+  const axw=y=> y<yH ? a*(0.6+0.4*y/yH) : y<yT ? a+(aT-a)*(y-yH)/thL : aT*Math.max(1-(y-yT)/tL,0);   // axial lobe half-width, head->tail
+  const R=[];
+  for(let j=0;j<=10;j++){ const t=j/10; R.push([hw*Math.sqrt(Math.max(1-(1-t)*(1-t),0)), t*hL]); }      // cephalon: rounded front -> genal
+  for(let i=0;i<seg;i++){ const t=seg>1?i/(seg-1):0; R.push([hw*(wf+(wr-wf)*t), yH+(i+0.5)/seg*thL]); } // thorax pleural tips
+  R.push([tw,yT]); for(let j=1;j<=8;j++){ const t=j/8; R.push([tw*Math.sqrt(Math.max(1-t*t,0)), yT+t*tL]); } // pygidium
+  let body='M '+R.map(p=>F(p[0])+' '+F(p[1])).join(' L ');
+  for(let i=R.length-1;i>=0;i--) body+=' L '+F(-R[i][0])+' '+F(R[i][1]);
+  const ys=[]; for(let y=0;y<=100;y+=4) ys.push(y);                                                      // axial furrows (the tri-lobe), both sides
+  const axis='M '+ys.map((y,i)=>(i?'L ':'')+F(axw(y))+' '+F(y)).join(' ')+' M '+ys.map((y,i)=>(i?'L ':'')+F(-axw(y))+' '+F(y)).join(' ');
+  let segs='';                                                                                          // thoracic segment furrows + occipital
+  for(let i=0;i<=seg;i++){ const y=yH+i/seg*thL, w=hw*(wf+(wr-wf)*(i/seg)), aw=axw(y);
+    segs+=`M ${F(aw)} ${F(y)} L ${F(w)} ${F(y)} M ${F(-aw)} ${F(y)} L ${F(-w)} ${F(y)} `; }
+  const yo=yH*0.92; segs+=`M ${F(-axw(yo))} ${F(yo)} L ${F(axw(yo))} ${F(yo)}`;
+  return {body:body+' Z', axis, segs, h:L};
+}
+const _silCache={};
+async function addSilhouettes(){
+  for(const n of N.filter(n=>n.has)){
+    try{
+      const P = _silCache[n.id] || (_silCache[n.id] = await (await fetch('/api/preset/'+n.id)).json());
+      const s = silhouette(P), [x0,y0]=XY(th(n.t0), n.lane), sc=(n.rank==='order'?17:12)/s.h;
+      const sg = el('g',{class:'sil',transform:`translate(${x0.toFixed(1)},${y0.toFixed(1)}) scale(${sc.toFixed(3)}) translate(0,${(-s.h/2).toFixed(1)})`});
+      sg.append(el('path',{class:'body',d:s.body})); sg.append(el('path',{class:'ax',d:s.axis})); sg.append(el('path',{class:'seg',d:s.segs}));
+      const circ = n.el.querySelector('circle'); if(circ) circ.setAttribute('display','none');           // the silhouette replaces the dot
+      n.el.insertBefore(sg, circ ? circ.nextSibling : n.el.firstChild);
+    }catch(_){}
+  }
+}
+addSilhouettes();
 
 // ---- eye types as timeline nodes: whole-clade characters placed on the trunk at first appearance, each a preset
 // that opens the generator with that eye configuration (?eye=<key> -> the generator applies the CHARACTERS bundle).
