@@ -160,6 +160,7 @@
       <button class="primary" id="buildBtn" style="grid-column:1/-1">Build</button>
       <button id="dl">Download STL</button>
       <button id="share">Copy link</button>
+      <button id="tps" style="grid-column:1/-1" title="dorsal homologous landmarks for geometric morphometrics (geomorph / tpsDig)">Landmarks · TPS</button>
     </div>
   </div>
   <div class="stage">
@@ -664,6 +665,11 @@ const sheetDone=ok=>{ if(sheetWait){ const r=sheetWait; sheetWait=null; r(ok); }
 $('sheet').onload=()=>{ $('sheet').style.opacity=1; $('view3d').style.display='flex'; placeView3D(); sheetDone(true); };   // fade in; the toggle appears with the sheet it sits on
 $('sheet').onerror=()=>sheetDone(false);                                                      // sheet() decides whether to try again
 $('dl').onclick=()=>{ if(buildKey) window.location='/api/stl/'+buildKey; };
+// dorsal homologous landmarks (geometric morphometrics): a .tps for geomorph/tpsDig — computed from params, no build needed
+$('tps').onclick=async()=>{ try{ const r=await fetch('/api/tps',{method:'POST',body:JSON.stringify({P})}); if(!r.ok) throw new Error(r.status);
+  const u=URL.createObjectURL(await r.blob()), a=document.createElement('a'); a.href=u; a.download='trilobite-'+ps.value+'-landmarks.tps'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(u),5000); status('landmarks saved',false);
+}catch(ex){ status('tps failed · '+why(ex),false); } };
 // shareable permalink: the full parameter set encoded in the URL, so a specific animal can be bookmarked or sent
 function shareURL(){ try{ const d={}; for(const k in P) if(k in DFLT && P[k]!==DFLT[k]) d[k]=P[k];   // only the params changed from the schema defaults
   return location.origin+location.pathname+'?p='+encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(d))))); }catch(_){ return location.href; } }

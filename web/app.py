@@ -134,6 +134,15 @@ def api_schema():
                         eye_types=eye_types, characters=_characters_list(),
                         colormaps=["magma", "viridis", "twilight", "inferno", "cividis", "gray"]))
 
+@app.post("/api/tps")
+def api_tps():
+    """Dorsal homologous landmarks for the current specimen as a TPS file (geomorph / tpsDig readable). No build needed."""
+    import landmarks as LM
+    P, _ = schema.coerce_report(request.get_json(force=True).get("P", {}), base=schema.table_defaults())
+    h = schema.param_hash(P)
+    return app.response_class(LM.tps_string([(h, P)]), mimetype="text/plain",
+                              headers={"Content-Disposition": f'attachment; filename="trilobite_{h}.tps"'})
+
 _PRESET_CHARS = None
 @app.post("/api/classify")
 def api_classify():
