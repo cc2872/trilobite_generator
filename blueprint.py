@@ -11,6 +11,15 @@ from matplotlib.patches import Arc, Circle, Ellipse
 INK, BG, DIM = "#ffffff", "#000000", "#9a9a9a"
 CMAPS = ("magma", "viridis", "twilight", "inferno", "cividis", "gray", "rainbow")   # scientific field colormaps (wave-optics look) + rainbow (full spectrum, vivid)
 RELIEF_ALPHA = 0.5   # the relief field sits semi-transparent under the blueprint lines — muted, not vibrant
+BED_MM = 256         # target print bed (square), mm — common desktop FDM; the sheet flags a specimen that won't fit
+
+def _fits_bed(w, h, bed=BED_MM):
+    """Does a w x h footprint fit on a square bed, flat or rotated? (print-in-place must lie flat)."""
+    if max(w, h) <= bed: return True
+    for th in np.radians(np.arange(1, 46, 1.0)):                               # try rotations up to 45 deg
+        c, s = np.cos(th), np.sin(th)
+        if w * c + h * s <= bed and w * s + h * c <= bed: return True
+    return False
 
 def _eye_lenses(ax, head, P, color=INK):
     """Fill each eye on the dorsal plan with its lens packing (the packing factor, as circles): the eye outline and a
@@ -503,6 +512,7 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
     gv = lambda k, d=0.0: float(P.get(k, d))
     lines = ["    " + title, "", f"DRAWING  {info.get('params', '—')}", "",
              f"LENGTH   {L:.1f} mm", f"WIDTH    {W:.1f} mm", f"RELIEF   {z1 - z0:.1f} mm", f"CLEAR    {gv('clearance'):.2f} mm",
+             f"BED      {BED_MM} mm  ·  {'FITS' if _fits_bed(W, L) else 'EXCEEDS — split or scale'}",
              f"PIECES   {len(parts)}  ·  JOINTS {len(pivots)} ball", f"CURL     {curl:.0f}°/joint · {curl * len(pivots):.0f}° total", "",
              "MORPHOSPACE COORDINATES",                                                 # the specimen's place in the space, not just its hash
              f" cephFrac {gv('cephFrac'):.2f}   pygFrac  {gv('pygFrac'):.2f}",
