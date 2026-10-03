@@ -475,7 +475,14 @@ def build(P, head="isopod", face=None, outline=None):
         for k in range(1, len(plans)):
             if parts[k].bounds[0][1] > H.bounds[1][1] + 1.0: break
             m = M.to_manifold(parts[k])
-            for a in np.arange(0.0, CURL + 1e-9, CURL_CLEAR_STEP):          # one pose at a time (memory)
+            # A shaped head's spines can run the whole length of the body (harpetid prolongations, trinucleid needles),
+            # so this loop reaches the rear segments and the tail. Curled 30 deg at every joint the tail has swung right
+            # round to the head, and subtracting the head there cut the tail off (3 Oct 2026: harpes, cryptolithus, ampyx
+            # built with a stump for a tail). The tail meeting the head is what STOPS the curl; it is not a clearance to
+            # cut. For a shaped head each part is cleared only while it has turned less than CURL in total (k joints x a).
+            # The crescent's horns reach three segments and its builds are approved: its angles are unchanged.
+            amax = CURL if head == "isopod" else CURL / k
+            for a in np.arange(0.0, amax + 1e-9, CURL_CLEAR_STEP if head == "isopod" else CURL_CLEAR_STEP / k):   # one pose at a time (memory)
                 m = BALL._force(m - HM.transform(np.linalg.inv(pose(PV, [a] * len(PV))[k])[:3, :]))
             parts[k] = M.from_manifold(m); flakes(k)
         del HM; gc.collect()                                               # the dilated head is large; free it before the neighbour pass

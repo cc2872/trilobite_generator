@@ -5,3 +5,4 @@ __pycache__/
 web_out/
 *.log
 web/cache/
+isopod_model/source/cache/

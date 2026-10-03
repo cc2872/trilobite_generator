@@ -51,7 +51,7 @@ STYLES = {
                         face=dict(caeca=0.45, eye_ridge=0.8, border_w=0.045, glab_len=1.04, furrow_splay=0.6, glab_round=0.6),
                         params=dict(LOBE, glabInflate=0.9, glabRise=0.16, glabLobes=3, eyeSize=0.08, eyePos=0.62, eyeHeight=2.0)),
     "harpes":      dict(p=72, doc="Harpetida: a broad pitted brim, short narrowing glabella, eyes reduced to tubercles on strong ridges",
-                        face=dict(brim=0.36, brim_pits=3, brim_drop=1.0, glab_len=0.66, glab_round=1.0, eye_ridge=1.1),
+                        face=dict(glab_len=0.66, glab_round=1.0, eye_ridge=1.1),
                         params=dict(glabInflate=0.7, glabRise=0.3, glabLobes=2, eyeSize=0.05, eyePos=0.42, eyeLat=0.36, eyeHeight=2.5, eyeSolid=0)),
     "phacops":     dict(p=76, doc="Phacopoidea: one great inflated glabella swallowing the front, schizochroal eyes at the front corners",
                         face=dict(glab_len=1.07, glab_bulge=0.16, tubercles=0.3, glab_round=0.8),
@@ -74,7 +74,7 @@ STYLES = {
                         face=dict(efface=0.9, node=0.5, glab_round=1.0),
                         params=dict(HOLO, glabLobes=0, glabInflate=1.0, eyeSize=0.08, eyePos=0.45, eyeLat=0.5, eyeStalk=3.0, eyeStalkBend=35)),
     "cryptolithus": dict(p=81, doc="Trinucleioidea: blind, a pear-shaped glabella standing out of a brim of pits",
-                        face=dict(brim=0.30, brim_pits=4, brim_drop=0.9, glab_boss=0.24, boss_rise=0.5, glab_len=0.94, glab_round=1.0),
+                        face=dict(glab_boss=0.24, boss_rise=0.5, glab_len=0.94, glab_round=1.0),
                         params=dict(BLIND, glabInflate=1.5, glabRise=0.25, glabLobes=0)),
     "cyclopyge":   dict(p=82, doc="Cyclopygoidea: glabella to the front margin, effaced, huge eyes as the sides of the head",
                         face=dict(glab_len=1.06, efface=0.7, glab_round=1.0),
@@ -93,6 +93,12 @@ STYLES = {
 STYLES["ceraurus"] = dict(p=78, doc="Cheirurina: barrel glabella with four furrow pairs, tuberculate, genal spines sweeping outward",
                           face=dict(glab_len=1.08, glab_round=0.8, glab_bulge=0.12, tubercles=0.35, tub_all=1),
                           params=dict(HOLO, glabInflate=1.25, glabRise=0.24, glabLobes=4, eyeSize=0.07, eyePos=0.5, eyeLat=0.55))
+STYLES["ampyx"] = dict(p=80, doc="Trinucleioidea (Raphiophoridae): blind, a long median frontal spine and genal spines longer than the body",
+                       face=dict(glab_boss=0.22, boss_rise=0.4, glab_len=0.96, glab_round=1.0), params=dict(BLIND, glabInflate=1.4, glabRise=0.25, glabLobes=0))
+STYLES["dikelocephalus"] = dict(p=82, doc="Dikelokephaloidea: squat glabella truncate in front, a square-cut head",
+                       face=dict(glab_len=0.9, glab_bulge=0.0, furrow_cross=0.6, eye_len=1.5), params=dict(LOBE, glabInflate=1.0, glabRise=0.18, glabLobes=2, eyeSize=0.1, eyePos=0.45, eyeHeight=2.0))
+STYLES["bristolia"] = dict(p=52, doc="Olenelloidea: the olenellid face, with the genal spines advanced far up the sides",
+                       face=dict(STYLES["olenellus"]["face"]), params=dict(STYLES["olenellus"]["params"]))
 
 # ---- the silhouette of each style (shaped_head.OUTLINE keys; 2 Oct 2026). The major head types of the guide:
 SP = dict(genal_w=0.10, genal_tip=0.12, notch=0.08, widest=0.03)              # a slim genal spine on a straight rear margin
@@ -106,17 +112,22 @@ OUTLINES = {
     "odontopleura": dict(length=0.7, front_exp=2.6, genal=1.0, genal_w=0.10, genal_tip=0.15, genal_spread=40, genal_curve=-45, notch=0.05, widest=0.05, width=1.15),  # short, transverse, spines flung out
     "modocia":      dict(SP, length=0.9, genal=0.55, notch=0.1, dome_fill=0.78, width=1.2),          # the generalized ptychoparioid
     "triarthrus":   dict(length=0.8, front_exp=2.5, genal=0, corner=0.2, widest=0.1, side=0.1, dome_fill=0.92, width=1.05),      # short, rounded genal angles
-    "harpes":       dict(length=1.25, genal=1.3, genal_w=0.30, genal_tip=0.55, genal_curve=-6, notch=0.55, widest=0.1, dome_fill=0.58, horn_h=0.2, width=1.5),  # the horseshoe
+    "harpes":       dict(length=1.25, genal=1.3, genal_w=0.30, genal_tip=0.55, genal_curve=-6, notch=0.55, widest=0.1, horn_h=0.2, width=1.5,
+                         brim_w=0.34, brim_rise=0.10, brim_curve=0.4, brim_roll=0.07, brim_pits=3),  # the horseshoe
     "phacops":      dict(length=0.95, front_exp=2.4, genal=0, corner=0.25, widest=0.2, side=0.12, dome_fill=0.95, width=1.05),    # rounded shield, no spines
-    "dalmanites":   dict(SP, length=1.05, front_exp=1.7, front_point=0.18, genal=0.7, genal_w=0.11, notch=0.1, width=1.2),      # ogival, an anterior point
+    "dalmanites":   dict(SP, length=1.05, front_exp=1.7, front_point=0.22, point_w=0.07, genal=0.7, genal_w=0.11, notch=0.1, width=1.2),      # ogival, an anterior point
     "encrinurus":   dict(length=0.85, front_exp=2.3, genal=0.35, genal_w=0.10, genal_tip=0.15, genal_spread=8, notch=0.08, widest=0.03, width=1.15),
     "deiphon":      dict(length=0.8, genal=1.1, genal_w=0.13, genal_tip=0.1, genal_spread=35, genal_curve=-35, notch=0.02, widest=0.03, dome_fill=0.7, width=1.1),  # cheeks reduced to spines
     "isotelus":     dict(length=1.1, front_exp=1.8, genal=0.3, genal_w=0.12, genal_tip=0.15, notch=0.1, widest=0.03, dome_fill=0.95, width=1.15),  # a subtriangular shovel
     "neoasaphus":   dict(length=0.95, front_exp=2.1, genal=0, corner=0.3, widest=0.25, side=0.15, dome_fill=0.95, width=1.05),
-    "cryptolithus": dict(length=0.85, genal=2.6, genal_w=0.07, genal_tip=0.3, genal_spread=3, notch=0.03, widest=0.03, width=1.25),   # needles three heads long
+    "cryptolithus": dict(length=0.85, genal=2.6, genal_w=0.07, genal_tip=0.3, genal_spread=3, notch=0.03, widest=0.03, width=1.25,
+                         brim_w=0.27, brim_rise=0.26, brim_curve=0.6, brim_pits=4),   # needles three heads long
     "cyclopyge":    dict(length=1.5, front_exp=2.2, genal=0, corner=0.3, widest=0.35, side=0.3, rear_taper=0.05, width=0.95),         # long and narrow
     "walliserops":  dict(SP, length=1.0, front_exp=1.9, genal=0.6, genal_spread=5, notch=0.1, width=1.2),
     "ceraurus":     dict(length=0.75, front_exp=2.6, genal=1.2, genal_w=0.12, genal_tip=0.1, genal_spread=22, genal_curve=28, notch=0.03, widest=0.03, width=1.15),  # spines sweeping out
+    "ampyx":        dict(length=0.8, genal=2.4, genal_w=0.06, genal_tip=0.3, notch=0.03, widest=0.03, front_point=1.2, point_w=0.045, width=1.2),   # three needles
+    "dikelocephalus": dict(SP, length=0.8, front_flat=0.4, genal=0.45, width=1.2),                    # truncate front
+    "bristolia":    dict(SP, length=0.9, genal=0.9, genal_at=-0.5, genal_spread=28, genal_curve=-22, corner=0.15, width=1.15),   # genal spines advanced up the side
     "all_on":       dict(),                                                                          # the crescent's own silhouette
 }
 

@@ -155,7 +155,7 @@
       <div class="printopt">
         <span>Joint</span>
         <span class="seg" id="jointseg"><span class="on" data-joint="isopod">isopod model</span> · <span data-joint="ball">print · ball</span> · <span data-joint="flexi">print · flexi</span> · <span data-joint="pin">measure · pin</span></span>
-        <span class="headwrap" id="headwrap">· <span>head</span> <select id="headstyle" title="named head after Gon (2009) — isopod model only"></select></span>
+        <span class="headwrap" id="headwrap">· <span>head</span> <select id="headstyle" title="head type: a silhouette and a sculpted face (isopod model only)"></select></span>
         <span class="fillwrap off" id="fillwrap">· <input type="number" id="fill" min="0" max="3" step="0.5" value="0"> mm fill</span>
         <span class="cmapwrap">· <span>relief</span> <select id="cmap" title="colormap for the blueprint's relief field"></select></span>
       </div>
@@ -585,13 +585,9 @@ let building=false, pending=false;
 // print mode: the site builds and hands back the print-ready ball joint by default (flexi is the one-axis
 // alternative); "pin" is the raw measurement shell (the geometry the sheet and the instrument describe),
 // with an optional fill (mm).
-let joint='isopod', fillMm=0, cmap='none', headStyle='';   // default: black & white blueprint; a colormap switches to the heatmap aesthetic. headStyle '' = the default crescent head
-const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0, head_style: joint==='isopod'?headStyle:''});
-// head style picker: a named head (Gon 2009) for the isopod model only — its own silhouette + sculpt keys. '' = the default crescent.
-(function(){ const sel=$('headstyle'); if(!sel) return;
-  const d=document.createElement('option'); d.value=''; d.textContent='default'; d.selected=true; sel.appendChild(d);
-  (S.head_styles||[]).forEach(h=>{const o=document.createElement('option'); o.value=h.name; o.textContent=h.name; if(h.doc) o.title=h.doc+(h.page?`  (Gon p. ${h.page})`:''); sel.appendChild(o);});
-  sel.onchange=()=>{ headStyle=sel.value; if(joint==='isopod') build(); }; })();
+let joint='isopod', fillMm=0, cmap='none';   // default: black & white blueprint; a colormap switches to the heatmap aesthetic
+let headStyle='crescent', HEADS=[];           // head type (isopod model only): 'crescent' = the approved head on the isopod head piece
+const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0, head: joint==='isopod'?headStyle:null});
 // relief style picker: "blueprint" (b&w, default) or a scientific colormap (the wave-optics heatmap). Just re-renders.
 (function(){ const sel=$('cmap');
   const bp=document.createElement('option'); bp.value='none'; bp.textContent='blueprint'; bp.selected=true; sel.appendChild(bp);
@@ -653,7 +649,7 @@ const SHEET_TRIES=3;                       // so the overlay lifts on the painte
 async function sheet(){ status('drawing sheet',true);
   for(let a=1;a<=SHEET_TRIES;a++){
     let r;
-    try{ r=await retryPost('/api/sheet','sheet',2,{P,joint,cmap,head_style: joint==='isopod'?headStyle:''}); if(!r.url) throw new Error(r.error||'no sheet'); }
+    try{ r=await retryPost('/api/sheet','sheet',2,{P,joint,cmap,head:joint==='isopod'?headStyle:null}); if(!r.url) throw new Error(r.error||'no sheet'); }
     catch(ex){
       if(a>=SHEET_TRIES){ status('sheet failed · '+why(ex),false); return; }
       status(`sheet failed · retry ${a}/${SHEET_TRIES-1}`,true); await new Promise(z=>setTimeout(z,800*a)); continue; }
@@ -691,9 +687,16 @@ $('share').onclick=async()=>{ const u=shareURL();
 function setJoint(j){ if(j!=='pin'&&j!=='flexi'&&j!=='ball'&&j!=='isopod') return; joint=j;
   [...$('jointseg').querySelectorAll('span[data-joint]')].forEach(s=>s.classList.toggle('on',s.dataset.joint===j));
   $('fillwrap').classList.toggle('off',j!=='pin');
-  $('headwrap').classList.toggle('off',j!=='isopod');   // the head styles apply to the isopod model only
+  $('headwrap').classList.toggle('off',j!=='isopod');
   build(); }
 $('jointseg').onclick=e=>{ if(e.target.dataset.joint) setJoint(e.target.dataset.joint); };
+// head-type picker: picking a style writes its parameter values into P (so the sliders show them and stay editable),
+// then rebuilds; the style's outline and sculpt travel as the build option `head`.
+fetch('/api/head_styles').then(r=>r.json()).then(L=>{ HEADS=L; const s=$('headstyle');
+  s.innerHTML=L.map(h=>`<option value="${h.name}" title="${(h.doc||'').replace(/"/g,'&quot;')}">${h.name}${h.p?' · p. '+h.p:''}</option>`).join(''); s.value=headStyle; }).catch(()=>{});
+$('headstyle').onchange=e=>{ headStyle=e.target.value; const h=HEADS.find(x=>x.name===headStyle);
+  if(h&&h.params){ for(const k in h.params) if(k in P) P[k]=h.params[k]; }
+  lastMeas=null; if(typeof dirty==='function') dirty(); if(typeof redraw==='function') redraw(); build(); };
 $('fill').onchange=e=>{ fillMm=Math.max(0,+e.target.value||0); if(joint==='pin') build(); };
 // ---- 3D — v1's model view: black fill with white feature edges (blueprint look) or shaded (model look), Z-up root, grid
 let scene,cam,ren,ctl,loader,root,grid,look='blueprint';   // 3D default: black & white blueprint (a colormap pick switches to Relief)

@@ -41,7 +41,8 @@ def _build_sig(*names):
     return h.hexdigest()[:8]
 BUILD_SIG = _build_sig("assemble.py", "joints/pin.py", "joints/flexi.py", "joints/ball.py", "printfill.py", "anatomy/head.py", "anatomy/thorax.py", "anatomy/tail.py", "anatomy/common.py", "mesh.py", "fields.py")
 # the isopod model is a separate builder (isopod_model/); its own source hash keys its cache half
-ISOPOD_SIG = _build_sig("isopod_model/body.py", "isopod_model/crescent_head.py", "isopod_model/shaped_head.py", "isopod_model/head_styles.py", "anatomy/head_crescent.py", "joints/ball.py", "mesh.py", "fields.py")
+ISOPOD_SIG = _build_sig("isopod_model/body.py", "isopod_model/crescent_head.py", "anatomy/head_crescent.py", "joints/ball.py", "mesh.py", "fields.py")
+SHAPED_SIG = _build_sig("isopod_model/body.py", "isopod_model/shaped_head.py", "isopod_model/head_styles.py", "anatomy/head_crescent.py", "joints/ball.py", "mesh.py", "fields.py")
 def _isopod_body():
     """Import isopod_model/body.py (its intra-package `import crescent_head` needs isopod_model on sys.path)."""
     d = os.path.join(ROOT, "isopod_model")
@@ -50,23 +51,30 @@ def _isopod_body():
     return IBODY
 
 def _head_styles():
-    """isopod_model/head_styles.py — the named heads (Gon 2009). Cheap to import (no body import at module top),
-    so /api/schema can list the styles without building anything."""
-    d = os.path.join(ROOT, "isopod_model")
-    if d not in sys.path: sys.path.insert(0, d)
-    import head_styles as HS
+    """isopod_model/head_styles.py (the named heads: a silhouette + a sculpted face each)."""
+    _isopod_body(); import head_styles as HS
     return HS
 
-def _build_isopod(P, folder, style=None):
-    """Build the isopod model (isopod body + ball joints + head) at print mm. With a named head style the head is
-    drawn on that style's parametric silhouette (shaped_head) with its sculpt keys; otherwise the default crescent
-    head. Returns (parts, man-fields)."""
-    IBODY = _isopod_body()
-    if style:
-        HS = _head_styles(); P2, face = HS.apply(P, style)                       # style overrides schema params + sculpt keys
-        parts, plans, PV, K = IBODY.build(P2, "shaped", face=face, outline=HS.outline(style))
+def _head_style(name):
+    """A valid head-style name, or None for the approved crescent on the isopod head piece."""
+    return name if name and name != "crescent" and name in _head_styles().STYLES else None
+
+def _iso_key(P, head=None):
+    """Cache key of an isopod-model build. A head style has its own key and its own builder-source hash, so the
+    crescent's cached builds are untouched by anything in the shaped-head code."""
+    h = _head_style(head)
+    return schema.param_hash(P) + ("-i" + ISOPOD_SIG if h is None else f"-h-{h}-" + SHAPED_SIG)
+
+def _build_isopod(P, folder, head=None):
+    """Build the isopod model at print mm: isopod body + ball joints + either the crescent on the isopod head piece
+    (head None) or a head style drawn on its own silhouette (3 Oct 2026). The style's outline and sculpt keys are
+    build options; P is used as given (the page applies a style's parameter values to P when it is picked, so the
+    sliders show them and stay editable). Returns (parts, man-fields)."""
+    IBODY = _isopod_body(); h = _head_style(head)
+    if h is None: parts, plans, PV, K = IBODY.build(P, "isopod")
     else:
-        parts, plans, PV, K = IBODY.build(P, "isopod")
+        HS = _head_styles(); face, _ = HS.style(h)
+        parts, plans, PV, K = IBODY.build(P, "shaped", face=face, outline=HS.outline(h))
     s = K["s"]                                                  # model units -> the isopod's own print mm
     pieces = [p.copy().apply_scale(1.0 / s) for p in parts]
     names = ["head"] + [f"seg{i}" for i in range(len(pieces) - 2)] + ["tail"]
@@ -140,20 +148,19 @@ def _char_cell(ch):
 def _characters_list():
     return [dict(key=k, name=c["name"], set=c["set"], cell=_char_cell(c)) for k, c in schema.CHARACTERS.items()]
 
-def _head_styles_list():
-    """The named head styles for the isopod-model head picker (print model only). Order as declared in head_styles."""
-    try:
-        HS = _head_styles()
-        return [dict(name=n, doc=HS.STYLES[n].get("doc", ""), page=HS.STYLES[n].get("p", 0)) for n in HS.names()]
-    except Exception:
-        return []
+@app.get("/api/head_styles")
+def api_head_styles():
+    """The head styles for the page's picker: name, what it is, the guide page, and the parameter values it sets."""
+    HS = _head_styles()
+    return jsonify([dict(name="crescent", doc="the approved crescent, on the isopod head piece", p=0, params={})] +
+                   [dict(name=n, doc=s.get("doc", ""), p=s.get("p", 0), params=s.get("params", {})) for n, s in HS.STYLES.items()])
 
 @app.get("/api/schema")
 def api_schema():
     eye_types = [dict(key=k, name=schema.CHARACTERS[k]["name"], set=schema.CHARACTERS[k]["set"]) for k in EYE_TYPES]
     return jsonify(dict(version=schema.SCHEMA_VERSION, instrument=I.INSTRUMENT_VERSION, params=_params_meta(), cells=schema.CELLS,
                         vertical_spines=schema.VERTICAL_SPINES, presets=sorted(_presets()), default=schema.DEFAULT_PRESET,
-                        eye_types=eye_types, characters=_characters_list(), head_styles=_head_styles_list(),
+                        eye_types=eye_types, characters=_characters_list(),
                         colormaps=["magma", "viridis", "twilight", "inferno", "cividis", "gray"]))
 
 @app.post("/api/tps")
@@ -198,9 +205,9 @@ def api_build():
     P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
     joint = body.get("joint", "isopod")                    # "isopod" = the default (isopod model); "pin" = measured; "flexi"/"ball" = print joints
     fill = float(body.get("fill", 0.0) or 0.0)              # pin builds only: thicken the shell for printing (mm), print-only
-    style = (body.get("head_style") or "").strip() or None  # a named head style (isopod model only); None = the default crescent head
     if joint == "isopod":
-        key = schema.param_hash(P) + "-i" + ISOPOD_SIG + (("-h" + style) if style else "")   # the style changes geometry -> its own cache key
+        head = _head_style(body.get("head"))                # a head style (isopod_model/head_styles.py), or None = the crescent
+        key = _iso_key(P, head)                             # the isopod model has its own builder-source hash
         folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
         PROGRESS.update(done=0, total=1)
         if os.path.exists(manifest):
@@ -210,14 +217,15 @@ def api_build():
                 PROGRESS.update(done=1); return send_file(manifest)
             t0 = time.time(); os.makedirs(folder, exist_ok=True); bnotes = []
             try:
-                out, kin = _build_isopod(P, folder, style)
+                out, kin = _build_isopod(P, folder, head)
             except Exception as ex:
                 shutil.rmtree(folder, ignore_errors=True)               # never cache a failed build — a retry must rebuild, not serve the error
                 PROGRESS.update(done=1)
-                return jsonify(key=key, parts=[], kinematics=_kinematics(P), joint="isopod", head_style=style,
+                return jsonify(key=key, parts=[], kinematics=_kinematics(P), joint="isopod",
                                build_notes=[("isopod", "build failed", str(ex)[:160])], build_seconds=round(time.time() - t0, 1)), 500
             man = dict(key=key, parts=out, kinematics=kin, print=dict(print_valid=True, notes=[]), schema_notes=notes,
-                       build_notes=bnotes, build_seconds=round(time.time() - t0, 1), schema=schema.SCHEMA_VERSION, joint="isopod", fill_mm=0, head_style=style)
+                       build_notes=bnotes, build_seconds=round(time.time() - t0, 1), schema=schema.SCHEMA_VERSION, joint="isopod", fill_mm=0,
+                       head=head or "crescent")
             json.dump(P, open(os.path.join(folder, "params.json"), "w")); json.dump(man, open(manifest, "w")); _evict()
             PROGRESS.update(done=1); return jsonify(man)
     jtag = ("" if joint == "pin" else f"-{joint}") + (f"-fill{fill:g}" if fill > 0.05 and joint == "pin" else "")  # pin stays untagged (matches the sheet key)
@@ -289,11 +297,10 @@ def api_sheet():
     if cmap not in blueprint.CMAPS and cmap != "none": cmap = "none"   # 'none' = black & white blueprint (default)
     if body.get("joint") == "isopod":                              # the isopod model has its own sheet (ball joints, crescent head, print-in-place)
         P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
-        style = (body.get("head_style") or "").strip() or None
-        key = schema.param_hash(P) + "-i" + ISOPOD_SIG + (("-h" + style) if style else "")
+        head = _head_style(body.get("head")); key = _iso_key(P, head)
         folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
         if not os.path.exists(manifest):
-            with app.test_request_context(json={"P": P, "joint": "isopod", "head_style": style}): api_build()
+            with app.test_request_context(json={"P": P, "joint": "isopod", "head": head}): api_build()
         man = json.load(open(manifest)); png = os.path.join(folder, f"sheet_isopod_{cmap}.png")   # cache per colormap
         if os.path.exists(png): return jsonify(url=f"/files/{key}/sheet_isopod_{cmap}.png", measured=False)
         with LOCK:

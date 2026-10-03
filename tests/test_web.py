@@ -34,3 +34,21 @@ def test_measure_endpoint(c):
     P = c.get("/api/preset/proetida").get_json(); P["segCount"] = 4
     r = c.post("/api/measure", json={"P": P}).get_json()
     assert r["instrument"] == "2.1" and r["limited_by"] in ("closed", "anatomy", "bound", "invalid") and "kinematics" in r
+
+
+def test_head_styles_endpoint_and_keys(c):
+    """3 Oct 2026: the head-type picker. The list leads with the crescent; a style has its own cache key; an unknown
+    name falls back to the crescent's key (never a failed build)."""
+    L = c.get("/api/head_styles").get_json(); names = [h["name"] for h in L]
+    assert names[0] == "crescent" and {"harpes", "phacops", "agnostus", "cryptolithus"} <= set(names)
+    for h in L:
+        for k in h["params"]: assert k in schema.BY_KEY, (h["name"], k)       # a style only sets real parameters
+    P = schema.coerce(c.get("/api/preset/proetida").get_json())
+    k0 = A._iso_key(P, None); assert A._iso_key(P, "crescent") == k0 == A._iso_key(P, "no-such-head")
+    assert A._iso_key(P, "harpes") != k0 and A._iso_key(P, "harpes") != A._iso_key(P, "phacops")
+
+@pytest.mark.slow
+def test_build_with_a_head_style(c):
+    P = c.get("/api/preset/proetida").get_json(); P["segCount"] = 4
+    m = c.post("/api/build", json={"P": P, "joint": "isopod", "head": "phacops"}).get_json()
+    assert m["head"] == "phacops" and len(m["parts"]) == 6 and all(p["bodies"] == 1 and p["watertight"] for p in m["parts"])
