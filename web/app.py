@@ -14,6 +14,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.ins
 from flask import Flask, request, jsonify, send_from_directory, send_file
 import schema, instrument as I, assemble, joints
 from joints import pin as PIN
+sys.path.insert(0, os.path.join(ROOT, 'web')); import recorder as RECORDER
 
 # manifold3d is pinned to 3.0.1 (PREREG §9): other versions' booleans shed sliver flakes, pinch thin envelopes to
 # non-manifold edges, and spike cylinder seams. A wrong-version image is what shipped the 21 Sep head pinch. Warn
@@ -27,6 +28,7 @@ if _MANIFOLD_V != "3.0.1":
     sys.stderr.flush()
 
 app = Flask(__name__, static_folder=None)
+threading.Thread(target=RECORDER.flush, daemon=True).start()   # send on any measurements stored while the receiver was unreachable
 CACHE = os.path.join(ROOT, "web", "cache"); os.makedirs(CACHE, exist_ok=True)
 
 def _build_sig(*names):
@@ -189,6 +191,12 @@ def api_classify():
     return jsonify(characters=[dict(key=k, name=schema.CHARACTERS[k]["name"]) for k in ch],
                    nearest=best if best_score > 0 else None, nearest_score=round(best_score, 2))
 
+@app.get("/api/preset_chars")
+def api_preset_chars():
+    """For the tree page: the characters each preset's own parameters express (schema.characters), so an option
+    button can tell a lineage whose model already shows the feature from one that only inherits it on the tree."""
+    return jsonify({n: schema.characters(pp) for n, pp in _presets().items()})
+
 @app.get("/api/preset/<name>")
 def api_preset(name):
     P = _presets().get(name)
@@ -280,12 +288,18 @@ def api_build():
 def api_measure():
     """The instrument: fixed measurement bevel, probe, sweep. Synchronous (~30 s); the page shows the wait."""
     P, notes = schema.coerce_report(request.get_json(force=True).get("P", {}), base=schema.table_defaults())
+    return jsonify(_measure(P, notes, "site"))
+
+def _measure(P, notes, source):
+    """Run the instrument on P (one at a time), remember the reading for the sheet, and record the animal. The page
+    and the agent interface (web/agent.py) both measure through here."""
     with LOCK:
         r, B = I.read(P)
     r = {k: v for k, v in r.items() if k not in ("scan_trace",)}
     r.update(kinematics=_kinematics(P), schema_notes=notes)
     MEASURED[schema.param_hash(P)] = json.loads(json.dumps(r, default=str))
-    return jsonify(MEASURED[schema.param_hash(P)])
+    RECORDER.record(schema.coerce(P), MEASURED[schema.param_hash(P)], schema.SCHEMA_VERSION, I.INSTRUMENT_VERSION, schema.param_hash(P), source=source)   # one line per distinct animal, kept and sent on (web/recorder.py)
+    return MEASURED[schema.param_hash(P)]
 
 @app.post("/api/sheet")
 def api_sheet():
@@ -367,6 +381,9 @@ def files(key, name): return send_from_directory(os.path.join(CACHE, key), name)
 def _evict(max_dirs=60):
     dirs = sorted(glob.glob(os.path.join(CACHE, "*")), key=os.path.getmtime)
     for d in dirs[:-max_dirs]: shutil.rmtree(d, ignore_errors=True)
+
+import agent as AGENT
+app.register_blueprint(AGENT.make_blueprint(app, schema, I, _presets, _measure, LOCK))   # /llms.txt and /api/agent/*: the way in for programs
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, threaded=True)

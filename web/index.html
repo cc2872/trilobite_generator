@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Trilobite Morphospace</title>
+<!-- Programs and AI agents: /llms.txt explains how to make and measure a trilobite here with plain HTTP (no JavaScript needed). -->
+<link rel="help" type="text/plain" href="/llms.txt" title="Guide for programs and AI agents">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -195,6 +197,7 @@ const DFLT = Object.fromEntries(S.params.map(p=>[p.key,p.default]));   // schema
 const _u=new URLSearchParams(location.search); const _q=_u.get('order')||_u.get('preset'); const START=(_q&&S.presets.includes(_q))?_q:S.default;   // tree deep link (?order= / ?preset=)
 let P = await (await fetch('/api/preset/'+START)).json(); let sel='frame', showMore=false, kin=null, partMeshes={}, buildKey=null, mode='sheet', lastMeas=null, threeReady=false;   // default view is the blueprint sheet, same as the other trilobites
 const _eye=_u.get('eye'); if(_eye){ const _t=(S.eye_types||[]).find(x=>x.key===_eye); if(_t) Object.assign(P,_t.set); }   // tree ?eye= deep link: apply the eye bundle
+const _ch=_u.get('chars'); if(_ch){ _ch.split(',').forEach(k=>{ const c=(S.characters||[]).find(x=>x.key===k); if(c) Object.assign(P,c.set); }); }   // tree ?chars= deep link: apply the character bundles, in order
 const _pp=_u.get('p'); if(_pp){ try{ const d=JSON.parse(decodeURIComponent(escape(atob(_pp)))); if(d&&typeof d==='object') P=Object.assign({...DFLT},d); }catch(_){} }   // ?p= shared permalink: defaults + the encoded changes
 const $=id=>document.getElementById(id); const INK='#ffffff', MID='#9a9a9a', LINE='#262626', SOFT='#141414';
 const ROWOF={b1:'head',a1:'head',b2:'seg',a2:'seg',b3:'tail',a3:'tail'};
@@ -586,7 +589,7 @@ let building=false, pending=false;
 // alternative); "pin" is the raw measurement shell (the geometry the sheet and the instrument describe),
 // with an optional fill (mm).
 let joint='isopod', fillMm=0, cmap='none';   // default: black & white blueprint; a colormap switches to the heatmap aesthetic
-let headStyle='crescent', HEADS=[];           // head type (isopod model only): 'crescent' = the approved head on the isopod head piece
+let headStyle=_u.get('head')||'crescent', HEADS=[];           // head type (isopod model only): 'crescent' = the approved head on the isopod head piece
 const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0, head: joint==='isopod'?headStyle:null});
 // relief style picker: "blueprint" (b&w, default) or a scientific colormap (the wave-optics heatmap). Just re-renders.
 (function(){ const sel=$('cmap');
@@ -690,10 +693,11 @@ function setJoint(j){ if(j!=='pin'&&j!=='flexi'&&j!=='ball'&&j!=='isopod') retur
   $('headwrap').classList.toggle('off',j!=='isopod');
   build(); }
 $('jointseg').onclick=e=>{ if(e.target.dataset.joint) setJoint(e.target.dataset.joint); };
+const _jq=_u.get('joint');   // ?joint=pin deep link (the agent interface's links.view opens the measured model)
 // head-type picker: picking a style writes its parameter values into P (so the sliders show them and stay editable),
 // then rebuilds; the style's outline and sculpt travel as the build option `head`.
 fetch('/api/head_styles').then(r=>r.json()).then(L=>{ HEADS=L; const s=$('headstyle');
-  s.innerHTML=L.map(h=>`<option value="${h.name}" title="${(h.doc||'').replace(/"/g,'&quot;')}">${h.name}${h.p?' · p. '+h.p:''}</option>`).join(''); s.value=headStyle; }).catch(()=>{});
+  s.innerHTML=L.map(h=>`<option value="${h.name}" title="${(h.doc||'').replace(/"/g,'&quot;')}">${h.name}${h.p?' · p. '+h.p:''}</option>`).join(''); if(!L.some(h=>h.name===headStyle)) headStyle='crescent'; s.value=headStyle; }).catch(()=>{});
 $('headstyle').onchange=e=>{ headStyle=e.target.value; const h=HEADS.find(x=>x.name===headStyle);
   if(h&&h.params){ for(const k in h.params) if(k in P) P[k]=h.params[k]; }
   lastMeas=null; if(typeof dirty==='function') dirty(); if(typeof redraw==='function') redraw(); build(); };
@@ -830,6 +834,7 @@ $('go').onclick=async()=>{ status('measuring',true); $('go').disabled=true;
   } catch(ex){ status('measure failed · '+why(ex),false); }
   finally { $('go').disabled=false; } };
 $('roll').max=P.maxAngle; $('roll').value=P.maxAngle; $('rollval').textContent=rollLabel(P.maxAngle);
+if(_jq&&['pin','flexi','ball','isopod'].includes(_jq)){ joint=_jq; [...$('jointseg').querySelectorAll('span[data-joint]')].forEach(x=>x.classList.toggle('on',x.dataset.joint===_jq)); $('fillwrap').classList.toggle('off',_jq!=='pin'); $('headwrap').classList.toggle('off',_jq!=='isopod'); }
 render(); build(); placeView3D(); classify(); pushHist();   // seed the undo history with the initial animal
 </script>
 </body>
