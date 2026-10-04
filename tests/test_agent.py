@@ -12,6 +12,7 @@ def client(monkeypatch):
         return dict(limited_by="closed", enroll_class="double", theta_joint_deg=22.81, total_deg=228.1, s_tail=0.258, closure_gap_mm=2.1, stopped_by=[], unsane_parts=[], reason=""), {}
     monkeypatch.setattr(A.I, "read", fake_read); AG.JOBS.clear(); A.MEASURED.clear()
     monkeypatch.delenv("TRILO_AGENT_TOKEN", raising=False); monkeypatch.setenv("TRILO_AGENT", "1")
+    monkeypatch.setenv("TRILO_AGENT_TOKEN_FILE", os.path.join(ROOT, "tests", "_no_token_file"))   # ignore any real web/agent_token.txt
     c = A.app.test_client(); c.calls = calls; return c
 
 def test_guide_is_readable_without_javascript(client):
@@ -60,4 +61,16 @@ def test_token_and_off_switch(client, monkeypatch):
     assert client.get("/api/agent/make?preset=proetida").status_code == 401
     assert client.get("/api/agent/make?preset=proetida&token=t0k").status_code == 200
     assert client.get("/api/agent/make?preset=proetida", headers={"Authorization": "Bearer t0k"}).status_code == 200
+    assert client.get("/api/agent/log").status_code == 401                                        # the log is gated by the same token
+    assert client.get("/api/agent/log?token=t0k").status_code == 200
     monkeypatch.setenv("TRILO_AGENT", "0"); assert client.get("/llms.txt").status_code == 404
+
+def test_log_keeps_every_request(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("TRILO_RECORD", "1"); monkeypatch.setenv("TRILO_RECORD_DIR", str(tmp_path)); monkeypatch.delenv("TRILO_RECORD_URL", raising=False)
+    client.get("/api/agent/make?preset=proetida&segCount=10")                                     # done
+    client.get("/api/agent/make?preset=nope")                                                     # rejected (400)
+    client.get("/api/agent/make?preset=proetida&segCount=10")                                     # same animal again: still logged (no dedup)
+    log = client.get("/api/agent/log").get_json(); outs = [e["outcome"] for e in log["events"]]
+    assert log["count"] >= 3 and outs.count("unknown_preset") == 1 and outs.count("done") >= 2     # repeats and rejections both kept
+    assert log["events"][0]["time"] >= log["events"][-1]["time"]                                   # newest first in the JSON
+    assert "<table" in client.get("/api/agent/log?format=html").get_data(as_text=True)

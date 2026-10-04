@@ -9,6 +9,7 @@ instrument.read, /api/build), so an animal made here is the animal the page woul
     GET  /api/agent/make?...       make one animal: preset=, chars=a,b, any parameter key=value, build=1, wait=<s>
     POST /api/agent/make           the same as JSON: {"preset": "...", "chars": [...], "set": {key: value}, "build": true}
     GET  /api/agent/animal/<hash>  an animal already asked for: its status and reading
+    GET  /api/agent/log            operator view (token-gated): every make request this server has seen, as JSON or a live HTML table
 
 A measurement takes about a minute and the server runs one at a time, so `make` waits up to `wait` seconds and
 otherwise answers {"status": "running"}; ask again with the same URL (it is the same animal, so nothing restarts).
@@ -16,7 +17,9 @@ TRILO_AGENT=0 removes these routes. A token, if set (TRILO_AGENT_TOKEN, else web
 `make` (?token= or Authorization: Bearer).
 """
 import os, json, time, base64, threading, urllib.parse
+from html import escape as _esc
 from flask import Blueprint, request, jsonify, Response
+import recorder as RECORDER
 
 MAX_WAITING = 6            # animals queued or running at once; more are refused (429) rather than piled up
 DEFAULT_WAIT, MAX_WAIT = 90, 110
@@ -60,11 +63,12 @@ def make_blueprint(app, schema, I, presets, measure, lock):
     _TOKEN_FILE = os.path.join(os.path.dirname(__file__), "agent_token.txt")
     def _on(): return os.environ.get("TRILO_AGENT", "1") not in ("0", "false", "off", "")
     def _token():
-        # the token for `make`: TRILO_AGENT_TOKEN wins; otherwise web/agent_token.txt (git-ignored, kept out of the repo)
+        # the token for `make`: TRILO_AGENT_TOKEN wins; otherwise the token file (TRILO_AGENT_TOKEN_FILE, else
+        # web/agent_token.txt) — git-ignored, so the phrase stays out of the repo. No env and no file: no token.
         tok = os.environ.get("TRILO_AGENT_TOKEN")
         if tok: return tok
         try:
-            with open(_TOKEN_FILE, encoding="utf-8") as f: tok = f.read().strip()
+            with open(os.environ.get("TRILO_AGENT_TOKEN_FILE") or _TOKEN_FILE, encoding="utf-8") as f: tok = f.read().strip()
             return tok or None
         except OSError:
             return None
@@ -139,17 +143,32 @@ def make_blueprint(app, schema, I, presets, measure, lock):
         except (TypeError, ValueError): wait = DEFAULT_WAIT
         return preset, chars, st, unknown, build, fill, wait
 
+    def _tok_ok():
+        tok = _token()
+        return not tok or request.args.get("token") == tok or request.headers.get("Authorization") == "Bearer " + tok
+    def _rec(outcome, code, spec=None, **extra):
+        # one raw line for this agent request, whatever its outcome (web/recorder.py -> agent_log.jsonl + the live page)
+        try:
+            info = spec if spec is not None else {k: v for k, v in request.args.items() if k != "token"}
+            RECORDER.log_event(dict(source="agent", method=request.method, outcome=outcome, code=code, request=info, **extra))
+        except Exception:
+            pass
+
     @bp.route("/api/agent/make", methods=["GET", "POST"])
     def make():
-        tok = _token()
-        if tok and request.args.get("token") != tok and request.headers.get("Authorization") != "Bearer " + tok:
+        if not _tok_ok():
+            _rec("unauthorized", 401)
             return jsonify(error="this server needs a token for /api/agent/make (?token=... or Authorization: Bearer ...)"), 401
         preset, chars, st, unknown, build, fill, wait = _spec()
+        spec = dict(preset=preset, chars=chars, set=st, build=build)
         PR = presets()
-        if preset not in PR: return jsonify(error=f"unknown preset {preset!r}", presets=sorted(PR)), 400
+        if preset not in PR:
+            _rec("unknown_preset", 400, spec=spec); return jsonify(error=f"unknown preset {preset!r}", presets=sorted(PR)), 400
         bad = [c for c in chars if c not in schema.CHARACTERS]
-        if bad: return jsonify(error=f"unknown character(s) {bad}", characters=sorted(schema.CHARACTERS)), 400
-        if unknown: return jsonify(error=f"unknown parameter(s) {unknown}", hint="GET /api/agent/params lists every key; ?q=word searches them"), 400
+        if bad:
+            _rec("unknown_chars", 400, spec=spec, bad=bad); return jsonify(error=f"unknown character(s) {bad}", characters=sorted(schema.CHARACTERS)), 400
+        if unknown:
+            _rec("unknown_params", 400, spec=spec, unknown=unknown); return jsonify(error=f"unknown parameter(s) {unknown}", hint="GET /api/agent/params lists every key; ?q=word searches them"), 400
         base = dict(PR[preset])
         for c in chars: base.update(schema.CHARACTERS[c]["set"])
         base.update(st)
@@ -162,18 +181,57 @@ def make_blueprint(app, schema, I, presets, measure, lock):
             j = JOBS.get(h)
             if j is None or j["state"] == "error" or (build and j["state"] == "done" and not j.get("build")):
                 if sum(1 for x in JOBS.values() if x["state"] in ("queued", "running")) >= MAX_WAITING:
-                    return jsonify(error="the server is busy: too many animals waiting. Try again in a few minutes."), 429
+                    _rec("busy", 429, spec=spec, hash=h); return jsonify(error="the server is busy: too many animals waiting. Try again in a few minutes."), 429
                 j = JOBS[h] = dict(state="queued", P=P, notes=notes, reading=(j or {}).get("reading"), error=None, t0=time.time(), t1=None, build=None)
                 threading.Thread(target=_run, args=(h, build, fill), daemon=True).start()
         t_end = time.time() + wait
         while JOBS[h]["state"] in ("queued", "running") and time.time() < t_end: time.sleep(0.5)
-        code = {"done": 200, "error": 500}.get(JOBS[h]["state"], 202)
+        state = JOBS[h]["state"]; code = {"done": 200, "error": 500}.get(state, 202)
+        _rec({"done": "done", "error": "error"}.get(state, "running"), code, spec=spec, hash=h,
+             summary=(_sentence(JOBS[h]["reading"]) if state == "done" and JOBS[h].get("reading") else None))
         return jsonify(_answer(h, wait_url=request.full_path.rstrip("?"), req=req)), code
 
     @bp.get("/api/agent/animal/<h>")
     def animal(h):
         if h not in JOBS: return jsonify(error="no animal with that hash has been asked for since the server started", hint="GET /api/agent/make?... makes one"), 404
         return jsonify(_answer(h)), {"done": 200, "error": 500}.get(JOBS[h]["state"], 202)
+
+    @bp.get("/api/agent/log")
+    def agent_log():
+        """The raw list: every make request this server has seen, newest first. Token-gated (operator view).
+        JSON by default; a browser (or ?format=html) gets a small table that refreshes itself."""
+        if not _tok_ok():
+            return jsonify(error="this endpoint needs the agent token (?token=... or Authorization: Bearer ...)"), 401
+        try: limit = max(1, min(2000, int(request.args.get("limit", 200))))
+        except (TypeError, ValueError): limit = 200
+        events = RECORDER.read_log(limit)
+        wants_html = request.args.get("format") == "html" or "text/html" in (request.headers.get("Accept") or "")
+        if wants_html: return Response(_log_html(events), mimetype="text/html; charset=utf-8")
+        return jsonify(count=len(events), events=list(reversed(events)))      # newest first
+
+    def _log_html(events):
+        def row(e):
+            req = e.get("request") or {}
+            st = req.get("set") if isinstance(req.get("set"), dict) else {}
+            bits = ", ".join(f"{k}={v}" for k, v in list(st.items())[:6]) + (" …" if len(st) > 6 else "")
+            chars = ",".join(req.get("chars") or []) if isinstance(req.get("chars"), list) else ""
+            return ("<tr><td>{t}</td><td class=o>{o}</td><td>{c}</td><td>{p}</td><td>{ch}</td>"
+                    "<td>{h}</td><td>{s}</td><td>{sm}</td></tr>").format(
+                t=_esc(e.get("time", "")), o=_esc(str(e.get("outcome", ""))), c=_esc(str(e.get("code", ""))),
+                p=_esc(str(req.get("preset", ""))), ch=_esc(chars), h=_esc(str(e.get("hash", "") or "")),
+                s=_esc(bits), sm=_esc(str(e.get("summary") or "")))
+        body = "".join(row(e) for e in reversed(events))      # newest first
+        return ("<!doctype html><meta charset=utf-8><meta http-equiv=refresh content=10>"
+                "<title>agent log</title>"
+                "<style>body{font:13px/1.45 system-ui,Segoe UI,sans-serif;margin:1.5rem;color:#222}"
+                "h1{font-size:1.2rem;margin:0 0 .2rem}p{color:#666;margin:.2rem 0 1rem}"
+                "table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #e3e3e3;padding:.3rem .55rem;text-align:left;vertical-align:top}"
+                "th{background:#f5f5f5;position:sticky;top:0}td.o{font-weight:600}"
+                "tr:hover{background:#fafafa}</style>"
+                f"<h1>Agent requests</h1><p>{len(events)} most recent, newest first · refreshes every 10&nbsp;s</p>"
+                "<table><tr><th>time (UTC)</th><th>outcome</th><th>code</th><th>preset</th><th>chars</th>"
+                "<th>hash</th><th>params set</th><th>result</th></tr>"
+                + (body or "<tr><td colspan=8 style='color:#999'>no requests yet</td></tr>") + "</table>")
 
     @bp.get("/api/agent/preset/<name>")
     def preset_values(name):

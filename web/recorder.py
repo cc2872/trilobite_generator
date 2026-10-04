@@ -6,12 +6,19 @@ the parameter hash, the full parameter table, and the instrument's reading. One 
 animal: the key is the parameter hash plus the schema and instrument versions, so the same animal
 measured again is not stored twice, and a new instrument version is.
 
-Two places, in this order:
-  1. web/records/readings.jsonl on the server (TRILO_RECORD_DIR moves it). Append-only, one JSON object per line.
-  2. If TRILO_RECORD_URL is set, each new line is POSTed there as JSON (Authorization: Bearer $TRILO_RECORD_TOKEN
-     when that is set; "secret": $TRILO_RECORD_SECRET in the body when that is set). Lines that could not be sent are retried with the next record and at start-up
-     (web/records/sent.txt lists the keys that arrived).
+There are two sources, both append-only JSONL in the same folder:
+  - web/records/readings.jsonl — the clean list, one line per DISTINCT measured animal (record(), kind "reading").
+  - web/records/agent_log.jsonl — the raw list, one line per agent REQUEST, no dedup (log_event(), kind "agent_request"):
+    every /api/agent/make call, including repeats, rejected ones (bad preset/params, 401, 429) and errors.
 
+Each new line from either source goes two places, in this order:
+  1. The JSONL file on the server (TRILO_RECORD_DIR moves the folder). Always.
+  2. If TRILO_RECORD_URL is set, the line is POSTed there as JSON (Authorization: Bearer $TRILO_RECORD_TOKEN
+     when that is set; "secret": $TRILO_RECORD_SECRET in the body when that is set). The "kind" field says which
+     list it belongs to so a receiver can route it (e.g. two tabs of one Sheet). Lines that could not be sent are
+     retried with the next record and at start-up (web/records/sent.txt lists the keys that arrived).
+
+The raw log is also served live at GET /api/agent/log (web/agent.py), gated by the agent token.
 Nothing about the visitor is stored: no address, no browser, no cookie. Recording never slows or fails a
 measurement: the send runs on its own thread and every error is swallowed into web/records/errors.log.
 TRILO_RECORD=0 turns the whole thing off.  docs/recording.md has the set-up for the receiving end.
@@ -20,6 +27,7 @@ import os, json, time, threading, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _LOCK = threading.Lock()
+_SEQ = 0                   # per-process counter so each raw event gets a unique key even within the same second
 
 def _dir():
     d = os.environ.get("TRILO_RECORD_DIR") or os.path.join(ROOT, "web", "records"); os.makedirs(d, exist_ok=True); return d
@@ -39,7 +47,7 @@ def entry(P, reading, schema_version, instrument_version, param_hash, source="si
     r = {k: v for k, v in reading.items() if k not in ("kinematics", "scan_trace", "schema_notes")}
     line = (f"{param_hash}  schema {schema_version}  instrument {instrument_version}  "
             f"{r.get('limited_by', '?')} / {r.get('enroll_class', '?')}  theta/joint {r.get('theta_joint_deg', '?')}  s_tail {r.get('s_tail', '?')}")
-    return dict(key=f"{param_hash}@{schema_version}@{instrument_version}", hash=param_hash, schema=schema_version, instrument=instrument_version,
+    return dict(kind="reading", key=f"{param_hash}@{schema_version}@{instrument_version}", hash=param_hash, schema=schema_version, instrument=instrument_version,
                 time=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), source=source, text=line, params=P, reading=r)
 
 def _post(e):
@@ -58,8 +66,10 @@ def flush():
     n = 0
     with _LOCK:
         sent = set(_keys("sent.txt"))
-        try: lines = [json.loads(l) for l in open(os.path.join(_dir(), "readings.jsonl"), encoding="utf-8") if l.strip()]
-        except OSError: lines = []
+        lines = []
+        for name in ("readings.jsonl", "agent_log.jsonl"):          # the clean list first, then the raw request log
+            try: lines += [json.loads(l) for l in open(os.path.join(_dir(), name), encoding="utf-8") if l.strip()]
+            except OSError: pass
         for e in lines:
             if e["key"] in sent: continue
             try:
@@ -83,3 +93,28 @@ def record(P, reading, schema_version, instrument_version, param_hash, source="s
         return True
     except Exception as ex:
         _log(f"record failed: {ex!r}"); return False
+
+def log_event(fields):
+    """Store one raw agent request (no dedup) and stream it on. `fields` is a dict (source, outcome, request, ...).
+    Returns the event key, or None when recording is off or something went wrong. Never raises."""
+    global _SEQ
+    try:
+        if not _on(): return None
+        with _LOCK:
+            _SEQ += 1
+            e = dict(kind="agent_request", key=f"log-{int(time.time() * 1000)}-{_SEQ}",
+                     time=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **fields)
+            with open(os.path.join(_dir(), "agent_log.jsonl"), "a", encoding="utf-8") as f: f.write(json.dumps(e, default=str, sort_keys=True) + "\n")
+        threading.Thread(target=flush, daemon=True).start()
+        return e["key"]
+    except Exception as ex:
+        _log(f"log_event failed: {ex!r}"); return None
+
+def read_log(limit=200):
+    """The most recent raw agent events, oldest first. Returns a list (empty if the log does not exist). Never raises."""
+    try:
+        with open(os.path.join(_dir(), "agent_log.jsonl"), encoding="utf-8") as f:
+            lines = [l for l in f if l.strip()]
+        return [json.loads(l) for l in lines[-max(1, int(limit)):]]
+    except (OSError, ValueError, TypeError):
+        return []

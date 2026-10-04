@@ -5,6 +5,7 @@ import recorder as R
 
 READING = dict(valid=True, limited_by="closed", enroll_class="double", theta_joint_deg=22.81, s_tail=0.258, kinematics={"big": [1] * 50})
 def _lines(d): return [json.loads(l) for l in open(os.path.join(d, "readings.jsonl"), encoding="utf-8")]
+def _log_lines(d): return [json.loads(l) for l in open(os.path.join(d, "agent_log.jsonl"), encoding="utf-8")]
 
 class _Sink(http.server.BaseHTTPRequestHandler):
     got, status = [], 200
@@ -38,6 +39,30 @@ def test_sent_once_with_token_and_retried_after_failure(tmp_path, monkeypatch):
     assert R.record({"a": 2}, READING, "6.2", "2.1", "dddddddddd", wait=True)                    # the next record takes the stuck one with it
     assert [g[1]["hash"] for g in _Sink.got] == ["cccccccccc", "dddddddddd"] and _Sink.got[0][0] == "Bearer s3cret"
     assert R.flush() == 0 and len(_Sink.got) == 2                                               # nothing is sent twice
+    srv.shutdown()
+
+def test_raw_log_keeps_every_event_and_read_log_reads_them(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRILO_RECORD", "1"); monkeypatch.setenv("TRILO_RECORD_DIR", str(tmp_path)); monkeypatch.delenv("TRILO_RECORD_URL", raising=False)
+    assert R.log_event(dict(source="agent", outcome="done", request={"preset": "proetida"}))
+    assert R.log_event(dict(source="agent", outcome="done", request={"preset": "proetida"}))     # identical: still a second line (no dedup)
+    assert R.log_event(dict(source="agent", outcome="unknown_preset", request={"preset": "nope"}))
+    L = _log_lines(tmp_path); assert len(L) == 3 and [e["kind"] for e in L] == ["agent_request"] * 3
+    assert len({e["key"] for e in L}) == 3                                                        # unique keys even for identical events
+    assert [e["outcome"] for e in R.read_log()] == ["done", "done", "unknown_preset"]             # oldest first
+    assert R.read_log(1)[0]["outcome"] == "unknown_preset"                                        # a limit keeps the most recent
+
+def test_raw_log_off_switch(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRILO_RECORD", "0"); monkeypatch.setenv("TRILO_RECORD_DIR", str(tmp_path))
+    assert R.log_event(dict(source="agent", outcome="done")) is None and R.read_log() == []
+
+def test_flush_carries_both_lists(tmp_path, monkeypatch):
+    srv = _server(); _Sink.got, _Sink.status = [], 200
+    monkeypatch.setenv("TRILO_RECORD", "1"); monkeypatch.setenv("TRILO_RECORD_DIR", str(tmp_path))
+    monkeypatch.setenv("TRILO_RECORD_URL", f"http://127.0.0.1:{srv.server_port}/hook"); monkeypatch.delenv("TRILO_RECORD_TOKEN", raising=False)
+    R.record({"a": 1}, READING, "6.2", "2.1", "ffffffffff", wait=True)
+    R.log_event(dict(source="agent", outcome="done", request={"preset": "proetida"}))
+    R.flush()
+    assert sorted(g[1].get("kind") for g in _Sink.got) == ["agent_request", "reading"]            # both sources reach the receiver
     srv.shutdown()
 
 def test_off_switch_and_never_raises(tmp_path, monkeypatch):
