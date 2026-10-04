@@ -6,3 +6,4 @@ web_out/
 *.log
 web/cache/
 web/records/
+web/agent_token.txt

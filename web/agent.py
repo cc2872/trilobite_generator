@@ -12,7 +12,8 @@ instrument.read, /api/build), so an animal made here is the animal the page woul
 
 A measurement takes about a minute and the server runs one at a time, so `make` waits up to `wait` seconds and
 otherwise answers {"status": "running"}; ask again with the same URL (it is the same animal, so nothing restarts).
-TRILO_AGENT=0 removes these routes. TRILO_AGENT_TOKEN, if set, must be given to `make` (?token= or Authorization: Bearer).
+TRILO_AGENT=0 removes these routes. A token, if set (TRILO_AGENT_TOKEN, else web/agent_token.txt), must be given to
+`make` (?token= or Authorization: Bearer).
 """
 import os, json, time, base64, threading, urllib.parse
 from flask import Blueprint, request, jsonify, Response
@@ -56,7 +57,17 @@ CLASSES = {"sphaeroidal": "closed with the tail margin meeting the head margin",
 def make_blueprint(app, schema, I, presets, measure, lock):
     """presets() -> {name: params}; measure(P, notes, source) -> reading dict (the page's own measurement path)."""
     bp = Blueprint("agent", __name__)
+    _TOKEN_FILE = os.path.join(os.path.dirname(__file__), "agent_token.txt")
     def _on(): return os.environ.get("TRILO_AGENT", "1") not in ("0", "false", "off", "")
+    def _token():
+        # the token for `make`: TRILO_AGENT_TOKEN wins; otherwise web/agent_token.txt (git-ignored, kept out of the repo)
+        tok = os.environ.get("TRILO_AGENT_TOKEN")
+        if tok: return tok
+        try:
+            with open(_TOKEN_FILE, encoding="utf-8") as f: tok = f.read().strip()
+            return tok or None
+        except OSError:
+            return None
     @bp.before_request
     def _gate():
         if not _on(): return jsonify(error="the agent interface is switched off on this server"), 404
@@ -130,7 +141,7 @@ def make_blueprint(app, schema, I, presets, measure, lock):
 
     @bp.route("/api/agent/make", methods=["GET", "POST"])
     def make():
-        tok = os.environ.get("TRILO_AGENT_TOKEN")
+        tok = _token()
         if tok and request.args.get("token") != tok and request.headers.get("Authorization") != "Bearer " + tok:
             return jsonify(error="this server needs a token for /api/agent/make (?token=... or Authorization: Bearer ...)"), 401
         preset, chars, st, unknown, build, fill, wait = _spec()
