@@ -177,3 +177,31 @@ if __name__ == "__main__":
         rows.append([(h, 32, -62, f"{n.upper()}" + (f"  (Gon p. {STYLES[n]['p']})" if STYLES[n]['p'] else "")), (h, 90, -90, "top")])
     for i in range(0, len(rows), 5):
         out = os.path.join(HERE, "photos", f"head_styles_{i // 5 + 1}.png"); R.sheet(rows[i:i + 5], out, W=720, H=470); print(out, flush=True)
+
+# ---------------------------------------------------------------- the macro projection (11 Oct 2026)
+FACE_TO_SCHEMA = dict(eye_size="eyeSize", eye_pos="eyePos", eye_height="eyeHeight", eye_lat="eyeLat", glab_inflate="glabInflate",
+                      glab_rise="glabRise", glab_front="glabFront", glab_lobes="glabLobes", suture_end="sutureEnd", suture_depth="sutureDepth", eye_ridge="eyeRidge")
+
+def macro(P, outline, face=None, params=None):
+    """The schema parameters that ROUGHLY reproduce a head-editor head on the opening page's macro model: the guide
+    style's own parameter values, the face keys (the same numbers under their schema names), and the outline's
+    genal spine (length, width, taper, curl), front exponent, dome fill, rear notch, and its length as cephFrac
+    (the head's axial length = outline.length x outline.width x segment 0's half-width; the rest of the body keeps
+    its length). Returns {schema key: value}, clamped. A projection: the outline has thirty keys, the crescent six."""
+    import schema
+    from fields import seg_halfwidth
+    o = dict(outline or {}); out = dict(params or {})
+    for k, v in (face or {}).items():
+        if k in FACE_TO_SCHEMA: out[FACE_TO_SCHEMA[k]] = v
+    if "genal" in o: out["genalSpine"] = o["genal"]
+    if "genal_w" in o: out["genalWidth"] = o["genal_w"]
+    if "genal_tip" in o: out["genalTaper"] = 0.5 + 2.5 * (1.0 - o["genal_tip"])
+    if "genal_curve" in o: out["genalCurve"] = -o["genal_curve"]            # the outline's + is outward; the schema's + is the inward curl
+    if "front_exp" in o: out["headOutlineExp"] = o["front_exp"]
+    if "dome_fill" in o: out["headDomeFill"] = o["dome_fill"]
+    if "notch" in o and "genal" in o: out["headRearArc"] = 0.35 * o["notch"] * min(o["genal"], 1.0)   # the U between the spines, as the crescent's bowed rear
+    if "length" in o and "width" in o:
+        Lc = o["length"] * o["width"] * seg_halfwidth(P, 0); rest = P["length"] * (1.0 - P["cephFrac"])
+        out["length"] = Lc + rest; out["cephFrac"] = Lc / (Lc + rest)
+    Q = schema.coerce(out, base=P); return {k: Q[k] for k in out if k in Q}   # the overrides only, clamped
+

@@ -33,6 +33,8 @@
   .more{color:var(--mid);cursor:pointer;margin-top:14px;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
   .actions{padding:14px 20px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:8px}
   button{background:var(--bg);color:var(--ink);border:1px solid var(--ink);border-radius:0;padding:8px 6px;font:inherit;cursor:pointer}
+  .nav{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px}
+  .nav button{font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-family:var(--mono)}
   button.primary{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:500;letter-spacing:.04em}
   button:hover{background:var(--soft)} button.primary:hover{opacity:.88} button:disabled{opacity:.35;cursor:default}
   .printopt{grid-column:1/-1;display:flex;align-items:center;gap:10px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mid);user-select:none;flex-wrap:wrap}
@@ -144,7 +146,7 @@
   <div class="panel">
     <div class="controls">
       <h1>Trilobite Morphospace</h1>
-      <button id="familytree" onclick="location.href='/tree'" title="browse the orders as a ring/spiral family tree">family tree</button>
+      <div class="nav"><button id="familytree" onclick="location.href='/tree'" title="browse the orders as a ring/spiral family tree">family tree</button><button id="headeditor" onclick="const h=window.__page&&window.__page.headStyle; location.href='/head'+(h&&h!=='crescent'?'?style='+encodeURIComponent(h):'')" title="draw the isopod model's head: plan and elevation with handles; save a head and it appears in the head picker here">head editor</button><button id="bodyeditor" onclick="const p=window.__page; location.href='/body?preset='+encodeURIComponent(p?p.preset:'')+(p&&p.headStyle&&p.headStyle!=='crescent'?'&head='+encodeURIComponent(p.headStyle):'')+(p&&p.body?'&body='+encodeURIComponent(p.body):'')" title="the body as rows, head to tail tip: each row's length, width, trajectory and height; short rows fuse into one piece">body editor</button></div>
       <div class="ctrl"><div class="lab"><span>Order</span></div><select id="preset"></select></div>
       <svg class="map" id="map" viewBox="0 0 384 396" xmlns="http://www.w3.org/2000/svg"></svg>
       <div id="dhint"><span class="x" id="dhintx" title="dismiss">×</span><b>Tip:</b> the diagram is the control. <b>Drag</b> the marks to shape the animal, <b>tap</b> a region to edit it, <b>tap</b> a prong to add a tine.</div>
@@ -589,8 +591,10 @@ let building=false, pending=false;
 // alternative); "pin" is the raw measurement shell (the geometry the sheet and the instrument describe),
 // with an optional fill (mm).
 let joint='isopod', fillMm=0, cmap='none';   // default: black & white blueprint; a colormap switches to the heatmap aesthetic
-let headStyle=_u.get('head')||'crescent', HEADS=[];           // head type (isopod model only): 'crescent' = the approved head on the isopod head piece
-const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0, head: joint==='isopod'?headStyle:null});
+let headStyle=_u.get('head')||'crescent', HEADS=[];
+let bodyName=_u.get('body')||null;                          // a saved body (the body editor's rows model) to build with, by name (10 Oct 2026)
+window.__page={get headStyle(){return headStyle}, get joint(){return joint}, get preset(){return (document.getElementById('preset')||{}).value||''}, get body(){return bodyName}, shareURL:()=>shareURL()};   // read-only view of the page's state for the nav buttons and tests (the script is a module)           // head type (isopod model only): 'crescent' = the approved head on the isopod head piece
+const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0, head: joint==='isopod'?headStyle:null, body: joint==='isopod'?bodyName:null});
 // relief style picker: "blueprint" (b&w, default) or a scientific colormap (the wave-optics heatmap). Just re-renders.
 (function(){ const sel=$('cmap');
   const bp=document.createElement('option'); bp.value='none'; bp.textContent='blueprint'; bp.selected=true; sel.appendChild(bp);
@@ -644,7 +648,7 @@ async function build(){ if(building){pending=true;return;} building=true; status
     try{ man=await retryPost('/api/build','build',2,buildBody()); }
     catch(ex){ status('build failed · '+why(ex),false); return; }
     kin=man.kinematics; buildKey=man.key; readout();
-    status(`built in ${man.build_seconds}s · ${man.print.print_valid?'printable':man.print.violations.join('; ')}`,false);
+    status(`built in ${man.build_seconds}s · ${man.print.print_valid?'printable':(man.print.violations||man.print.notes||['not printable']).join('; ')}`,false);
     if(mode==='sheet') await sheet(); else await load3d(man);
   } finally { building=false; loadingOff(); if(pending){pending=false; build();} } }
 let sheetWait=null;                        // resolved true by the img's load, false by its error or the timeout,
@@ -652,7 +656,7 @@ const SHEET_TRIES=3;                       // so the overlay lifts on the painte
 async function sheet(){ status('drawing sheet',true);
   for(let a=1;a<=SHEET_TRIES;a++){
     let r;
-    try{ r=await retryPost('/api/sheet','sheet',2,{P,joint,cmap,head:joint==='isopod'?headStyle:null}); if(!r.url) throw new Error(r.error||'no sheet'); }
+    try{ r=await retryPost('/api/sheet','sheet',2,{P,joint,cmap,head:joint==='isopod'?headStyle:null,body:joint==='isopod'?bodyName:null}); if(!r.url) throw new Error(r.error||'no sheet'); }
     catch(ex){
       if(a>=SHEET_TRIES){ status('sheet failed · '+why(ex),false); return; }
       status(`sheet failed · retry ${a}/${SHEET_TRIES-1}`,true); await new Promise(z=>setTimeout(z,800*a)); continue; }
@@ -678,7 +682,10 @@ $('tps').onclick=async()=>{ try{ const r=await fetch('/api/tps',{method:'POST',b
 }catch(ex){ status('tps failed · '+why(ex),false); } };
 // shareable permalink: the full parameter set encoded in the URL, so a specific animal can be bookmarked or sent
 function shareURL(){ try{ const d={}; for(const k in P) if(k in DFLT && P[k]!==DFLT[k]) d[k]=P[k];   // only the params changed from the schema defaults
-  return location.origin+location.pathname+'?p='+encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(d))))); }catch(_){ return location.href; } }
+  let u=location.origin+location.pathname+'?p='+encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(d)))));
+  if(joint!=='isopod') u+='&joint='+encodeURIComponent(joint); if(joint==='isopod'&&headStyle&&headStyle!=='crescent') u+='&head='+encodeURIComponent(headStyle);   // the link carries the joint and the head too (9 Oct 2026)
+  if(joint==='isopod'&&bodyName) u+='&body='+encodeURIComponent(bodyName);
+  return u; }catch(_){ return location.href; } }
 $('share').onclick=async()=>{ const u=shareURL();
   try{ await navigator.clipboard.writeText(u); status('link copied',false); }
   catch(_){ const t=document.createElement('textarea'); t.value=u; document.body.appendChild(t); t.select();
@@ -696,11 +703,25 @@ $('jointseg').onclick=e=>{ if(e.target.dataset.joint) setJoint(e.target.dataset.
 const _jq=_u.get('joint');   // ?joint=pin deep link (the agent interface's links.view opens the measured model)
 // head-type picker: picking a style writes its parameter values into P (so the sliders show them and stay editable),
 // then rebuilds; the style's outline and sculpt travel as the build option `head`.
-fetch('/api/head_styles').then(r=>r.json()).then(L=>{ HEADS=L; const s=$('headstyle');
-  s.innerHTML=L.map(h=>`<option value="${h.name}" title="${(h.doc||'').replace(/"/g,'&quot;')}">${h.name}${h.p?' · p. '+h.p:''}</option>`).join(''); if(!L.some(h=>h.name===headStyle)) headStyle='crescent'; s.value=headStyle; }).catch(()=>{});
-$('headstyle').onchange=e=>{ headStyle=e.target.value; const h=HEADS.find(x=>x.name===headStyle);
-  if(h&&h.params){ for(const k in h.params) if(k in P) P[k]=h.params[k]; }
+const HEADS_READY=fetch('/api/head_styles').then(r=>r.json()).then(L=>{ HEADS=L; const s=$('headstyle');
+  const g=L.filter(h=>!h.saved), v=L.filter(h=>h.saved);
+  s.innerHTML=g.map(h=>`<option value="${h.name}" title="${(h.doc||'').replace(/"/g,'&quot;')}">${h.name}${h.p?' · p. '+h.p:''}</option>`).join('')+
+    (v.length?`<optgroup label="saved">${v.map(h=>`<option value="${h.name}" title="${(h.doc||'').replace(/"/g,'&quot;')}">${h.name} · ${h.style}</option>`).join('')}</optgroup>`:'');
+  if(!L.some(h=>h.name===headStyle)) headStyle='crescent'; s.value=headStyle; }).catch(()=>{});
+$('headstyle').onchange=async e=>{ headStyle=e.target.value; const h=HEADS.find(x=>x.name===headStyle);
+  if(h&&h.saved){ await applyMacro(); }                                       // a head from the editor: its projection (style values + outline + face)
+  else if(h&&h.params){ for(const k in h.params) if(k in P) P[k]=h.params[k]; }
   lastMeas=null; if(typeof dirty==='function') dirty(); if(typeof redraw==='function') redraw(); build(); };
+// ---- the editors mirrored on the macro model (11 Oct 2026): a saved head and/or a saved body project onto the schema
+// parameters (/api/macro: row counts and lengths, the width field, medians of the row numbers, the spine field; the
+// head's guide values, face keys, genal spine, front, dome, length). The sliders then show roughly the edited animal,
+// and the pin model and the instrument see it too. A projection, not an inverse: the editors hold more detail.
+async function applyMacro(){ const h=HEADS.find(x=>x.name===headStyle); const savedHead=!!(h&&h.saved); if(!bodyName&&!savedHead) return 0;
+  try{ const r=await fetch('/api/macro',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, head:savedHead?headStyle:null, body:bodyName})});
+    const j=await r.json(); if(!r.ok) throw new Error(j.error||'macro failed'); let n=0; for(const k in j.P) if(k in P){ P[k]=j.P[k]; n++; }
+    if(n&&typeof redraw==='function') redraw();
+    status(`macro mirrors ${[bodyName?'body '+bodyName:'',savedHead?'head '+headStyle:''].filter(Boolean).join(' + ')} · ${n} parameters`,false); return n; }
+  catch(ex){ status('macro mirror failed · '+why(ex),false); return 0; } }
 $('fill').onchange=e=>{ fillMm=Math.max(0,+e.target.value||0); if(joint==='pin') build(); };
 // ---- 3D — v1's model view: black fill with white feature edges (blueprint look) or shaded (model look), Z-up root, grid
 let scene,cam,ren,ctl,loader,root,grid,look='blueprint';   // 3D default: black & white blueprint (a colormap pick switches to Relief)
@@ -835,6 +856,9 @@ $('go').onclick=async()=>{ status('measuring',true); $('go').disabled=true;
   finally { $('go').disabled=false; } };
 $('roll').max=P.maxAngle; $('roll').value=P.maxAngle; $('rollval').textContent=rollLabel(P.maxAngle);
 if(_jq&&['pin','flexi','ball','isopod'].includes(_jq)){ joint=_jq; [...$('jointseg').querySelectorAll('span[data-joint]')].forEach(x=>x.classList.toggle('on',x.dataset.joint===_jq)); $('fillwrap').classList.toggle('off',_jq!=='pin'); $('headwrap').classList.toggle('off',_jq!=='isopod'); }
+await HEADS_READY.catch(()=>{});
+if(bodyName&&!_u.get('head')){ try{ const b=(await (await fetch('/api/bodies')).json()).find(x=>x.name===bodyName); if(b&&b.head&&HEADS.some(h=>h.name===b.head)){ headStyle=b.head; $('headstyle').value=headStyle; } }catch(_){} }   // a saved body brings its head
+await applyMacro();
 render(); build(); placeView3D(); classify(); pushHist();   // seed the undo history with the initial animal
 </script>
 </body>

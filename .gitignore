@@ -7,3 +7,7 @@ web_out/
 web/cache/
 web/records/
 web/agent_token.txt
+web/heads/
+web/bodies/
+segment/out/
+web/heads_cache/

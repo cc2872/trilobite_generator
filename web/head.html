@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trilobite · Head</title>
+<!-- The head editor (9 Oct 2026): the isopod model's shaped head drawn as the sheet draws it, plan over elevation,
+     with handles. Every drag is sent to /api/head_diagram, which runs the SAME Shape / head_crescent functions the
+     solid is built from, so the drawing is the geometry (about 0.2 s a redraw). p5 (web/static/p5.min.js, self-hosted,
+     instance mode) does the canvas; the parameters, the build and the cache are the generator's own. -->
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<script src="/static/p5.min.js"></script>
+<style>
+  :root{--bg:#000;--ink:#fff;--mid:#9a9a9a;--line:#262626;--soft:#141414;--accent:#f6704f;--accent-dim:#7a3326;
+        --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"IBM Plex Sans",system-ui,"Helvetica Neue",Arial,sans-serif}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:12px;overflow:hidden;-webkit-font-smoothing:antialiased}
+  body{display:grid;grid-template-columns:272px 1fr;height:100%}
+  .panel{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;padding:18px 18px 14px;overflow-y:auto;overflow-x:hidden}
+  .panel input[type=text]{min-width:0}
+  h1,.sect,.status,.kv,.edits,.val,.btn,.links,.hint.mono{font-family:var(--mono)}
+  h1{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:normal;margin:0 0 4px;display:flex;justify-content:space-between}
+  .nav{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:4px 0 10px} .nav button{background:var(--bg);color:var(--mid);border:1px solid var(--line);padding:6px 0;font:inherit;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} .nav button:hover{color:var(--ink);border-color:var(--ink)}
+  h1 a{color:var(--mid);text-decoration:none;letter-spacing:.08em}
+  h1 a:hover{color:var(--ink)}
+  .sect{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mid);margin:20px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
+  .sect span:last-child{color:var(--mid);cursor:pointer;letter-spacing:.06em}
+  .sect span:last-child:hover{color:var(--ink)}
+  select{width:100%;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--ink);padding:6px 0;font:inherit;border-radius:0}
+  .hint{color:var(--mid);font-size:11px;margin:6px 0 0;line-height:1.45}
+  .ctrl{margin:9px 0 0}
+  .ctrl .lab{display:flex;justify-content:space-between;font-size:11px}
+  .ctrl .lab .val{color:var(--mid);font-variant-numeric:tabular-nums}
+  .ctrl .lab .val.on{color:var(--accent)}
+  input[type=range]{-webkit-appearance:none;width:100%;height:1px;background:var(--ink);outline:none;margin:7px 0 2px}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;border-radius:50%;background:var(--ink);cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;background:var(--ink);border:none;cursor:pointer}
+  .edits{font-size:11px;line-height:1.7;color:var(--mid)}
+  .edits b{color:var(--ink);font-weight:normal}
+  .edits i{color:var(--mid);font-style:normal;cursor:pointer;margin-left:6px}
+  .edits i:hover{color:var(--accent)}
+  .row{display:flex;gap:8px;margin-top:12px}
+  .btn{flex:1;background:var(--bg);color:var(--ink);border:1px solid var(--ink);padding:7px 0;font-size:10px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+  .btn:hover{background:var(--soft)}
+  .btn.primary{background:var(--ink);color:var(--bg)}
+  .btn.primary:hover{background:#ddd}
+  .btn[disabled]{opacity:.4;cursor:default}
+  .status{font-size:10px;letter-spacing:.06em;color:var(--mid);margin-top:12px;min-height:14px;white-space:pre-line}
+  .status.busy{color:var(--accent)}
+  .links{font-size:11px;line-height:1.7;margin-top:6px}
+  .links a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)}
+  .links a:hover{border-bottom-color:var(--ink)}
+  #stage{position:relative;min-width:0;min-height:0}
+  #stage canvas{display:block}
+  .kv{position:absolute;right:14px;top:12px;font-size:10px;letter-spacing:.08em;color:var(--mid);text-align:right;line-height:1.6;pointer-events:none}
+  .kv b{color:var(--ink);font-weight:normal}
+  .spacer{flex:1}
+  textarea{width:100%;height:120px;background:var(--bg);color:var(--mid);border:1px solid var(--line);font:11px var(--mono);padding:6px;resize:vertical;display:none}
+</style>
+</head>
+<body>
+<div class="panel">
+  <h1><span>Head · editor</span></h1>
+  <div class="nav"><button id="home" onclick="const h=S.savedName||S.style; location.href='/'+(h&&h!=='crescent'?'?head='+encodeURIComponent(h):'')" title="back to the generator, keeping this head, preset and body">home</button><button id="bodyeditor" onclick="const h=S.savedName||S.style; location.href='/body'+(h&&h!=='crescent'?'?head='+encodeURIComponent(h):'')" title="the body as rows: length, width, trajectory and height per row">body editor</button></div>
+  <div class="hint">Drag a handle on the drawing. Each redraw is the builder's own geometry, not an approximation.</div>
+
+  <div class="sect"><span>Head type</span><span id="pg"></span></div>
+  <select id="style"></select>
+  <div class="hint" id="doc"></div>
+
+  <div class="sect"><span id="hname">Handle</span><span id="allkeys">all keys</span></div>
+  <div id="sliders"><div class="hint">Hover a handle to see what it drags; click it to pin its sliders here.</div></div>
+
+  <div class="sect"><span id="edhead">Edits</span><span id="reset">reset</span></div>
+  <div class="edits" id="edits">none</div>
+
+  <div class="sect"><span>Save</span><span id="del" style="display:none">delete saved</span></div>
+  <div class="row" style="margin-top:8px"><input type="text" id="savename" placeholder="name (letters, digits, - _)" style="flex:1;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--line);padding:4px 0;font:inherit"><button class="btn" id="save" style="flex:0 0 90px">save</button></div>
+  <div class="hint">A saved head is a name the generator understands: it appears in the head picker on the opening page, in share links (<span class="mono">?head=name</span>), and here. Re-saving a name replaces it.</div>
+  <div class="links" id="openlink"></div>
+
+  <div class="row"><button class="btn" id="copy">copy JSON</button><button class="btn primary" id="build">build</button></div>
+  <textarea id="json" readonly></textarea>
+  <div class="status" id="status"></div>
+  <div class="links" id="links"></div>
+  <div class="spacer"></div>
+  <div class="hint">Plan above, elevation below, one scale, front to the left. Half-width = 1. Dotted lines: the first thorax segment's half-width. Section on the axis is solid; the highest profile is grey.</div>
+</div>
+<div id="stage"><div class="kv" id="kv"></div></div>
+
+<script>
+// ---------- state ----------
+const $=id=>document.getElementById(id);
+const S={style:'crescent', outline:{}, face:{}, D:null, meta:null, pinned:null, hover:null, drag:null, busy:0, pendingSend:false, P:null, savedName:null};
+// schema-named keys in shaped_head.HANDLES -> the face keys the diagram actually takes
+const ALIAS={glabInflate:'glab_inflate', eyePos:'eye_pos', eyeLat:'eye_lat', eyeSize:'eye_size', glabRise:'glab_rise'};
+// slider ranges (the page's, not the schema's: shaped_head.OUTLINE / head_crescent.FACE carry defaults and comments, no ranges)
+const R={
+  width:[0.6,2.0], length:[0.5,2.0], front_exp:[1.0,6.0], front_point:[0,0.6], widest:[0,0.6], side:[0,0.6], rear_taper:[0,0.6], corner:[0,0.5],
+  genal:[0,2.5], genal_w:[0.03,0.6], genal_tip:[0.05,1.0], genal_spread:[-30,60], genal_curve:[-60,60], notch:[0,1], notch_exp:[1,6], dome_fill:[0.4,1],
+  horn_h:[0,0.6], height:[0.4,2.0], genal_at:[-1,1], front_flat:[0,0.9], front_dent:[0,0.3], point_w:[0.02,0.5], point_fork:[0,0.8],
+  brim_w:[0,0.6], brim_rise:[0,0.4], brim_curve:[-1,1], brim_roll:[0,0.3], brim_pits:[0,6,1],
+  eye_size:[0,0.5], eye_pos:[0.2,0.95], eye_height:[0.2,2.5], eye_lat:[0,0.95], axis_frac:[0.15,0.45], glab_inflate:[0.5,2.0], glab_rise:[0,0.6],
+  glab_front:[1,6], glab_lobes:[0,6,1], furrow:[0,2.5], border_w:[0,0.3], suture_end:[-1,1], suture_depth:[0,0.6], eye_ridge:[0,1.5],
+  glab_len:[0.3,1.2], glab_bulge:[-0.3,0.3], glab_round:[0,1], glab_boss:[0,0.45], boss_rise:[0,1], furrow_cross:[0,1], furrow_splay:[0,1],
+  bullae:[0,0.3], node:[0,1.5], eye_len:[0.5,3], caeca:[0,1], brim:[0,0.5], brim_drop:[0,1.5], tubercles:[0,1], tub_all:[0,1,1], efface:[0,1]};
+const isFace=k=>S.meta && (k in S.meta.face_defaults);
+const isOut=k=>S.meta && (k in S.meta.outline_defaults);
+const baseOf=k=>isOut(k)?S.baseOutline[k]:S.baseFace[k];        // the style's own value (what "reset" returns to)
+const cur=k=>isOut(k)?S.D.outline[k]:S.D.face[k];                // the resolved value, from the server
+
+function clamp(k,v){const r=R[k]||[-1e9,1e9]; v=Math.min(r[1],Math.max(r[0],v)); if(r[2]) v=Math.round(v); return v;}
+function setKey(k,v){ v=clamp(k,v); const edits=isOut(k)?S.outline:S.face; if(Math.abs(v-baseOf(k))<1e-9) delete edits[k]; else edits[k]=+v.toFixed(4); send(); }
+
+// ---------- server ----------
+async function load(style){
+  const r=await fetch('/api/head_diagram?style='+encodeURIComponent(style)); const d=await r.json(); if(d.error){ status(d.error,true); return; }
+  S.meta=S.meta||d; S.pinned=null; S.D=d;
+  if(d.saved){                                                        // a saved head: rest on its guide style, carry its edits as edits
+    S.style=d.saved.style; S.savedName=d.saved.name; S.outline=Object.assign({},d.saved.outline); S.face=Object.assign({},d.saved.face);
+    const b=await (await fetch('/api/head_diagram?style='+encodeURIComponent(S.style))).json(); S.baseOutline=b.outline; S.baseFace=b.face;
+  } else { S.style=style; S.savedName=null; S.outline={}; S.face={}; S.baseOutline=d.outline; S.baseFace=d.face; }
+  $('savename').value=S.savedName||''; $('del').style.display=S.savedName?'':'none'; $('openlink').innerHTML=S.savedName?`<a href="/?head=${encodeURIComponent(S.savedName)}">open ${S.savedName} in the generator →</a>`:'';
+  if(!S.P){ const sc=await (await fetch('/api/schema')).json(); S.P=await (await fetch('/api/preset/'+sc.default)).json(); }
+  const st=d.styles.find(x=>x.name===S.style); $('doc').textContent=(S.savedName?`saved head on ${S.style}${d.saved.doc?': '+d.saved.doc:''}. `:'')+(st?st.doc:'the approved crescent silhouette, drawn whole (shaped_head.OUTLINE defaults)'); $('pg').textContent=st&&st.p?'Gon p. '+st.p:'';
+  $('style').value=S.savedName||S.style;
+  renderSliders(); renderEdits(); kv();
+}
+let inflight=null;
+async function send(){                                             // one request in flight; the newest state always goes last
+  renderEdits();
+  if(inflight){ S.pendingSend=true; return; }
+  const body={style:S.style, outline:S.outline, face:S.face};
+  inflight=fetch('/api/head_diagram',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})
+    .then(r=>r.json()).then(d=>{ if(d.error){ status(d.error,true); return; } S.D=d; kv(); renderSliders(false); })
+    .catch(e=>status(String(e),true)).finally(()=>{ inflight=null; if(S.pendingSend){ S.pendingSend=false; send(); } });
+}
+function status(t,bad){ $('status').textContent=t||''; $('status').classList.toggle('busy',!!bad); }
+function kv(){ const z=S.D.diagram.size; $('kv').innerHTML=`<b>${S.savedName?S.savedName+' · on '+S.style:S.style}</b>${Object.keys(S.outline).length+Object.keys(S.face).length?' · edited':''}<br>length / half-width <b>${z.length.toFixed(2)}</b><br>head / thorax width <b>${z.width_vs_thorax.toFixed(2)}</b><br>id <b>${S.D.id}</b>`; }
+
+// ---------- panel ----------
+function keysFor(h){ const ks=(S.meta.handles[h]||[]).map(k=>ALIAS[k]||k); return ks.filter(k=>isOut(k)||isFace(k)); }
+let showAll=false;
+function renderSliders(rebuild=true){
+  const box=$('sliders'); const h=S.pinned||S.hover;
+  let keys; if(showAll){ keys=[...Object.keys(S.meta.outline_defaults),...Object.keys(S.meta.face_defaults)]; $('hname').textContent='All keys'; }
+  else if(h){ keys=keysFor(h); $('hname').textContent='Handle · '+h; }
+  else { if(rebuild){ box.innerHTML='<div class="hint">Hover a handle to see what it drags; click it to pin its sliders here.</div>'; $('hname').textContent='Handle'; } return; }
+  if(rebuild||box.dataset.keys!==keys.join()){ box.innerHTML=''; box.dataset.keys=keys.join();
+    for(const k of keys){ const r=R[k]||[0,1]; const d=document.createElement('div'); d.className='ctrl';
+      d.innerHTML=`<div class="lab"><span>${k}${isOut(k)?'':' <span style="color:var(--mid)">· face</span>'}</span><span class="val" id="v_${k}"></span></div><input type="range" min="${r[0]}" max="${r[1]}" step="${r[2]||((r[1]-r[0])/200)}" id="s_${k}">`;
+      box.appendChild(d); const inp=d.querySelector('input'); inp.oninput=()=>{ setKey(k,+inp.value); }; } }
+  for(const k of keys){ const v=cur(k); const s=$('s_'+k), vv=$('v_'+k); if(!s) continue; if(document.activeElement!==s) s.value=v; vv.textContent=fmt(v); vv.classList.toggle('on',Math.abs(v-baseOf(k))>1e-9); }
+}
+const fmt=v=>Number.isInteger(v)?String(v):(+v).toFixed(Math.abs(v)<1?3:2);
+function renderEdits(){ const e=$('edits'); $('edhead').textContent=S.savedName?`Edits · ${S.savedName}`:'Edits'; const all=[...Object.entries(S.outline).map(([k,v])=>[k,v,'o']),...Object.entries(S.face).map(([k,v])=>[k,v,'f'])];
+  e.innerHTML=all.length?all.map(([k,v,t])=>`<div><b>${k}</b> ${fmt(v)} <span style="color:var(--line)">←</span> ${fmt(baseOf(k))}<i data-k="${k}" title="undo">×</i></div>`).join(''):'none';
+  e.querySelectorAll('i').forEach(i=>i.onclick=()=>{ const k=i.dataset.k; delete S.outline[k]; delete S.face[k]; send(); renderSliders(); }); }
+$('allkeys').onclick=()=>{ showAll=!showAll; $('allkeys').textContent=showAll?'handle keys':'all keys'; renderSliders(); };
+$('reset').onclick=()=>{ S.outline={}; S.face={}; send(); renderSliders(); };
+$('style').onchange=e=>load(e.target.value);
+$('copy').onclick=()=>{ const spec={style:S.style, outline:S.outline, face:S.face};
+  const txt=JSON.stringify(spec)+'\n\n# python\nfrom isopod_model import body  # (isopod_model on sys.path)\n# parts, plans, PV, K = body.build(P, "shaped", face=' + JSON.stringify({...S.baseFaceEdits(), ...S.face}) + ', outline=' + JSON.stringify({...S.baseOutline, ...S.outline}) + ')';
+  const ta=$('json'); ta.value=txt; ta.style.display='block'; ta.select(); try{ navigator.clipboard.writeText(txt); status('copied'); }catch(_){ status('select and copy'); } };
+S.baseFaceEdits=()=>{ const out={}; for(const [k,v] of Object.entries(S.baseFace||{})) if(v!==S.meta.face_defaults[k]) out[k]=v; return out; };
+$('build').onclick=async()=>{ const b=$('build'); b.disabled=true; const t0=Date.now(); let tick=setInterval(()=>status(`building · ${Math.round((Date.now()-t0)/1000)} s`,true),500);
+  const st=S.D.styles.find(x=>x.name===S.style); const P=Object.assign({},S.P,st?st.params:{});
+  try{ const r=await fetch('/api/build',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, joint:'isopod', head:{style:S.style, outline:S.outline, face:S.face}})});
+    const m=await r.json(); clearInterval(tick);
+    if(!r.ok||!m.parts||!m.parts.length){ status('build failed · '+((m.build_notes||[]).map(n=>n[2]).join('; ')||r.status),true); }
+    else{ const bad=m.parts.filter(p=>!p.watertight||p.bodies!==1).length;
+      status(`built ${m.parts.length} pieces in ${m.build_seconds} s${bad?` · ${bad} not a single watertight body`:''}`,!!bad);
+      $('links').innerHTML=`<a href="/api/stl/${m.key}">download STL (all pieces, print mm)</a><br>`+m.parts.map(p=>`<a href="${p.stl}">${p.name}</a>`).join(' · '); }
+  }catch(e){ clearInterval(tick); status('build failed · '+e,true); }
+  b.disabled=false; };
+
+// ---------- the drawing (p5, instance mode) ----------
+new p5(s=>{
+  let W,H, ox, oyP, oyE, px, crown, xw, ymin, ymax;
+  const stage=$('stage');
+  s.setup=()=>{ const c=s.createCanvas(stage.clientWidth,stage.clientHeight); c.parent(stage); s.textFont('IBM Plex Mono'); s.textSize(10); s.frameRate(60); };
+  s.windowResized=()=>s.resizeCanvas(stage.clientWidth,stage.clientHeight);
+  // diagram units -> screen. Diagram: x across (0 = axis, 1 = half-width), y fore-aft (negative = front). Screen: fore-aft runs left->right.
+  function fit(){ W=s.width; H=s.height; const D=S.D.diagram; const ys=D.outline.map(p=>p[1]); const y0=Math.min(...ys, D.profile[0][0]), y1=Math.max(...ys, D.profile[D.profile.length-1][0]);
+    const zmax=Math.max(...D.profile.map(p=>p[1]),0.3); xw=Math.max(1, 1/Math.max(D.size.width_vs_thorax,0.5)); ymin=y0; ymax=y1;
+    const span=y1-y0; px=Math.min((W-120)/span, (H-140)/(2*xw+zmax+0.35));
+    ox=60-y0*px; oyP=50+xw*px; oyE=oyP+xw*px+40+zmax*px; }
+  const X=y=>ox+y*px, YP=x=>oyP-x*px, YE=z=>oyE-z*px;
+  function poly(pts, mirror){ s.beginShape(); for(const p of pts) s.vertex(X(p[1]), oyP+(mirror?1:-1)*p[0]*px); s.endShape(); }
+  function hair(a){ s.stroke(255,a); s.strokeWeight(1); s.noFill(); }
+  function handlePositions(){ const D=S.D.diagram; const out={}; for(const [k,v] of Object.entries(D.handles)) out[k]={sx:X(v[1]), sy:YP(v[0]), x:v[0], y:v[1]};
+    let mi=0; D.profile.forEach((p,i)=>{ if(p[1]>D.profile[mi][1]) mi=i; }); crown={y:D.profile[mi][0], z:D.profile[mi][1]}; out.crown={sx:X(crown.y), sy:YE(crown.z), x:0, y:crown.y, z:crown.z, elev:true}; return out; }
+  let HP={}; window.__handles=()=>HP;   // for tests
+  s.draw=()=>{ s.background(0); if(!S.D){ return; } fit(); const D=S.D.diagram;
+    // axis + thorax half-width references
+    hair(60); s.line(40, oyP, W-40, oyP);
+    const tw=1/Math.max(D.size.width_vs_thorax,1e-6); s.drawingContext.setLineDash([2,5]); hair(70); s.line(X(ymin)-10, YP(tw), X(ymax)+10, YP(tw)); s.line(X(ymin)-10, oyP+tw*px, X(ymax)+10, oyP+tw*px); s.drawingContext.setLineDash([]);
+    // plan: outline both halves, glabella, eye, brim, boss
+    hair(255); s.strokeWeight(1.2); poly(D.outline,false); poly(D.outline,true);
+    hair(230); poly(D.glabella,false); poly(D.glabella,true);
+    if(D.eye){ poly(D.eye,false); poly(D.eye,true); }
+    if(D.brim){ hair(140); poly(D.brim,false); poly(D.brim,true); }
+    if(D.boss){ hair(180); poly(D.boss,false); poly(D.boss,true); }
+    // elevation: bed line, section (solid), profile (grey)
+    hair(60); s.line(40, oyE, W-40, oyE);
+    const run=(pts)=>{ let open=false; for(const p of pts){ if(p[1]>1e-4){ if(!open){ s.beginShape(); open=true; } s.vertex(X(p[0]), YE(p[1])); } else if(open){ s.endShape(); open=false; } } if(open) s.endShape(); };
+    hair(255); s.strokeWeight(1.2); run(D.section);
+    hair(130); s.strokeWeight(1); run(D.profile);
+    // labels
+    s.noStroke(); s.fill(255,120); s.textAlign(s.LEFT,s.BOTTOM); s.text('PLAN', 40, oyP-xw*px-8); s.text('ELEVATION', 40, oyE-Math.max(...D.profile.map(p=>p[1]))*px-8);
+    s.textAlign(s.LEFT,s.TOP); s.text('front', X(ymin)-4, oyE+8); s.textAlign(s.RIGHT,s.TOP); s.text('rear', X(ymax)+4, oyE+8);
+    // handles
+    HP=handlePositions(); const act=S.drag||S.pinned||S.hover;
+    for(const [k,h] of Object.entries(HP)){ const on=k===act; s.stroke(on?s.color(246,112,79):s.color(255)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):0); s.circle(h.sx,h.sy,on?9:7);
+      if(on||S.hover===k){ s.noStroke(); s.fill(on?s.color(246,112,79):s.color(255,200)); s.textAlign(s.LEFT,s.BOTTOM); s.text(k+'  '+keysFor(k).join(' · '), h.sx+9, h.sy-6); } }
+    s.noStroke(); s.fill(255,90); s.textAlign(s.RIGHT,s.BOTTOM); s.text((inflight?'drawing…':'')+' ', W-12, H-10);
+  };
+  function nearest(mx,my){ let best=null,bd=14; for(const [k,h] of Object.entries(HP)){ const d=Math.hypot(h.sx-mx,h.sy-my); if(d<bd){ bd=d; best=k; } } return best; }
+  s.mouseMoved=()=>{ const h=nearest(s.mouseX,s.mouseY); if(h!==S.hover){ S.hover=h; if(!S.pinned) renderSliders(); } stage.style.cursor=h?'grab':'default'; };
+  s.mousePressed=()=>{ if(s.mouseX<0||s.mouseY<0||s.mouseX>W||s.mouseY>H) return; const h=nearest(s.mouseX,s.mouseY);
+    if(h){ S.drag={h, x0:s.mouseX, y0:s.mouseY, start:snapshot(h)}; S.pinned=h; renderSliders(); stage.style.cursor='grabbing'; }
+    else if(S.pinned){ S.pinned=null; renderSliders(); } };
+  s.mouseReleased=()=>{ if(S.drag){ S.drag=null; stage.style.cursor='grab'; } };
+  s.mouseDragged=()=>{ if(!S.drag) return; const d=S.drag; const along=(s.mouseX-d.x0)/px, across=-(s.mouseY-d.y0)/px, up=-(s.mouseY-d.y0)/px;   // along: + rearward; across: + outward (upper half)
+    const L=S.D.diagram.size.length; const st=d.start; const v={};
+    switch(d.h){
+      case 'front':    v.length=st.length-along; v.front_exp=st.front_exp+across*3; break;
+      case 'process':  v.front_point=st.front_point-along/L; v.point_fork=Math.abs(st.point_fork+across); break;
+      case 'widest':   v.widest=st.widest-along/L; v.width=st.width+across; break;
+      case 'angle':    v.side=st.side+along/L; v.rear_taper=st.rear_taper-across; break;
+      case 'root':     v.genal_at=st.genal_at-across; break;
+      case 'notch':    v.notch=st.notch-along/Math.max(0.2,st.genal*L); v.notch_exp=st.notch_exp+across*4; break;
+      case 'glabella': v.glab_len=st.glab_len-along/L; v.glab_inflate=st.glab_inflate+across*1.5; break;
+      case 'eye':      v.eye_pos=st.eye_pos-along/L; v.eye_lat=st.eye_lat+across; break;
+      case 'brim':     v.brim_w=st.brim_w-across/0.7; break;
+      case 'crown':    v.height=st.height+up/0.357; v.glab_rise=st.glab_rise+along*0.3; break;
+      case 'spine': {  const r=HP.root||{x:1,y:0}; const tx=(s.mouseX-ox)/px, ty=-(s.mouseY-oyP)/px;      // absolute: the tip follows the mouse
+                       const dx=Math.abs(ty)-r.x, dy=tx-r.y; v.genal=Math.hypot(dx,dy)/L; v.genal_spread=Math.atan2(dx,dy)*180/Math.PI; break; }
+    }
+    for(const [k,val] of Object.entries(v)) if(Number.isFinite(val)) setKeyQuiet(k,val);
+    send(); };
+  function snapshot(h){ const o={}; for(const k of Object.keys(R)) if(isOut(k)||isFace(k)) o[k]=cur(k); return o; }
+  function setKeyQuiet(k,v){ v=clamp(k,v); const edits=isOut(k)?S.outline:S.face; if(Math.abs(v-baseOf(k))<1e-9) delete edits[k]; else edits[k]=+v.toFixed(4); }
+}, $('stage'));
+
+// ---------- start ----------
+(async()=>{ const first=new URLSearchParams(location.search).get('style')||'harpes';
+  const r=await fetch('/api/head_diagram?style='+first); const d=await r.json();
+  fillPicker(d, first); await load(first); })();
+function fillPicker(d, selected){ const sel=$('style');
+  sel.innerHTML=`<optgroup label="guide">${['crescent',...d.styles.map(x=>x.name)].map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+
+    (d.saved_heads&&d.saved_heads.length?`<optgroup label="saved">${d.saved_heads.map(h=>`<option value="${h.name}">${h.name} · ${h.style}</option>`).join('')}</optgroup>`:'');
+  if(selected) sel.value=selected; }
+$('save').onclick=async()=>{ const name=$('savename').value.trim(); if(!name){ status('give the head a name',true); $('savename').focus(); return; }
+  const r=await fetch('/api/heads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name, style:S.style, outline:S.outline, face:S.face})}); const j=await r.json();
+  if(!r.ok){ status(j.error||'save failed',true); return; }
+  status(`saved as ${name}`); const d=await (await fetch('/api/head_diagram?style='+encodeURIComponent(name))).json(); fillPicker(d, name); await load(name); };
+$('del').onclick=async()=>{ if(!S.savedName) return; const n=S.savedName; const r=await fetch('/api/heads/'+encodeURIComponent(n),{method:'DELETE'}); if(!r.ok){ status('delete failed',true); return; }
+  status(`deleted ${n}`); const base=S.style; const d=await (await fetch('/api/head_diagram?style='+encodeURIComponent(base))).json(); fillPicker(d, base); S.savedName=null; await load(base); };
+</script>
+</body>
+</html>

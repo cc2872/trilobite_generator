@@ -8,7 +8,7 @@ prong pickers. The viewer loads one GLB per part; hovering a cell highlights its
 instrument (instrument.read: build at the fixed measurement bevel, probe, measure — ~30 s) and returns the reading and
 the hinge kinematics so the browser animates the animal to its stop with the limiting pair flashing.
 """
-import os, sys, json, glob, time, threading, hashlib, shutil
+import os, sys, re, json, glob, time, threading, hashlib, shutil
 import trimesh
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, ROOT)
 from flask import Flask, request, jsonify, send_from_directory, send_file
@@ -43,8 +43,8 @@ def _build_sig(*names):
     return h.hexdigest()[:8]
 BUILD_SIG = _build_sig("assemble.py", "joints/pin.py", "joints/flexi.py", "joints/ball.py", "printfill.py", "anatomy/head.py", "anatomy/thorax.py", "anatomy/tail.py", "anatomy/common.py", "mesh.py", "fields.py")
 # the isopod model is a separate builder (isopod_model/); its own source hash keys its cache half
-ISOPOD_SIG = _build_sig("isopod_model/body.py", "isopod_model/crescent_head.py", "anatomy/head_crescent.py", "joints/ball.py", "mesh.py", "fields.py")
-SHAPED_SIG = _build_sig("isopod_model/body.py", "isopod_model/shaped_head.py", "isopod_model/head_styles.py", "anatomy/head_crescent.py", "joints/ball.py", "mesh.py", "fields.py")
+ISOPOD_SIG = _build_sig("isopod_model/body.py", "isopod_model/rows.py", "isopod_model/crescent_head.py", "anatomy/head_crescent.py", "joints/ball.py", "mesh.py", "fields.py")
+SHAPED_SIG = _build_sig("isopod_model/body.py", "isopod_model/rows.py", "isopod_model/shaped_head.py", "isopod_model/head_styles.py", "anatomy/head_crescent.py", "joints/ball.py", "mesh.py", "fields.py")
 def _isopod_body():
     """Import isopod_model/body.py (its intra-package `import crescent_head` needs isopod_model on sys.path)."""
     d = os.path.join(ROOT, "isopod_model")
@@ -58,25 +58,74 @@ def _head_styles():
     return HS
 
 def _head_style(name):
-    """A valid head-style name, or None for the approved crescent on the isopod head piece."""
+    """A valid head-style name, or None for the approved crescent on the isopod head piece. A SAVED head's name
+    (web/heads/<name>.json, from the head editor) or a dict ({"style", "outline", "face"}, the editor's live head) is a
+    custom shaped head and is returned resolved (see _head_custom)."""
+    if isinstance(name, dict): return _head_custom(name)
+    if name and name in _saved_heads(): return _head_custom({"style": name})
     return name if name and name != "crescent" and name in _head_styles().STYLES else None
 
-def _iso_key(P, head=None):
-    """Cache key of an isopod-model build. A head style has its own key and its own builder-source hash, so the
-    crescent's cached builds are untouched by anything in the shaped-head code."""
-    h = _head_style(head)
-    return schema.param_hash(P) + ("-i" + ISOPOD_SIG if h is None else f"-h-{h}-" + SHAPED_SIG)
+# ---- saved heads: the head editor's "save". One JSON per head in web/heads/ (git-ignored, like records/): the guide
+# style it started from and the outline / face edits on top. A saved head is addressed by its name wherever a style
+# name goes (the head picker, ?head=, /api/build, /api/sheet, the editor's ?style=), and is re-read at every use, so
+# re-saving a name re-keys every build made with it (the cache key hashes the resolved numbers).
+HEADS = os.path.join(ROOT, "web", "heads")
+_HEAD_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_\-]{0,39}$")
 
-def _build_isopod(P, folder, head=None):
+def _saved_heads():
+    out = {}
+    for f in sorted(glob.glob(os.path.join(HEADS, "*.json"))):
+        try: d = json.load(open(f)); out[d["name"]] = d
+        except Exception: pass
+    return out
+
+def _head_custom(spec):
+    """A custom shaped head: a guide style's outline and face with edits on top. `spec["style"]` is a guide style, the
+    crescent, or a SAVED head (whose own edits then come first, `spec`'s on top). Returns dict(style, base, outline,
+    face, id, saved): `base` the guide style the geometry rests on, the outline fully resolved, `face` as edits on the
+    crescent's own face, both validated (unknown keys raise KeyError), and `id`, a short hash of the resolved numbers
+    for the cache key; `saved` the saved head's record when `style` named one."""
+    HS = _head_styles(); import shaped_head as SH; from anatomy import head_crescent as HC
+    style = spec.get("style") or "crescent"; saved = None
+    o_edits = {k: float(v) for k, v in (spec.get("outline") or {}).items()}
+    f_edits = {k: float(v) for k, v in (spec.get("face") or {}).items()}
+    if style in _saved_heads():
+        saved = _saved_heads()[style]; style = saved.get("style") or "crescent"
+        o_edits = dict(saved.get("outline") or {}, **o_edits); f_edits = dict(saved.get("face") or {}, **f_edits)
+    # the base face is what the BUILD would use: the default preset with the style's schema values (eyeSize, glabInflate ...)
+    # mapped through body.face_of, then the style's own face keys on top -- so the drawing matches the solid
+    IBODY = _isopod_body(); P0 = schema.coerce(dict(schema.preset(schema.DEFAULT_PRESET), **(HS.style(style)[1] if style in HS.STYLES else {})), base=schema.table_defaults())
+    base_face = IBODY.face_of(P0, HS.style(style)[0] if style in HS.STYLES else None)
+    base_out = HS.outline(style) if style in HS.STYLES else {}
+    outline = SH.outline_of(dict(base_out, **o_edits))
+    face = HC.face_of(dict(base_face, **f_edits))
+    face_edits = {k: v for k, v in face.items() if v != HC.FACE.get(k)}        # only what differs from the crescent's own face
+    blob = json.dumps(dict(o=outline, f=face), sort_keys=True).encode()
+    return dict(style=spec.get("style") or "crescent", base=style, outline=outline, face=face_edits, id=hashlib.sha1(blob).hexdigest()[:10],
+                saved=(dict(name=saved["name"], style=saved.get("style") or "crescent", outline=saved.get("outline") or {}, face=saved.get("face") or {}) if saved else None))
+
+def _iso_key(P, head=None, body=None):
+    """Cache key of an isopod-model build. A head style has its own key and its own builder-source hash, so the
+    crescent's cached builds are untouched by anything in the shaped-head code. A custom head (dict) keys on the hash
+    of its resolved outline + face."""
+    h = _head_style(head); spec = _body_spec(body)
+    b = "" if spec is None else f"-b-{_body_id(P, spec)}"          # a rows-model body: its own id in the key
+    if isinstance(h, dict): return schema.param_hash(P) + f"-h-custom-{h['id']}{b}-" + SHAPED_SIG
+    return schema.param_hash(P) + ("-i" + ISOPOD_SIG if h is None else f"-h-{h}-" + SHAPED_SIG) + b
+
+def _build_isopod(P, folder, head=None, body_spec=None):
     """Build the isopod model at print mm: isopod body + ball joints + either the crescent on the isopod head piece
     (head None) or a head style drawn on its own silhouette (3 Oct 2026). The style's outline and sculpt keys are
     build options; P is used as given (the page applies a style's parameter values to P when it is picked, so the
     sliders show them and stay editable). Returns (parts, man-fields)."""
     IBODY = _isopod_body(); h = _head_style(head)
-    if h is None: parts, plans, PV, K = IBODY.build(P, "isopod")
+    rows = _body_spec(body_spec)
+    if h is None: parts, plans, PV, K = IBODY.build(P, "isopod", rows=rows)
+    elif isinstance(h, dict):                                   # the head editor's head: its own outline + face
+        parts, plans, PV, K = IBODY.build(P, "shaped", face=h["face"], outline=h["outline"], rows=rows)
     else:
         HS = _head_styles(); face, _ = HS.style(h)
-        parts, plans, PV, K = IBODY.build(P, "shaped", face=face, outline=HS.outline(h))
+        parts, plans, PV, K = IBODY.build(P, "shaped", face=face, outline=HS.outline(h), rows=rows)
     s = K["s"]                                                  # model units -> the isopod's own print mm
     pieces = [p.copy().apply_scale(1.0 / s) for p in parts]
     names = ["head"] + [f"seg{i}" for i in range(len(pieces) - 2)] + ["tail"]
@@ -87,7 +136,18 @@ def _build_isopod(P, folder, head=None):
         out.append(dict(name=name, url=f"/files/{os.path.basename(folder)}/{name}.glb", stl=f"/files/{os.path.basename(folder)}/{name}.stl",
                         bodies=len(__import__("mesh").bodies(m)), watertight=bool(m.is_watertight), volume=round(float(m.volume), 1)))
     kin = dict(names=names, pivots=pivots)                      # pivots present => the viewer poses about per-joint pivots (ball joints)
-    return out, kin
+    # the checks (11 Oct 2026): the build has already refused invalid parts (body.MeshError); here what a slicer and the
+    # chain would still notice -- parts touching at rest, and the debris the clean-up removed
+    import check as CHECK
+    touching = [dict(a=names[k], b=names[j], mm3=round(v / s ** 3, 3)) for k, j, v in CHECK.contacts(parts, [(y, z) for y, z in PV], 0.0)]
+    dropped = {names[k]: round(v / s ** 3, 3) for k, v in getattr(IBODY, "LAST_DROPPED", {}).items() if v > 0}
+    cut = {k: v for k, v in dropped.items() if v > 20.0}                  # more than debris: the clearances severed anatomy (parts overlapped)
+    checks = dict(print_valid=all(p["watertight"] and p["bodies"] == 1 for p in out) and not touching and not cut,
+                  notes=[f"{t['a']} and {t['b']} touch at rest: {t['mm3']} mm3" for t in touching]
+                        + [f"{k}: {v:.0f} mm3 cut away by the clearances (it overlapped the part ahead; a forward sweep or a long overlap?)" for k, v in cut.items()]
+                        + ([f"debris dropped (mm3): {dropped}"] if dropped and not cut else []),
+                  touching=touching, debris_mm3=dropped)
+    return out, kin, checks
 LOCK = threading.Lock()          # one build or measurement at a time (the lab workstation has one job's worth of RAM to spare)
 MEASURED = {}                    # param hash -> last instrument result (so the sheet can carry the reading and the enrolled pose)
 PROGRESS = {"done": 0, "total": 0}   # parts finished in the build now running; the page polls it for its loading count
@@ -129,6 +189,178 @@ def tree(): return send_file(os.path.join(ROOT, "web", "tree.html"))            
 @app.get("/family-tree")
 def family_tree(): return send_file(os.path.join(ROOT, "web", "tree.html"))            # alias -> the same page
 
+@app.get("/head")
+def head_page(): return send_file(os.path.join(ROOT, "web", "head.html"))              # the head editor (p5): plan + elevation with handles
+
+@app.get("/body")
+def body_page(): return send_file(os.path.join(ROOT, "web", "body.html"))              # the body editor (p5): the rows, head to tail tip
+
+# ---- saved bodies (the body editor's "save"): web/bodies/<name>.json = {name, preset, spec, doc}. A saved body's
+# name goes wherever a body spec goes (?body=name, /api/build "body").
+BODIES = os.path.join(ROOT, "web", "bodies")
+
+def _saved_bodies():
+    out = {}
+    for f in sorted(glob.glob(os.path.join(BODIES, "*.json"))):
+        try: d = json.load(open(f)); out[d["name"]] = d
+        except Exception: pass
+    return out
+
+def _body_spec(body):
+    """A body spec (dict), or a saved body's name -> its spec; None/''/'preset' = the preset's rows untouched (None)."""
+    if body is None or body == "" or body == "preset": return None
+    if isinstance(body, str):
+        d = _saved_bodies().get(body)
+        if d is None: raise KeyError(f"no saved body '{body}'")
+        return d.get("spec") or {}
+    return dict(body)
+
+def _iso_problems(P, head, spec):
+    """Why this animal cannot be built: the rows' problems (the kit does not fit, the print too big) and the head's
+    (its spines would make the print longer than the bed). Checked before a build is started (11 Oct 2026)."""
+    _isopod_body(); import rows as RW
+    from anatomy.common import pitch
+    from fields import seg_halfwidth
+    out = []
+    if spec is not None:
+        R = RW.plans(P, spec, strict=False); out += R["problems"]; scale = R["scale"]; L_body = R["length"]
+    else: scale = BALL_SCALE(P); L_body = P["length"] * (1 - P["cephFrac"])
+    h = _head_style(head)
+    if isinstance(h, dict):
+        o = h["outline"]; L_head = o["length"] * o["width"] * seg_halfwidth(P, 0) * (1.0 + o["genal"])   # axial length + the genal spines
+        if (L_head + L_body) * scale > RW.PRINT_MAX_MM: out.append(f"with this head the print would be {(L_head + L_body) * scale:.0f} mm long; at most {RW.PRINT_MAX_MM:g}")
+    return out
+
+def BALL_SCALE(P):
+    from joints import ball as BALL
+    return BALL.model_scale(P)
+
+def _iso_n_parts(P, spec):
+    """How many pieces the isopod build makes: head + tail + the thorax (the rows model's pieces after fusion)."""
+    if spec is None: return int(P["segCount"]) + 2
+    _isopod_body(); import rows as RW
+    return len(RW.plans(P, spec, strict=False)["parts"]) + 1
+
+def _body_id(P, spec):
+    """Short hash of the RESOLVED rows (every row's numbers, the groups, the scale), for the cache key."""
+    _isopod_body(); import rows as RW
+    R = RW.plans(P, spec, strict=False)
+    blob = json.dumps(dict(rows=R["rows"], groups=R["groups"], scale=R["scale"], ts=R["term_spine"], model=R["model"]), sort_keys=True).encode()
+    return hashlib.sha1(blob).hexdigest()[:10]
+
+@app.route("/api/body_diagram", methods=["GET", "POST"])
+def api_body_diagram():
+    """The body editor's drawing. GET ?preset=<order>[&body=<saved>]; POST {"preset", "spec": {...}, "head": <style|saved>}.
+    Answers the rows diagram (isopod_model/rows.diagram: outline per row, pieces after fusion, joints, handles,
+    the axis profile, the print size) and the head's diagram scaled to the first row, for the page to draw."""
+    _isopod_body(); import rows as RW; import shaped_head as SH
+    q = request.get_json(force=True, silent=True) or {} if request.method == "POST" else dict(request.args)
+    preset = q.get("preset") or schema.DEFAULT_PRESET
+    Pp = _presets().get(preset)
+    if Pp is None: return jsonify(error="no such preset"), 404
+    P = schema.coerce(Pp, base=schema.table_defaults())
+    try:
+        spec = _body_spec(q.get("spec") if request.method == "POST" else q.get("body")) or {}
+        if request.method == "GET" and q.get("start") == "boring": spec = {"list": RW.boring(P)}    # the editor's plain starting animal
+        D = RW.diagram(P, spec)
+        h = _head_custom({"style": q.get("head") or "crescent"}); hd = _diagram_json(SH.diagram(h["outline"], h["face"]))
+    except (KeyError, ValueError) as ex:
+        return jsonify(error=str(ex)[:200]), 400
+    return jsonify(preset=preset, spec=spec, diagram=D, head=dict(style=h["style"], diagram=hd), id=_body_id(P, spec),
+                   presets=sorted(_presets()), saved_bodies=[dict(name=n, preset=d.get("preset"), doc=d.get("doc", "")) for n, d in _saved_bodies().items()])
+
+@app.get("/api/bodies")
+def api_bodies():
+    return jsonify([dict(name=n, preset=d.get("preset"), head=d.get("head") or "crescent", spec=d.get("spec") or {}, doc=d.get("doc", ""), saved_at=d.get("saved_at")) for n, d in _saved_bodies().items()])
+
+@app.post("/api/macro")
+def api_macro():
+    """The opening page's macro model made to ROUGHLY mirror the editors (11 Oct 2026). {"P": the page's parameters,
+    "preset"?, "head": a style or saved head, "body": a saved body's name or a spec} -> {"P": {schema key: value}}:
+    the head's projection (its guide style's values, face keys, the outline's genal spine / front / dome / length)
+    laid over P, then the body's (row counts and lengths, the width field, medians of the row numbers, the spine
+    field). Nothing is built; the page writes the values into its sliders. Only a SAVED or custom head projects its
+    outline: a guide style picked from the list keeps the page's old rule (its parameter values alone)."""
+    _isopod_body(); import rows as RW
+    q = request.get_json(force=True, silent=True) or {}
+    base = _presets().get(q.get("preset")) if q.get("preset") else None
+    P = schema.coerce(q.get("P") or (base or {}), base=schema.table_defaults())
+    out = {}; info = {}
+    try:
+        head = q.get("head")
+        if head and head != "crescent":
+            h = _head_style(head); HS = _head_styles()
+            if h is None: return jsonify(error=f"no such head '{head}'"), 404
+            if isinstance(h, dict):
+                hm = HS.macro(P, h["outline"], h["face"], HS.STYLES.get(h["base"], {}).get("params", {}))
+                out.update(hm); P = schema.coerce(dict(P, **hm), base=P); info["head"] = dict(style=h["style"], base=h["base"], keys=sorted(hm))
+            else:
+                hm = dict(HS.style(h)[1]); out.update(hm); P = schema.coerce(dict(P, **hm), base=P); info["head"] = dict(style=h, keys=sorted(hm))
+        spec = _body_spec(q.get("body"))
+        if spec is not None:
+            bm = RW.macro(P, spec); out.update(bm); info["body"] = dict(keys=sorted(bm), rows=len(RW.plans(P, spec)["rows"]))
+    except (KeyError, ValueError) as ex:
+        return jsonify(error=str(ex)[:200]), 400
+    return jsonify(P=out, info=info)
+
+@app.post("/api/bodies")
+def api_bodies_save():
+    """Save a body: {"name", "preset", "spec", "doc"?}. Name rules as for heads. Re-saving replaces."""
+    _isopod_body(); import rows as RW
+    q = request.get_json(force=True, silent=True) or {}
+    name = str(q.get("name", "")).strip()
+    if not _HEAD_NAME.match(name): return jsonify(error="name: letters, digits, _ and -, 1 to 40 characters, starting with a letter"), 400
+    if name in _presets() or name == "preset": return jsonify(error=f"'{name}' is a preset's name"), 400
+    preset = q.get("preset") or schema.DEFAULT_PRESET
+    if preset not in _presets(): return jsonify(error="no such preset"), 404
+    try: spec = dict(q.get("spec") or {}); RW.plans(schema.coerce(_presets()[preset], base=schema.table_defaults()), spec, strict=False)   # work in progress may be saved; the build refuses it
+    except (KeyError, ValueError) as ex: return jsonify(error=str(ex)[:200]), 400
+    head = str(q.get("head") or "crescent")                                                # the head it was drawn with (a style or a saved head)
+    if head != "crescent" and _head_style(head) is None: return jsonify(error=f"no such head '{head}'"), 404
+    rec = dict(name=name, preset=preset, head=head, spec=spec, doc=str(q.get("doc", ""))[:200], saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
+    os.makedirs(BODIES, exist_ok=True); tmp = os.path.join(BODIES, name + ".json.part")
+    json.dump(rec, open(tmp, "w"), indent=1); os.replace(tmp, os.path.join(BODIES, name + ".json"))
+    return jsonify(saved=rec)
+
+@app.delete("/api/bodies/<name>")
+def api_bodies_delete(name):
+    if not _HEAD_NAME.match(name) or name not in _saved_bodies(): return jsonify(error="no such saved body"), 404
+    os.remove(os.path.join(BODIES, name + ".json")); return jsonify(deleted=name)
+
+STATIC = os.path.join(ROOT, "web", "static")                                            # self-hosted libraries (p5.min.js)
+@app.get("/static/<path:name>")
+def static_file(name): return send_from_directory(STATIC, name)
+
+def _diagram_json(d):
+    """shaped_head.diagram's arrays as rounded lists (None stays None)."""
+    import numpy as np
+    out = {}
+    for k, v in d.items():
+        if isinstance(v, np.ndarray): out[k] = np.round(v, 4).tolist()
+        elif isinstance(v, dict): out[k] = {kk: ([round(float(x), 4) for x in vv] if isinstance(vv, (tuple, list)) else vv) for kk, vv in v.items()}
+        else: out[k] = v
+    return out
+
+@app.route("/api/head_diagram", methods=["GET", "POST"])
+def api_head_diagram():
+    """The head editor's drawing. GET ?style=<name> gives a style's resolved outline + face and its diagram;
+    POST {"style", "outline": {edits}, "face": {edits}} redraws with the edits on top (about 0.2 s: the same Shape
+    and head_crescent functions the solid is built from, so what is drawn is what builds). The answer carries the
+    resolved outline and face, the diagram polylines (plan right half, glabella, eye, brim, boss, section, profile,
+    all in half-width units), the handle positions, which keys each handle drags, and the defaults."""
+    HS = _head_styles(); import shaped_head as SH; from anatomy import head_crescent as HC
+    spec = request.get_json(force=True, silent=True) or {} if request.method == "POST" else {"style": request.args.get("style", "crescent")}
+    try:
+        h = _head_custom(spec)
+        d = SH.diagram(h["outline"], h["face"])
+    except (KeyError, ValueError) as ex:
+        return jsonify(error=str(ex)[:200]), 400
+    face_full = HC.face_of(h["face"])
+    return jsonify(style=h["style"], base=h["base"], saved=h["saved"], outline=h["outline"], face=face_full, id=h["id"], diagram=_diagram_json(d),
+                   handles=SH.HANDLES, outline_defaults=SH.OUTLINE, face_defaults=HC.FACE,
+                   styles=[dict(name=n, doc=s.get("doc", ""), p=s.get("p", 0), params=s.get("params", {})) for n, s in HS.STYLES.items()],
+                   saved_heads=[dict(name=n, style=r.get("style") or "crescent", doc=r.get("doc", "")) for n, r in _saved_heads().items()])
+
 @app.get("/loading.gif")
 def loading_gif(): return send_file(os.path.join(ROOT, "web", "loading.gif"))
 
@@ -154,8 +386,45 @@ def _characters_list():
 def api_head_styles():
     """The head styles for the page's picker: name, what it is, the guide page, and the parameter values it sets."""
     HS = _head_styles()
+    saved = [dict(name=n, doc=f"saved head, from {d.get('style') or 'crescent'}" + (f": {d['doc']}" if d.get("doc") else ""), p=0,
+                  params=HS.STYLES.get(d.get("style") or "", {}).get("params", {}), saved=True, style=d.get("style") or "crescent") for n, d in _saved_heads().items()]
     return jsonify([dict(name="crescent", doc="the approved crescent, on the isopod head piece", p=0, params={})] +
-                   [dict(name=n, doc=s.get("doc", ""), p=s.get("p", 0), params=s.get("params", {})) for n, s in HS.STYLES.items()])
+                   [dict(name=n, doc=s.get("doc", ""), p=s.get("p", 0), params=s.get("params", {})) for n, s in HS.STYLES.items()] + saved)
+
+@app.get("/api/heads")
+def api_heads():
+    """The saved heads (the head editor's "save"): name, the guide style each rests on, its edits, when it was saved."""
+    return jsonify([dict(name=n, style=d.get("style") or "crescent", outline=d.get("outline") or {}, face=d.get("face") or {},
+                         doc=d.get("doc", ""), saved_at=d.get("saved_at")) for n, d in _saved_heads().items()])
+
+@app.post("/api/heads")
+def api_heads_save():
+    """Save a head: {"name", "style", "outline": {edits}, "face": {edits}, "doc"?}. `style` may be a guide style, the
+    crescent, or another saved head (then it is flattened: the stored record rests on the guide style). The name is
+    [A-Za-z][A-Za-z0-9_-]{0,39} and must not be a guide style's. Re-saving a name replaces it."""
+    spec = request.get_json(force=True, silent=True) or {}
+    name = str(spec.get("name", "")).strip()
+    if not _HEAD_NAME.match(name): return jsonify(error="name: letters, digits, _ and -, 1 to 40 characters, starting with a letter"), 400
+    if name == "crescent" or name in _head_styles().STYLES: return jsonify(error=f"'{name}' is a guide style's name"), 400
+    try: h = _head_custom(spec)
+    except (KeyError, ValueError) as ex: return jsonify(error=str(ex)[:200]), 400
+    # store the edits against the guide style, flattened (a head saved from a saved head rests on the same guide style)
+    HS = _head_styles(); from anatomy import head_crescent as HC
+    base_out = HS.outline(h["base"]) if h["base"] in HS.STYLES else {}
+    import shaped_head as SH
+    o_edits = {k: v for k, v in h["outline"].items() if v != dict(SH.OUTLINE, **base_out).get(k)}
+    base_face = _head_custom({"style": h["base"]})["face"]
+    f_edits = {k: v for k, v in h["face"].items() if v != base_face.get(k)}
+    f_edits.update({k: HC.FACE[k] for k in base_face if k not in h["face"]})   # an edit back to the crescent's own value is an edit too
+    rec = dict(name=name, style=h["base"], outline=o_edits, face=f_edits, doc=str(spec.get("doc", ""))[:200], saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
+    os.makedirs(HEADS, exist_ok=True); tmp = os.path.join(HEADS, name + ".json.part")
+    json.dump(rec, open(tmp, "w"), indent=1); os.replace(tmp, os.path.join(HEADS, name + ".json"))
+    return jsonify(saved=rec, id=h["id"])
+
+@app.delete("/api/heads/<name>")
+def api_heads_delete(name):
+    if not _HEAD_NAME.match(name) or name not in _saved_heads(): return jsonify(error="no such saved head"), 404
+    os.remove(os.path.join(HEADS, name + ".json")); return jsonify(deleted=name)
 
 @app.get("/api/schema")
 def api_schema():
@@ -215,27 +484,33 @@ def api_build():
     fill = float(body.get("fill", 0.0) or 0.0)              # pin builds only: thicken the shell for printing (mm), print-only
     if joint == "isopod":
         head = _head_style(body.get("head"))                # a head style (isopod_model/head_styles.py), or None = the crescent
-        key = _iso_key(P, head)                             # the isopod model has its own builder-source hash
+        try: bspec = _body_spec(body.get("body"))           # a rows-model body (the body editor): a spec or a saved name
+        except KeyError as ex: return jsonify(error=str(ex)), 404
+        try: key = _iso_key(P, head, bspec); problems = _iso_problems(P, head, bspec)   # the isopod model has its own builder-source hash;
+        except (KeyError, ValueError) as ex: return jsonify(error=f"body or head spec: {str(ex)[:200]}"), 400   # resolving validates (bounds, keys)
+        if problems: return jsonify(error="cannot build: " + "; ".join(problems)[:400]), 400
         folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
-        PROGRESS.update(done=0, total=1)
+        n_parts = _iso_n_parts(P, bspec)                    # head + the body's printed pieces + tail (fused rows count once)
+        PROGRESS.update(done=0, total=n_parts)
         if os.path.exists(manifest):
-            PROGRESS.update(done=1); return send_file(manifest)
+            PROGRESS.update(done=n_parts); return send_file(manifest)
         with LOCK:
             if os.path.exists(manifest):
-                PROGRESS.update(done=1); return send_file(manifest)
+                PROGRESS.update(done=n_parts); return send_file(manifest)
             t0 = time.time(); os.makedirs(folder, exist_ok=True); bnotes = []
+            _isopod_body().PROGRESS_HOOK = lambda done, total: PROGRESS.update(done=done, total=total)   # the build reports parts as they finish
             try:
-                out, kin = _build_isopod(P, folder, head)
+                out, kin, checks = _build_isopod(P, folder, head, bspec)
             except Exception as ex:
                 shutil.rmtree(folder, ignore_errors=True)               # never cache a failed build — a retry must rebuild, not serve the error
-                PROGRESS.update(done=1)
+                PROGRESS.update(done=n_parts)
                 return jsonify(key=key, parts=[], kinematics=_kinematics(P), joint="isopod",
                                build_notes=[("isopod", "build failed", str(ex)[:160])], build_seconds=round(time.time() - t0, 1)), 500
-            man = dict(key=key, parts=out, kinematics=kin, print=dict(print_valid=True, notes=[]), schema_notes=notes,
+            man = dict(key=key, parts=out, kinematics=kin, print=checks, schema_notes=notes,
                        build_notes=bnotes, build_seconds=round(time.time() - t0, 1), schema=schema.SCHEMA_VERSION, joint="isopod", fill_mm=0,
                        head=head or "crescent")
             json.dump(P, open(os.path.join(folder, "params.json"), "w")); json.dump(man, open(manifest, "w")); _evict()
-            PROGRESS.update(done=1); return jsonify(man)
+            PROGRESS.update(done=n_parts); return jsonify(man)
     jtag = ("" if joint == "pin" else f"-{joint}") + (f"-fill{fill:g}" if fill > 0.05 and joint == "pin" else "")  # pin stays untagged (matches the sheet key)
     key = schema.param_hash(P) + "-b" + BUILD_SIG + jtag   # params + builder-source hash: a code change never serves stale parts
     folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
@@ -311,10 +586,12 @@ def api_sheet():
     if cmap not in blueprint.CMAPS and cmap != "none": cmap = "none"   # 'none' = black & white blueprint (default)
     if body.get("joint") == "isopod":                              # the isopod model has its own sheet (ball joints, crescent head, print-in-place)
         P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
-        head = _head_style(body.get("head")); key = _iso_key(P, head)
+        try: head = _head_style(body.get("head")); bspec = _body_spec(body.get("body")); key = _iso_key(P, head, bspec)
+        except (KeyError, ValueError) as ex: return jsonify(error=f"body or head spec: {str(ex)[:200]}"), 400
         folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
         if not os.path.exists(manifest):
-            with app.test_request_context(json={"P": P, "joint": "isopod", "head": head}): api_build()
+            with app.test_request_context(json={"P": P, "joint": "isopod", "head": head, "body": bspec}): api_build()
+        if not os.path.exists(manifest): return jsonify(error="the build failed; nothing to draw"), 500   # a refused build leaves no manifest
         man = json.load(open(manifest)); png = os.path.join(folder, f"sheet_isopod_{cmap}.png")   # cache per colormap
         if os.path.exists(png): return jsonify(url=f"/files/{key}/sheet_isopod_{cmap}.png", measured=False)
         with LOCK:

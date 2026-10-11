@@ -1,0 +1,254 @@
+{
+ "thorax_rows": 11,
+ "pyg_rows": 20,
+ "pyg_len": 95.0,
+ "term_spine": 12,
+ "rows": {
+  "0": {
+   "tip": 6.0,
+   "sweep": 28.0,
+   "curve": 10.0,
+   "tip_w": 0.5
+  },
+  "1": {
+   "tip": 7.353564379881891,
+   "sweep": 30.4,
+   "curve": 11.0,
+   "tip_w": 0.5
+  },
+  "2": {
+   "tip": 9.572077813989125,
+   "sweep": 32.8,
+   "curve": 12.0,
+   "tip_w": 0.5
+  },
+  "3": {
+   "tip": 12.301568675787603,
+   "sweep": 35.2,
+   "curve": 13.0,
+   "tip_w": 0.5
+  },
+  "4": {
+   "tip": 15.426769866909993,
+   "sweep": 37.6,
+   "curve": 14.0,
+   "tip_w": 0.5
+  },
+  "5": {
+   "tip": 18.883590815338387,
+   "sweep": 40.0,
+   "curve": 15.0,
+   "tip_w": 0.5
+  },
+  "6": {
+   "tip": 22.629939435960825,
+   "sweep": 42.4,
+   "curve": 16.0,
+   "tip_w": 0.5
+  },
+  "7": {
+   "tip": 26.635555912270735,
+   "sweep": 44.8,
+   "curve": 17.0,
+   "tip_w": 0.5
+  },
+  "8": {
+   "tip": 30.877394824846554,
+   "sweep": 47.2,
+   "curve": 18.0,
+   "tip_w": 0.5
+  },
+  "9": {
+   "tip": 35.337184374733994,
+   "sweep": 49.6,
+   "curve": 19.0,
+   "tip_w": 0.5
+  },
+  "10": {
+   "tip": 40.0,
+   "sweep": 52.0,
+   "curve": 20.0,
+   "tip_w": 0.5
+  },
+  "11": {
+   "width": 22.51032469162085,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 15.76,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "12": {
+   "width": 21.525255188267977,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 15.28,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "13": {
+   "width": 20.532161946793785,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 14.8,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "14": {
+   "width": 19.53051486231453,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 14.32,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "15": {
+   "width": 18.519714322436823,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 13.84,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "16": {
+   "width": 17.499076977941268,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 13.36,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "17": {
+   "width": 16.467817405941553,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 12.879999999999999,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "18": {
+   "width": 15.425024082744644,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 12.4,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "19": {
+   "width": 14.369627295620456,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 11.92,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "20": {
+   "width": 13.30035533778114,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 11.440000000000001,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "21": {
+   "width": 12.215673156832247,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 10.96,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "22": {
+   "width": 11.113693785981985,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 10.48,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "23": {
+   "width": 9.9920457439394,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 10.0,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "24": {
+   "width": 8.847665454549285,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 9.52,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "25": {
+   "width": 7.676453539614372,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 9.04,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "26": {
+   "width": 6.472662707908869,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 8.56,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "27": {
+   "width": 5.227694227756743,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 8.080000000000002,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "28": {
+   "width": 3.9273657381688873,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 7.6,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "29": {
+   "width": 2.5440749977734396,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 7.119999999999999,
+   "arch": 0.12,
+   "rear_round": 0
+  },
+  "30": {
+   "width": 1.6,
+   "tip": 0,
+   "sweep": 55,
+   "curve": 6,
+   "relief": 6.640000000000001,
+   "arch": 0.12,
+   "rear_round": 0.3
+  }
+ }
+}

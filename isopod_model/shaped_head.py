@@ -53,9 +53,23 @@ OUTLINE = dict(
     brim_pits=0,       # rows of pits on it
 )
 
+OUTLINE_RANGE = dict(   # what the silhouette is drawn for (11 Oct 2026: a 0.2-long head crashed in interp, a 3 x 3 x genal-3 one printed 2.7 m)
+    width=(0.5, 2.5), length=(0.4, 2.5), front_exp=(1.0, 8.0), front_point=(0.0, 1.5), widest=(0.0, 0.8), side=(0.0, 1.0), rear_taper=(0.0, 0.9),
+    corner=(0.0, 0.5), genal=(0.0, 2.5), genal_w=(0.02, 1.0), genal_tip=(0.02, 1.5), genal_spread=(-60.0, 80.0), genal_curve=(-90.0, 90.0),
+    notch=(0.0, 1.0), notch_exp=(1.0, 8.0), dome_fill=(0.3, 1.0), horn_h=(0.0, 1.0), height=(0.2, 3.0), genal_at=(-1.0, 1.0),
+    front_flat=(0.0, 0.9), front_dent=(0.0, 0.5), point_w=(0.02, 1.0), point_fork=(0.0, 0.9), brim_w=(0.0, 1.0), brim_rise=(-0.5, 1.0),
+    brim_curve=(-1.0, 1.0), brim_roll=(0.0, 0.5), brim_pits=(0, 10))
+
 def outline_of(o=None):
     f = dict(OUTLINE, **(o or {})); bad = set(f) - set(OUTLINE)
     if bad: raise KeyError(f"unknown outline keys {sorted(bad)} (have {sorted(OUTLINE)})")
+    for k, v in f.items():
+        try: v = float(v)
+        except (TypeError, ValueError): raise ValueError(f"outline {k} is not a number")
+        if not math.isfinite(v): raise ValueError(f"outline {k} is not finite")
+        lo, hi = OUTLINE_RANGE.get(k, (-10.0 * max(1.0, abs(OUTLINE[k])), 10.0 * max(1.0, abs(OUTLINE[k]))))
+        if not lo <= v <= hi: raise ValueError(f"outline {k} = {v:g} is outside {lo:g}..{hi:g}")
+        f[k] = v
     return f
 
 def _dense(pts, step=0.15):
@@ -204,7 +218,7 @@ def plan(P, plans, K, outline=None, face=None, z_thorax=None):
     S1 = plans[1][2]; w_seg = max(abs(S1["outline"](u, v)[0]) for u in np.linspace(-1, 1, 201) for v in (0.0, 0.5, 1.0))
     k = o["width"] * w_seg / RO
     if z_thorax is None:
-        z_thorax = max(float(M.sample_grid(Sk["outline"], Sk["zfun"], 61, 31)[2].max()) for _, _, Sk, _ in plans[1:-1])
+        z_thorax = max(float(M.sample_grid(Sk["outline"], Sk["zfun"], 61, 31)[2].max()) for _, _, Sk, _ in (plans[1:-1] or plans[1:]))
     gx, gy = np.meshgrid(np.linspace(0, 0.6 * RO, 40), np.linspace(-sh.L1, 0, 60))
     base = {kk: vv for kk, vv in (face or {}).items() if kk in ("eye_size", "eye_pos", "eye_height", "eye_lat", "glab_inflate", "glab_rise", "glab_front", "glab_lobes")}
     z_ref = float(sh.z(gx, gy, dict(base, eye_size=0.0)).max())             # the unsculpted crown: a boss or a tubercle does not set the scale

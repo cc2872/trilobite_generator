@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trilobite · Body</title>
+<!-- The body editor (10 Oct 2026): the isopod model's body as ONE LIST OF ROWS, head to tail tip, each with its own
+     length, width, pleural trajectory and height; rows too short for the joint at the print scale fuse into one
+     piece. Surface model (10 Oct 2026, evening): "generator segments" (default) -- each row is the generator's own
+     thoracic segment (anatomy/thorax.py) with the row's numbers and the pygidial rows are its tail (anatomy/tail.py),
+     built exactly as the site already prints them; "slab" is the first editor's tergite slab. Every drag is sent to
+     /api/body_diagram, which runs isopod_model/rows.py: the same rows the solid is built from. p5 (instance mode). -->
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<script src="/static/p5.min.js"></script>
+<style>
+  :root{--bg:#000;--ink:#fff;--mid:#9a9a9a;--line:#262626;--soft:#141414;--accent:#f6704f;--accent-dim:#7a3326;
+        --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"IBM Plex Sans",system-ui,"Helvetica Neue",Arial,sans-serif}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:12px;overflow:hidden;-webkit-font-smoothing:antialiased}
+  body{display:grid;grid-template-columns:284px 1fr;height:100%}
+  .panel{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;padding:18px 18px 14px;overflow-y:auto;overflow-x:hidden}
+  .panel input[type=text]{min-width:0}
+  h1,.sect,.status,.kv,.edits,.val,.btn,.links,.mono,.rowtag{font-family:var(--mono)}
+  h1{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:normal;margin:0 0 4px;display:flex;justify-content:space-between}
+  .nav{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:4px 0 10px} .nav button{background:var(--bg);color:var(--mid);border:1px solid var(--line);padding:6px 0;font:inherit;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} .nav button:hover{color:var(--ink);border-color:var(--ink)}
+  h1 a{color:var(--mid);text-decoration:none;letter-spacing:.08em} h1 a:hover{color:var(--ink)}
+  .sect{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mid);margin:18px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
+  .sect span:last-child{color:var(--mid);cursor:pointer;letter-spacing:.06em} .sect span:last-child:hover{color:var(--ink)}
+  select{width:100%;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--ink);padding:6px 0;font:inherit;border-radius:0}
+  .hint{color:var(--mid);font-size:11px;margin:6px 0 0;line-height:1.45}
+  .ctrl{margin:8px 0 0} .ctrl .lab{display:flex;justify-content:space-between;font-size:11px} .ctrl .lab .val{color:var(--mid);font-variant-numeric:tabular-nums} .ctrl .lab .val.on{color:var(--accent)}
+  input[type=range]{-webkit-appearance:none;width:100%;height:1px;background:var(--ink);outline:none;margin:7px 0 2px}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;border-radius:50%;background:var(--ink);cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;background:var(--ink);border:none;cursor:pointer}
+  .edits{font-size:11px;line-height:1.7;color:var(--mid);max-height:150px;overflow-y:auto} .edits b{color:var(--ink);font-weight:normal} .edits i{color:var(--mid);font-style:normal;cursor:pointer;margin-left:6px} .edits i:hover{color:var(--accent)}
+  .row{display:flex;gap:8px;margin-top:10px}
+  .btn{flex:1;background:var(--bg);color:var(--ink);border:1px solid var(--ink);padding:7px 0;font-size:10px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer} .btn:hover{background:var(--soft)} .btn.primary{background:var(--ink);color:var(--bg)} .btn.primary:hover{background:#ddd} .btn[disabled]{opacity:.4;cursor:default}
+  .btn.small{flex:0 0 auto;padding:4px 8px;font-size:9px}
+  .status{font-size:10px;letter-spacing:.06em;color:var(--mid);margin-top:10px;min-height:14px;white-space:pre-line} .status.busy{color:var(--accent)}
+  .links{font-size:11px;line-height:1.7;margin-top:6px} .links a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)} .links a:hover{border-bottom-color:var(--ink)}
+  #stage{position:relative;min-width:0;min-height:0} #stage canvas{display:block}
+  .kv{position:absolute;right:14px;top:12px;font-size:10px;letter-spacing:.08em;color:var(--mid);text-align:right;line-height:1.6;pointer-events:none} .kv b{color:var(--ink);font-weight:normal}
+  .rowtag{font-size:10px;color:var(--accent);letter-spacing:.06em}
+  textarea{width:100%;height:110px;background:var(--bg);color:var(--mid);border:1px solid var(--line);font:11px var(--mono);padding:6px;resize:vertical;display:none}
+  input.name{flex:1;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--line);padding:4px 0;font:inherit}
+</style>
+</head>
+<body>
+<div class="panel">
+  <h1><span>Body · editor</span></h1>
+  <div class="nav"><button id="home" onclick="location.href='/?preset='+encodeURIComponent(S.preset||'')+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+(S.savedName?'&body='+encodeURIComponent(S.savedName):'')" title="back to the generator, keeping this head, preset and body">home</button><button id="headeditor" onclick="location.href='/head'+(S.head&&S.head!=='crescent'?'?style='+encodeURIComponent(S.head):'')" title="draw the head: plan and elevation with handles">head editor</button></div>
+  <div class="hint">One list of rows, head to tail tip. Drag a row's handles; rows too short for the joint fuse (orange).</div>
+
+  <div class="sect"><span>Start from</span><span id="pg"></span></div>
+  <select id="preset"></select>
+  <div class="hint">The editor opens on a plain trilobite. A preset is a different start; a saved body is yours.</div>
+  <div class="ctrl"><div class="lab"><span>head</span></div><select id="head"></select></div>
+  <div class="ctrl"><div class="lab"><span>surface</span></div><select id="model"><option value="thorax">generator segments (as the site prints them)</option><option value="slab">tergite slab</option></select></div>
+
+  <div class="sect"><span>Body</span><span id="bodytoggle">show</span></div>
+  <div id="bodyctl" style="display:none"></div>
+
+  <div class="sect"><span>Rows</span><span id="reset">reset</span></div>
+  <div class="row" style="margin-top:6px"><button class="btn" id="plus" title="add a row after the pinned row (or at the end), as a copy of the row before it">+ row</button><button class="btn" id="minus" title="remove the pinned row (or the last)">− row</button></div>
+  <div class="row" style="margin-top:6px;align-items:center"><span class="mono" style="font-size:10px;color:var(--mid);letter-spacing:.06em">COPY ROW</span><input type="number" id="copyfrom" min="0" value="0" style="width:52px;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--line);font:inherit;padding:3px 0"><button class="btn small" id="copyrow" title="insert a copy of that row after the pinned row (or at the end)">insert copy</button></div>
+  <div class="edits" id="rowtable"></div>
+
+  <div class="sect"><span id="rowname">Row</span><span id="rowtools"></span></div>
+  <div id="sliders"><div class="hint">Click a row (on the drawing or in the list) to pin its sliders here. Shift-click a second row to ramp the pinned row's values linearly across the rows between.</div></div>
+
+  <div class="sect"><span>Save</span><span id="del" style="display:none">delete saved</span></div>
+  <div class="row" style="margin-top:8px"><input type="text" class="name" id="savename" placeholder="name (letters, digits, - _)"><button class="btn" id="save" style="flex:0 0 90px">save</button></div>
+  <div class="links" id="openlink"></div>
+  <div class="row"><button class="btn" id="copy">copy JSON</button><button class="btn primary" id="build">build</button></div>
+  <textarea id="json" readonly></textarea>
+  <div class="status" id="status"></div>
+  <div class="links" id="links"></div>
+</div>
+<div id="stage"><div class="kv" id="kv"></div></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const S={preset:'textured', head:'crescent', spec:{list:null}, D:null, H:null, meta:null, pinned:null, hover:null, drag:null, pendingSend:false, savedName:null, presets:[], saved:[]};
+let inflight=null;
+// slider ranges per row key (the page's; rows.py carries units and docs, not ranges) and per body key
+const R={len:[1,40], width:[1,80], axis:[0.12,0.5], relief:[3,40], margin:[0.05,0.6], sweep:[-20,70], curve:[-30,60], tip:[0,80], tip_w:[0.1,1.5], arch:[0,0.5], fulcrum:[0.1,0.95], slope:[0,1.2], rear_round:[0,1]};
+const RB={term_spine:[0,60], min_joint_mm:[8,40], print_scale:[0.5,6]};   // in list mode the row counts and lengths ARE the list
+const ROWKEYS=['len','width','sweep','curve','tip','tip_w','relief','arch','axis','margin','fulcrum','slope','rear_round'];
+const fmt=v=>Number.isInteger(v)?String(v):(+v).toFixed(Math.abs(v)<1?3:(Math.abs(v)<10?2:1));
+function status(t,bad){ $('status').textContent=t||''; $('status').classList.toggle('busy',!!bad); }
+function clamp(k,v,T){ const r=(T||R)[k]||[-1e9,1e9]; v=Math.min(r[1],Math.max(r[0],v)); if(r[2]) v=Math.round(v); return v; }
+const rowOf=i=>S.spec.list[i];                                     // the editor's own list is the truth; the server resolves and draws it
+function setRow(i,k,v,quiet){ v=clamp(k,v); S.spec.list[i][k]=+v.toFixed(3); if(!quiet) send(); }
+function setBody(k,v,quiet){ v=clamp(k,v,RB); S.spec[k]=+v.toFixed(3); if(!quiet) send(); }
+$('model').onchange=e=>{ S.spec.model=e.target.value; send(); };
+function insertRow(at, src){ const r=Object.assign({}, S.spec.list[src]); S.spec.list.splice(at, 0, r); S.pinned=at; send(); renderTable(); renderSliders(); }
+function removeRow(i){ if(S.spec.list.length<=2){ status('keep at least two rows',true); return; } S.spec.list.splice(i,1); S.pinned=Math.min(i, S.spec.list.length-1); send(); renderTable(); renderSliders(); }
+
+// ---------- server ----------
+async function load(preset, bodyName, start){
+  const u=`/api/body_diagram?preset=${encodeURIComponent(preset)}&head=${encodeURIComponent(S.head)}`+(bodyName?`&body=${encodeURIComponent(bodyName)}`:(start==='plain'?'&start=boring':''));
+  const d=await (await fetch(u)).json(); if(d.error){ status(d.error,true); return; }
+  S.preset=preset; S.savedName=bodyName||null; S.start=bodyName?'saved':(start||'preset');
+  S.spec=Object.assign({}, d.spec||{}); delete S.spec.rows; for(const k of ['thorax_rows','pyg_rows','thorax_len','pyg_len']) delete S.spec[k];
+  S.spec.list=d.diagram.list.map(r=>Object.assign({},r));            // whatever the start was, from here on the list is explicit
+  S.spec.model=S.spec.model||d.diagram.model||'thorax'; $('model').value=S.spec.model;
+  S.D=d.diagram; S.H=d.head.diagram; S.presets=d.presets; S.saved=d.saved_bodies; S.pinned=null;
+  $('savename').value=S.savedName||''; $('del').style.display=S.savedName?'':'none'; $('openlink').innerHTML=S.savedName?`<a href="/?preset=${encodeURIComponent(S.preset)}&body=${encodeURIComponent(S.savedName)}${S.head!=='crescent'?'&head='+encodeURIComponent(S.head):''}">open ${S.savedName} in the generator →</a>`:'';
+  fillPickers(); renderBody(); renderSliders(); renderTable(); kv();
+}
+async function send(){ renderTable();
+  if(inflight){ S.pendingSend=true; return; }
+  inflight=fetch('/api/body_diagram',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({preset:S.preset, spec:S.spec, head:S.head})})
+    .then(r=>r.json()).then(d=>{ if(d.error){ status(d.error,true); return; } S.D=d.diagram; S.H=d.head.diagram; kv(); renderBody(false); renderSliders(false); renderTable(); })
+    .catch(e=>status(String(e),true)).finally(()=>{ inflight=null; if(S.pendingSend){ S.pendingSend=false; send(); } }); }
+function kv(){ const D=S.D; $('kv').innerHTML=`<b>${S.savedName?S.savedName:(S.start==='plain'?'plain trilobite':S.preset)}</b> · ${D.model==='slab'?'tergite slab':'generator segments'}<br>rows <b>${D.rows.length}</b> · pieces <b>${D.pieces.length}</b><br>print <b>${D.print_size_mm.length} × ${D.print_size_mm.width} mm</b> · scale <b>${D.scale.toFixed(2)}</b><br>joint min <b>${D.min_joint_mm} mm</b>`+((D.problems||[]).length?`<br><span style="color:var(--accent)">cannot build: ${D.problems.join(' · ')}</span>`:''); $('build').disabled=!!(D.problems||[]).length; }
+
+// ---------- panel ----------
+function fillPickers(){ const ps=$('preset'); ps.innerHTML=`<option value="plain">plain trilobite</option><optgroup label="presets">${S.presets.map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+(S.saved.length?`<optgroup label="saved bodies">${S.saved.map(b=>`<option value="saved:${b.name}">${b.name} · ${b.preset}</option>`).join('')}</optgroup>`:''); ps.value=S.savedName?'saved:'+S.savedName:(S.start==='plain'?'plain':S.preset); }
+$('preset').onchange=e=>{ const v=e.target.value; if(v==='plain') load('textured', null, 'plain'); else if(v.startsWith('saved:')){ const b=S.saved.find(x=>x.name===v.slice(6)); load(b.preset, b.name); } else load(v); };
+$('head').onchange=e=>{ S.head=e.target.value; send(); };
+let showBody=false; $('bodytoggle').onclick=()=>{ showBody=!showBody; $('bodytoggle').textContent=showBody?'hide':'show'; $('bodyctl').style.display=showBody?'':'none'; renderBody(); };
+function slider(box,k,val,lo,hi,step,onin,tag){ const d=document.createElement('div'); d.className='ctrl';
+  d.innerHTML=`<div class="lab"><span>${k}${tag?' <span style="color:var(--mid)">· '+tag+'</span>':''}</span><span class="val" id="v_${k}"></span></div><input type="range" min="${lo}" max="${hi}" step="${step}" id="s_${k}">`;
+  box.appendChild(d); const inp=d.querySelector('input'); inp.value=val; d.querySelector('.val').textContent=fmt(val); inp.oninput=()=>{ onin(+inp.value); d.querySelector('.val').textContent=fmt(+inp.value); d.querySelector('.val').classList.add('on'); }; return d; }
+function renderBody(rebuild=true){ const box=$('bodyctl'); if(!showBody) return; const B=S.D.body; if(S.spec.rows) delete S.spec.rows;
+  if(rebuild||!box.children.length){ box.innerHTML=''; for(const k of Object.keys(RB)){ const r=RB[k]; const v=S.spec[k]!=null?S.spec[k]:B[k]; slider(box,k,v,r[0],r[1],r[2]||((r[1]-r[0])/200),val=>setBody(k,val),S.D.body_keys[k].unit); } }
+  else for(const k of Object.keys(RB)){ const s=$('s_'+k); if(s&&document.activeElement!==s){ const v=S.spec[k]!=null?S.spec[k]:B[k]; s.value=v; $('v_'+k).textContent=fmt(v); $('v_'+k).classList.toggle('on',S.spec[k]!=null); } } }
+function renderSliders(rebuild=true){ const box=$('sliders'); const i=S.pinned!=null?S.pinned:S.hover;
+  if(i==null){ if(rebuild){ box.innerHTML='<div class="hint">Click a row to pin its sliders here. Shift-click a second row to ramp the pinned row\'s edits linearly across the rows between.</div>'; $('rowname').textContent='Row'; $('rowtools').innerHTML=''; } return; }
+  const r=rowOf(i); const dr=S.D.rows[i]; $('rowname').textContent=`Row ${i} · ${r.kind}${dr&&dr.small?' · fused':''}`;
+  if(rebuild||box.dataset.i!==String(i)){ box.innerHTML=''; box.dataset.i=String(i);
+    for(const k of ROWKEYS){ const rr=R[k]; slider(box,k,r[k],rr[0],rr[1],(rr[1]-rr[0])/300,val=>setRow(i,k,val),S.D.keys[k].unit); if(S.D.model!=='slab'&&/slab model only/.test(S.D.keys[k].doc)) box.lastChild.style.opacity=0.35; }
+    $('rowtools').innerHTML=`<select id="kind" style="width:auto;padding:2px 0;font-size:10px"><option value="thorax">thorax</option><option value="pyg">pyg</option></select> <button class="btn small" id="toall">→ rows behind</button>`;
+    $('kind').value=r.kind; $('kind').onchange=e=>{ S.spec.list[i].kind=e.target.value; send(); };
+    $('toall').onclick=()=>{ for(let j=i+1;j<S.spec.list.length;j++){ const kind=S.spec.list[j].kind; S.spec.list[j]=Object.assign({}, S.spec.list[i], {kind}); } send(); }; }
+  else for(const k of ROWKEYS){ const s=$('s_'+k); if(s&&document.activeElement!==s){ s.value=r[k]; $('v_'+k).textContent=fmt(r[k]); } } }
+function renderTable(){ const e=$('rowtable'); const L=S.spec.list; const D=S.D;
+  e.innerHTML=L.map((r,i)=>{ const dr=D&&D.rows[i]; const on=i===S.pinned; return `<div data-i="${i}" style="cursor:pointer;${on?'color:var(--accent)':''}"><b${on?' style="color:var(--accent)"':''}>${String(i).padStart(2,' ')}</b> ${r.kind==='pyg'?'pyg ':'thx '}len ${fmt(r.len)} · w ${fmt(r.width)} · tip ${fmt(r.tip)} · sw ${fmt(r.sweep)}°${dr&&dr.small?' <span style="color:var(--accent)">fused</span>':''}</div>`; }).join('');
+  e.querySelectorAll('div[data-i]').forEach(x=>x.onclick=ev=>{ const i=+x.dataset.i; if(ev.shiftKey&&S.pinned!=null&&S.pinned!==i){ ramp(S.pinned,i); return; } S.pinned=i; renderSliders(); renderTable(); });
+  $('copyfrom').max=L.length-1; }
+$('reset').onclick=()=>load('textured', null, 'plain');
+$('plus').onclick=()=>{ const at=S.pinned!=null?S.pinned+1:S.spec.list.length; insertRow(at, at-1); status(`row ${at} added as a copy of row ${at-1}`); };
+$('minus').onclick=()=>{ const i=S.pinned!=null?S.pinned:S.spec.list.length-1; removeRow(i); status(`row ${i} removed`); };
+$('copyrow').onclick=()=>{ const src=Math.max(0,Math.min(S.spec.list.length-1,+$('copyfrom').value||0)); const at=S.pinned!=null?S.pinned+1:S.spec.list.length; insertRow(at, src); status(`row ${at} added as a copy of row ${src}`); };
+function ramp(a,b){ if(a===b) return; const lo=Math.min(a,b), hi=Math.max(a,b); const ks=ROWKEYS.filter(k=>Math.abs(rowOf(a)[k]-rowOf(b)[k])>1e-9);
+  for(const k of ks){ const va=rowOf(a)[k], vb=rowOf(b)[k]; for(let j=lo;j<=hi;j++){ const t=(j-a)/(b-a); S.spec.list[j][k]=+(va+(vb-va)*t).toFixed(3); } }
+  status(ks.length?`ramped ${ks.join(', ')} from row ${a} to row ${b}`:'rows already equal'); send(); }
+$('copy').onclick=()=>{ const txt=JSON.stringify({preset:S.preset, head:S.head, spec:S.spec})+'\n\n# python: body.build(P, "isopod", rows='+JSON.stringify(S.spec)+')'; const ta=$('json'); ta.value=txt; ta.style.display='block'; ta.select(); try{ navigator.clipboard.writeText(txt); status('copied'); }catch(_){ status('select and copy'); } };
+$('save').onclick=async()=>{ const name=$('savename').value.trim(); if(!name){ status('give the body a name',true); $('savename').focus(); return; }
+  const r=await fetch('/api/bodies',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name, preset:S.preset, head:S.head, spec:S.spec})}); const j=await r.json(); if(!r.ok){ status(j.error||'save failed',true); return; }
+  status(`saved as ${name}`); await load(S.preset, name); };
+$('del').onclick=async()=>{ if(!S.savedName) return; const n=S.savedName; const r=await fetch('/api/bodies/'+encodeURIComponent(n),{method:'DELETE'}); if(!r.ok){ status('delete failed',true); return; } status(`deleted ${n}`); S.savedName=null; $('savename').value=''; $('del').style.display='none'; $('openlink').innerHTML=''; const d=await (await fetch('/api/body_diagram?preset='+encodeURIComponent(S.preset))).json(); S.saved=d.saved_bodies; fillPickers(); send(); };
+$('build').onclick=async()=>{ const b=$('build'); b.disabled=true; const t0=Date.now(); const tick=setInterval(()=>status(`building · ${Math.round((Date.now()-t0)/1000)} s`,true),500);
+  try{ const P=await (await fetch('/api/preset/'+encodeURIComponent(S.preset))).json();
+    const r=await fetch('/api/build',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, joint:'isopod', head:S.head, body:S.spec})}); const m=await r.json(); clearInterval(tick);
+    if(!r.ok||!m.parts||!m.parts.length){ status('build failed · '+((m.build_notes||[]).map(n=>n[2]).join('; ')||m.error||r.status),true); }
+    else{ const bad=m.parts.filter(p=>!p.watertight||p.bodies!==1).length; status(`built ${m.parts.length} pieces in ${m.build_seconds} s${bad?` · ${bad} not a single watertight body`:''}`,!!bad);
+      $('links').innerHTML=`<a href="/api/stl/${m.key}">download STL (all pieces, print mm)</a>`; }
+  }catch(e){ clearInterval(tick); status('build failed · '+e,true); } b.disabled=false; };
+
+// ---------- the drawing ----------
+new p5(s=>{
+  const stage=$('stage'); let W,H,px,ox,oy,oxE; let HP=[]; const ZX=1.0;   // the side view is TRUE scale, aligned with the plan row for row
+  s.setup=()=>{ const c=s.createCanvas(stage.clientWidth,stage.clientHeight); c.parent(stage); s.textFont('IBM Plex Mono'); s.textSize(10); };
+  s.windowResized=()=>s.resizeCanvas(stage.clientWidth,stage.clientHeight);
+  // model mm -> screen: the axis runs DOWN the screen (front at the top, as the sheet and the guide draw it); x across
+  const headLen=()=>{ const h=S.H; return h?(-h.outline.reduce((m,p)=>Math.min(m,p[1]),0))*headScale():0; };
+  const headScale=()=>{ const w0=S.D.rows[0].row.width; return w0*(S.H&&S.H.size?S.H.size.width_vs_thorax:1.15); };   // the head's half-width unit in mm
+  function fit(){ W=s.width; H=s.height; const D=S.D; const L=D.length+(D.term_spine||0); const hl=headLen();
+    const xw=Math.max(...D.rows.map(r=>r.row.width+r.row.tip), headScale()); const zmax=Math.max(...D.side.flatMap(p=>p.top.map(q=>q[1])),5)+2;
+    px=Math.min((H-80)/(L+hl+6), (W-140)/(2*xw+ZX*zmax+30)); ox=40+xw*px; oy=40+hl*px; oxE=ox+xw*px+30; }
+  const X=x=>ox+x*px, Y=y=>oy+y*px;
+  function hair(a,w=1){ s.stroke(255,a); s.strokeWeight(w); s.noFill(); }
+  function orange(w=1){ s.stroke(246,112,79); s.strokeWeight(w); s.noFill(); }
+  function poly(pts,mir,sc,dy){ s.beginShape(); for(const p of pts) s.vertex(X((mir?-1:1)*p[0]*(sc||1)), Y(p[1]*(sc||1)+(dy||0))); s.endShape(); }
+  s.draw=()=>{ s.background(0); if(!S.D) return; fit(); const D=S.D;
+    hair(60); s.line(X(0), 30, X(0), H-20);
+    // the head, from its own diagram, scaled so its half-width is the first row's width x the head/thorax ratio; its y = 0 at the first row's front
+    if(S.H){ const sc=headScale(); hair(255,1.1); poly(S.H.outline,false,sc,-0.5); poly(S.H.outline,true,sc,-0.5); hair(200); poly(S.H.glabella,false,sc,-0.5); poly(S.H.glabella,true,sc,-0.5); if(S.H.eye){ poly(S.H.eye,false,sc,-0.5); poly(S.H.eye,true,sc,-0.5); } }
+    // rows: outline both halves; fused rows orange; joints as ticks across the axis
+    for(const r of D.rows){ if(r.small) orange(1); else hair(255,1.1); poly(r.outline,false); poly(r.outline,true); }
+    hair(120); for(const j of D.joints) s.line(X(-6), Y(j), X(6), Y(j));
+    if(D.term_spine>0){ hair(255,1.5); s.line(X(0), Y(D.length), X(0), Y(D.length+D.term_spine)); }
+    // the elevation beside: z to the right of the plan, the same y
+    // the side view: every piece's slab in section (top, bottom, front and rear faces), the lip under the plate ahead,
+    // the column to the bed and the ball at each joint; the row under the mouse / pinned is lit in BOTH views
+    const actRow=S.drag?S.drag.i:(S.pinned!=null?S.pinned:S.hover);
+    hair(60); s.line(oxE, Y(-2), oxE, Y(D.length+4));                                      // the bed
+    for(const pc of D.side){ const lit=actRow!=null&&pc.rows.includes(actRow); const fused=pc.rows.length>1;
+      hair(90); s.rect(oxE, Y(pc.y0+0.6), 6.5*ZX*px, (pc.y1-pc.y0-1.2)*px);                 // the column (the isopod's strip) under the slab
+      if(lit) orange(1.4); else if(fused) orange(0.9); else hair(255,1.1);
+      s.beginShape(); for(const q of pc.top) s.vertex(oxE+q[1]*ZX*px, Y(q[0])); for(const q of pc.bottom.slice().reverse()) s.vertex(oxE+q[1]*ZX*px, Y(q[0])); s.endShape(s.CLOSE);
+      if(lit){ s.noStroke(); s.fill(246,112,79,36); s.beginShape(); for(const q of pc.top) s.vertex(oxE+q[1]*ZX*px, Y(q[0])); for(const q of pc.bottom.slice().reverse()) s.vertex(oxE+q[1]*ZX*px, Y(q[0])); s.endShape(s.CLOSE); } }
+    hair(160); for(const pv of D.pivots){ s.circle(oxE+pv[1]*ZX*px, Y(pv[0]), 3.4*ZX*px); }     // the ball at each joint (isopod 11.5 mm print)
+    if(D.term_spine>0){ hair(255,1.2); const last=D.side[D.side.length-1]; const zt=last.top[last.top.length-1][1]; s.line(oxE+zt*ZX*px, Y(D.length), oxE+1.5*ZX*px, Y(D.length+D.term_spine)); }
+    if(actRow!=null&&D.rows[actRow]){ const r=D.rows[actRow]; s.noStroke(); s.fill(246,112,79,30); s.beginShape(); for(const p of r.outline) s.vertex(X(p[0]),Y(p[1])); s.endShape(s.CLOSE); s.beginShape(); for(const p of r.outline) s.vertex(X(-p[0]),Y(p[1])); s.endShape(s.CLOSE); }
+    s.noStroke(); s.fill(255,120); s.textAlign(s.LEFT,s.TOP); s.text('SIDE · section on the axis · true scale', oxE+2, 30); s.text('PLAN', 40, 30);
+    // handles: rear (axis), edge, tip, and the relief handle on the elevation
+    HP=[]; const act=S.drag?S.drag.i:(S.pinned!=null?S.pinned:S.hover);
+    D.rows.forEach((r,i)=>{ const h=r.handles; const on=i===act; const col=on?s.color(246,112,79):(r.small?s.color(246,112,79,160):s.color(255));
+      const pc=D.side.find(p=>p.rows.includes(i)); const inrow=pc?pc.top.filter(q=>q[0]>=r.y0-1e-6&&q[0]<=r.y1+1e-6):[]; const zc=inrow.length?Math.max(...inrow.map(q=>q[1])):h.top[1];
+      const pts=[['rear',X(h.rear[0]),Y(h.rear[1])],['edge',X(h.edge[0]),Y(h.edge[1])],['top',oxE+zc*ZX*px,Y(0.5*(r.y0+r.y1))],['side_rear',oxE+0.45*zc*ZX*px,Y(r.y1)]]; if(r.row.tip>0.05) pts.push(['tip',X(h.tip[0]),Y(h.tip[1])]);
+      for(const [k,sx,sy] of pts){ s.stroke(col); s.strokeWeight(1); s.fill(on?col:0); s.circle(sx,sy,on?8:(k==='rear'?6:5)); HP.push({i,k,sx,sy}); }
+      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`row ${i} · ${r.kind} · ${r.print_len.toFixed(1)} mm print${r.small?' · fused':''}`, X(h.edge[0])+10, Y(h.edge[1])-6); } });
+    s.noStroke(); s.fill(255,90); s.textAlign(s.RIGHT,s.BOTTOM); s.text((inflight?'drawing…':'')+' ', W-12, H-10);
+  };
+  function nearest(mx,my){ let best=null,bd=12; for(const h of HP){ const d=Math.hypot(h.sx-mx,h.sy-my); if(d<bd){ bd=d; best=h; } } return best; }
+  s.mouseMoved=()=>{ const h=nearest(s.mouseX,s.mouseY); const i=h?h.i:null; if(i!==S.hover){ S.hover=i; if(S.pinned==null) renderSliders(); } stage.style.cursor=h?'grab':'default'; };
+  s.mousePressed=()=>{ if(s.mouseX<0||s.mouseY<0||s.mouseX>W||s.mouseY>H) return; const h=nearest(s.mouseX,s.mouseY);
+    if(h){ if(s.keyIsDown(s.SHIFT)&&S.pinned!=null&&S.pinned!==h.i){ ramp(S.pinned,h.i); return; }
+      S.drag={i:h.i,k:h.k,x0:s.mouseX,y0:s.mouseY,start:Object.assign({},rowOf(h.i))}; S.pinned=h.i; renderSliders(); renderTable(); stage.style.cursor='grabbing'; }
+    else if(S.pinned!=null){ S.pinned=null; renderSliders(); renderTable(); } };
+  s.mouseReleased=()=>{ if(S.drag){ S.drag=null; stage.style.cursor='grab'; } };
+  s.mouseDragged=()=>{ if(!S.drag) return; const d=S.drag, st=d.start, i=d.i; const dx=(s.mouseX-d.x0)/px, dy=(s.mouseY-d.y0)/px;   // mm: dx outward, dy rearward
+    switch(d.k){
+      case 'rear': setRow(i,'len',st.len+dy,true); break;
+      case 'edge': setRow(i,'width',st.width+dx,true); setRow(i,'sweep',st.sweep+Math.atan2(dy,Math.max(st.width-st.axis*st.width,1))*180/Math.PI*0.9,true); break;
+      case 'tip': { const r=rowOf(i); const ex=S.D.rows[i].handles.edge; const tx=(s.mouseX-ox)/px, ty=(s.mouseY-oy)/px; const L=Math.hypot(tx-ex[0],ty-ex[1]); const ang=Math.atan2(ty-ex[1],Math.max(tx-ex[0],0.3))*180/Math.PI;
+                    setRow(i,'tip',L,true); setRow(i,'curve',ang-r.sweep,true); break; }
+      case 'top': setRow(i,'relief',st.relief+dx/ZX,true); break;
+      case 'side_rear': setRow(i,'len',st.len+dy,true); break; }
+    send(); };
+}, $('stage'));
+
+// ---------- start ----------
+(async()=>{ const u=new URLSearchParams(location.search); S.head=u.get('head')||'crescent';
+  const hs=await (await fetch('/api/head_styles')).json(); $('head').innerHTML=hs.map(h=>`<option value="${h.name}">${h.name}${h.saved?' · saved':''}</option>`).join(''); $('head').value=S.head;
+  const body=u.get('body'); if(body){ const b=(await (await fetch('/api/bodies')).json()).find(x=>x.name===body); if(b){ await load(b.preset, body); return; } }
+  if(u.get('preset')) await load(u.get('preset')); else await load('textured', null, 'plain'); })();
+</script>
+</body>
+</html>
