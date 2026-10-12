@@ -602,6 +602,11 @@ let bodySpec=null;                                          // live rows spec fr
 const bodyArg=()=>bodySpec||bodyDraft||bodyName;            // live spec wins, then a carried draft, then a saved name; null = the preset's own rows
 window.__page={get headStyle(){return headStyle}, get joint(){return joint}, get preset(){return (document.getElementById('preset')||{}).value||''}, get body(){return bodyName}, shareURL:()=>shareURL()};   // read-only view of the page's state for the nav buttons and tests (the script is a module)           // head type (isopod model only): 'crescent' = the approved head on the isopod head piece
 const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0, head: joint==='isopod'?headArg():null, body: joint==='isopod'?bodyArg():null});
+window.addEventListener('message', async e=>{                       // the embedded editor (/studio) streams its live head + body here, so Build/sheet/3D use them (12 Oct 2026)
+  const m=e.data||{}; if(m.type!=='trilo-studio') return;
+  headStyle=m.head||'crescent'; headOutline=m.headOutline||{}; headFace=m.headFace||{}; bodySpec=(m.spec&&m.spec.list&&m.spec.list.length)?m.spec:null;
+  if(m.preset && m.preset!==ps.value && S.presets.includes(m.preset)){ ps.value=m.preset; try{ P=await (await fetch('/api/preset/'+encodeURIComponent(m.preset))).json(); }catch(_){} }
+});
 // relief style picker: "blueprint" (b&w, default) or a scientific colormap (the wave-optics heatmap). Just re-renders.
 (function(){ const sel=$('cmap');
   const bp=document.createElement('option'); bp.value='none'; bp.textContent='blueprint'; bp.selected=true; sel.appendChild(bp);
@@ -656,7 +661,7 @@ async function build(){ if(building){pending=true;return;} building=true; status
     catch(ex){ status('build failed · '+why(ex),false); return; }
     kin=man.kinematics; buildKey=man.key; readout();
     status(`built in ${man.build_seconds}s · ${man.print.print_valid?'printable':(man.print.violations||man.print.notes||['not printable']).join('; ')}`,false);
-    if(mode==='sheet') await sheet(); else await load3d(man);
+    if(mode==='edit') await toSheet(); else if(mode==='3d') await load3d(man); else await sheet();   // building from the editor shows the result on the sheet
   } finally { building=false; loadingOff(); if(pending){pending=false; build();} } }
 let sheetWait=null;                        // resolved true by the img's load, false by its error or the timeout,
 const SHEET_TRIES=3;                       // so the overlay lifts on the painted sheet, not on the response
@@ -873,7 +878,7 @@ if(_jq&&['pin','flexi','ball','isopod'].includes(_jq)){ joint=_jq; [...$('joints
 await HEADS_READY.catch(()=>{});
 if(bodyName&&!_u.get('head')){ try{ const b=(await (await fetch('/api/bodies')).json()).find(x=>x.name===bodyName); if(b&&b.head&&HEADS.some(h=>h.name===b.head)){ headStyle=b.head; $('headstyle').value=headStyle; } }catch(_){} }   // a saved body brings its head
 await applyMacro();
-render(); build(); placeView3D(); classify(); pushHist();   // seed the undo history with the initial animal
+render(); placeView3D(); classify(); pushHist(); toEdit();   // land on the combined head+body editor; the sheet/3D build on demand
 </script>
 </body>
 </html>

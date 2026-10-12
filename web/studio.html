@@ -82,6 +82,8 @@ const S={ preset:'textured', head:'crescent', savedBody:null, savedHead:null,
           sel:null, pinned:null, hover:null, drag:null, pendingB:false, pendingH:false, edited:false };
 const fmt=v=>Number.isInteger(v)?String(v):(+v).toFixed(Math.abs(v)<1?3:(Math.abs(v)<10?2:1));
 function status(t,bad){ $('status').textContent=t||''; $('status').classList.toggle('busy',!!bad); }
+// when embedded in the generator, stream the live head + body so the host's Build/sheet/3D use them (12 Oct 2026)
+function postState(){ try{ if(window.parent && window.parent!==window) window.parent.postMessage({type:'trilo-studio', preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec}, '*'); }catch(_){} }
 
 // ---------- ranges (the page's own; the model files carry units/docs, not ranges) ----------
 const R={len:[1,40], width:[1,80], axis:[0.12,0.5], relief:[3,40], margin:[0.05,0.6], sweep:[-20,70], curve:[-30,60], tip:[0,80], tip_w:[0.1,1.5], arch:[0,0.5], fulcrum:[0.1,0.95], slope:[0,1.2], rear_round:[0,1]};
@@ -130,15 +132,15 @@ async function loadAll(preset, bodyName, start){
   S.BD=bd.diagram; S.presets=bd.presets; S.savedBodies=bd.saved_bodies; S.pinned=null; S.sel=null;
   $('savebody').value=S.savedBody||''; $('savehead').value=S.savedHead||'';
   $('del').style.display=S.savedBody?'':'none';
-  fillPickers(); renderContext(); renderTable(); kv();
+  fillPickers(); renderContext(); renderTable(); kv(); postState();
 }
 let inflightB=null, inflightH=null;
-async function sendBody(){ S.edited=true; renderTable();
+async function sendBody(){ S.edited=true; postState(); renderTable();
   if(inflightB){ S.pendingB=true; return; }
   inflightB=fetch('/api/body_diagram',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({preset:S.preset, spec:S.spec, head:S.head})})
     .then(r=>r.json()).then(d=>{ if(d.error){ status(d.error,true); return; } S.BD=d.diagram; kv(); renderContext(false); renderTable(); })
     .catch(e=>status(String(e),true)).finally(()=>{ inflightB=null; if(S.pendingB){ S.pendingB=false; sendBody(); } }); }
-async function sendHead(){ S.edited=true; renderContext(false);
+async function sendHead(){ S.edited=true; postState(); renderContext(false);
   if(inflightH){ S.pendingH=true; return; }
   inflightH=fetch('/api/head_diagram',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({style:S.head, outline:S.headOutline, face:S.headFace})})
     .then(r=>r.json()).then(d=>{ if(d.error){ status(d.error,true); return; } S.HD=d; kv(); renderContext(false); })
