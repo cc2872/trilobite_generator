@@ -592,12 +592,15 @@ let building=false, pending=false;
 // with an optional fill (mm).
 let joint='isopod', fillMm=0, cmap='none';   // default: black & white blueprint; a colormap switches to the heatmap aesthetic
 let headStyle=_u.get('head')||'crescent', HEADS=[];
+let headOutline={}, headFace={};                            // live shaped-head edits (the in-page combined editor); empty = the plain style
+const headArg=()=>(Object.keys(headOutline).length||Object.keys(headFace).length)?{style:headStyle, outline:headOutline, face:headFace}:headStyle;   // the NAME when unedited (native crescent path, identical to before); the live {style,outline,face} dict only once edited; 12 Oct 2026
 let bodyName=_u.get('body')||null;                          // a saved body (the body editor's rows model) to build with, by name (10 Oct 2026)
 let bodyDraft=null;                                         // unsaved body edits carried from the editor via sessionStorage (?bodydraft=1, 11 Oct 2026)
 if(_u.get('bodydraft')){ try{ const d=JSON.parse(sessionStorage.getItem('trilo_body_draft')||'null'); if(d&&d.spec) bodyDraft=d.spec; }catch(_){} }
-const bodyArg=()=>bodyDraft||bodyName;                      // live edits win over the saved name; null = the preset's own rows
+let bodySpec=null;                                          // live rows spec from the in-page editor (the studio S.spec shape); 12 Oct 2026
+const bodyArg=()=>bodySpec||bodyDraft||bodyName;            // live spec wins, then a carried draft, then a saved name; null = the preset's own rows
 window.__page={get headStyle(){return headStyle}, get joint(){return joint}, get preset(){return (document.getElementById('preset')||{}).value||''}, get body(){return bodyName}, shareURL:()=>shareURL()};   // read-only view of the page's state for the nav buttons and tests (the script is a module)           // head type (isopod model only): 'crescent' = the approved head on the isopod head piece
-const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0, head: joint==='isopod'?headStyle:null, body: joint==='isopod'?bodyArg():null});
+const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0, head: joint==='isopod'?headArg():null, body: joint==='isopod'?bodyArg():null});
 // relief style picker: "blueprint" (b&w, default) or a scientific colormap (the wave-optics heatmap). Just re-renders.
 (function(){ const sel=$('cmap');
   const bp=document.createElement('option'); bp.value='none'; bp.textContent='blueprint'; bp.selected=true; sel.appendChild(bp);
@@ -659,7 +662,7 @@ const SHEET_TRIES=3;                       // so the overlay lifts on the painte
 async function sheet(){ status('drawing sheet',true);
   for(let a=1;a<=SHEET_TRIES;a++){
     let r;
-    try{ r=await retryPost('/api/sheet','sheet',2,{P,joint,cmap,head:joint==='isopod'?headStyle:null,body:joint==='isopod'?bodyArg():null}); if(!r.url) throw new Error(r.error||'no sheet'); }
+    try{ r=await retryPost('/api/sheet','sheet',2,{P,joint,cmap,head:joint==='isopod'?headArg():null,body:joint==='isopod'?bodyArg():null}); if(!r.url) throw new Error(r.error||'no sheet'); }
     catch(ex){
       if(a>=SHEET_TRIES){ status('sheet failed · '+why(ex),false); return; }
       status(`sheet failed · retry ${a}/${SHEET_TRIES-1}`,true); await new Promise(z=>setTimeout(z,800*a)); continue; }
