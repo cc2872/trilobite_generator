@@ -66,7 +66,7 @@ def test_saved_heads_round_trip(c, tmp_path, monkeypatch):
 
 def test_opening_page_links_and_share(c):
     html = c.get("/").get_data(as_text=True)
-    assert 'id="headeditor"' in html and 'id="familytree"' in html                               # the nav row on the opening page
+    assert 'id="editor"' in html and 'id="familytree"' in html                                   # the nav row on the opening page (12 Oct: one combined head+body editor button)
     body = c.get("/body").get_data(as_text=True); head = c.get("/head").get_data(as_text=True)
     assert 'id="home"' in body and 'id="headeditor"' in body and 'id="home"' in head and 'id="bodyeditor"' in head   # 11 Oct: each editor links home and to the other
     assert "&head=" in html and "&joint=" in html                                                 # the share link carries the head and joint
