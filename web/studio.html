@@ -212,7 +212,9 @@ new p5(s=>{
   const headScale=()=>{ const w0=S.BD.rows[0].row.width; return w0*(S.HD&&S.HD.diagram.size?S.HD.diagram.size.width_vs_thorax:1.15); };
   const headLen=()=>{ const h=S.HD&&S.HD.diagram; return h?(-h.outline.reduce((m,p)=>Math.min(m,p[1]),0))*headScale():0; };
   function fit(){ W=s.width; H=s.height; const D=S.BD; const L=D.length+(D.term_spine||0); const hl=headLen();
-    const xw=Math.max(...D.rows.map(r=>r.row.width+r.row.tip), headScale()); const zmax=Math.max(...D.side.flatMap(p=>p.top.map(q=>q[1])),5)+2;
+    const xw=Math.max(...D.rows.map(r=>r.row.width+r.row.tip), headScale());
+    const hz=(S.HD&&S.HD.diagram.profile&&S.HD.diagram.profile.length)?Math.max(...S.HD.diagram.profile.map(p=>p[1]))*headScale():0;   // the head's elevation depth, in model mm
+    const zmax=Math.max(...D.side.flatMap(p=>p.top.map(q=>q[1])), hz, 5)+2;
     px=Math.min((H-80)/(L+hl+6), (W-150)/(2*xw+ZX*zmax+30)); ox=46+xw*px; oy=40+hl*px; oxE=ox+xw*px+30; }
   const X=x=>ox+x*px, Y=y=>oy+y*px;
   function hair(a,w=1){ s.stroke(255,a); s.strokeWeight(w); s.noFill(); }
@@ -241,8 +243,13 @@ new p5(s=>{
       if(lit) orange(1.4); else if(fused) orange(0.9); else hair(255,1.1);
       s.beginShape(); for(const q of pc.top) s.vertex(oxE+q[1]*ZX*px, Y(q[0])); for(const q of pc.bottom.slice().reverse()) s.vertex(oxE+q[1]*ZX*px, Y(q[0])); s.endShape(s.CLOSE); }
     hair(160); for(const pv of D.pivots){ s.circle(oxE+pv[1]*ZX*px, Y(pv[0]), 3.4*ZX*px); }
-    s.noStroke(); s.fill(255,120); s.textAlign(s.LEFT,s.TOP); s.text('PLAN', 44, 30); s.text('SIDE · section · true scale', oxE+2, 30);
-    // handles: rows (rear/edge/tip) and the head (its plan handles)
+    // the head's elevation (side view), at the right in the head's own y-band, above the rows' side view
+    const HS=S.HD.diagram; const hsc=headScale();
+    const heX=z=>oxE+z*hsc*ZX*px, heY=b=>Y(b*hsc+HEADDY);
+    if(HS.section&&HS.section.length){ if(headOn) orange(1.2); else hair(255,1.1); s.beginShape(); for(const p of HS.section) s.vertex(heX(p[1]), heY(p[0])); s.endShape(); }
+    if(HS.profile&&HS.profile.length){ hair(130); s.beginShape(); for(const p of HS.profile) s.vertex(heX(p[1]), heY(p[0])); s.endShape(); }
+    s.noStroke(); s.fill(255,120); s.textAlign(s.LEFT,s.TOP); s.text('PLAN', 44, 30); s.text('HEAD SIDE', oxE+2, 30); s.text('ROWS SIDE · true scale', oxE+2, Y(-1.5));
+    // handles: rows (rear/edge/tip), the head's plan handles, and its elevation handles (height, eye height)
     HP=[];
     D.rows.forEach((r,i)=>{ const h=r.handles; const on=S.sel&&S.sel.type==='row'&&i===S.sel.i; const col=on?s.color(246,112,79):(r.small?s.color(246,112,79,160):s.color(255));
       const pts=[['rear',X(h.rear[0]),Y(h.rear[1])],['edge',X(h.edge[0]),Y(h.edge[1])]]; if(r.row.tip>0.05) pts.push(['tip',X(h.tip[0]),Y(h.tip[1])]);
@@ -252,6 +259,15 @@ new p5(s=>{
     for(const [k,v] of Object.entries(HH)){ if(HEADHANDLE_SKIP.has(k)) continue; const sx=headSX(v), sy=headSY(v); const on=headOn&&S.headSel===k;
       s.stroke(headOn?s.color(246,112,79):s.color(255,210)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):0); s.circle(sx,sy,on?8:5); HP.push({kind:'head',k,sx,sy});
       if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(k+'  '+headKeysFor(k).join(' · '), sx+9, sy-6); } }
+    // head elevation handles: overall height (the crown) and eye height, dragged on the HEAD SIDE view
+    if(HS.profile&&HS.profile.length){ let mi=0; HS.profile.forEach((p,k)=>{ if(p[1]>HS.profile[mi][1]) mi=k; }); const cp=HS.profile[mi];
+      const csx=heX(cp[1]), csy=heY(cp[0]); const con=headOn&&S.headSel==='crown';
+      s.stroke(headOn?s.color(246,112,79):s.color(255,210)); s.strokeWeight(1); s.fill(con?s.color(246,112,79):0); s.circle(csx,csy,con?8:5); HP.push({kind:'head',k:'crown',elev:true,sx:csx,sy:csy});
+      let be=cp[0], ze=Math.max(cp[1]*0.6,0.15); if(HS.eye&&HS.eye.length) be=HS.eye.reduce((m,p)=>m+p[1],0)/HS.eye.length;   // eye-height handle at the eye's fore-aft
+      const esx=heX(ze), esy=heY(be); const eon=headOn&&S.headSel==='eyeH';
+      s.stroke(headOn?s.color(246,112,79):s.color(255,210)); s.strokeWeight(1); s.fill(eon?s.color(246,112,79):0); s.circle(esx,esy,eon?8:5); HP.push({kind:'head',k:'eyeH',elev:true,sx:esx,sy:esy});
+      if(con){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text('head height · drag ↔', csx+9, csy-6); }
+      if(eon){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text('eye height · drag ↔', esx+9, esy-6); } }
     s.noStroke(); s.fill(255,90); s.textAlign(s.RIGHT,s.BOTTOM); s.text(((inflightB||inflightH)?'drawing…':'')+' ', W-12, H-10);
   };
   const HEADHANDLE_SKIP=new Set(['crown']);                 // elevation-only; edit via the slider in the panel
@@ -259,7 +275,7 @@ new p5(s=>{
   s.mouseMoved=()=>{ const h=nearest(s.mouseX,s.mouseY); const hi=h&&h.kind==='row'?h.i:null; if(hi!==S.hover){ S.hover=hi; } stage.style.cursor=h?'grab':'default'; };
   s.mousePressed=()=>{ if(s.mouseX<0||s.mouseY<0||s.mouseX>W||s.mouseY>H) return; const h=nearest(s.mouseX,s.mouseY);
     if(h&&h.kind==='row'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; S.drag={kind:'row',i:h.i,k:h.k,x0:s.mouseX,y0:s.mouseY,start:Object.assign({},rowOf(h.i))}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
-    else if(h&&h.kind==='head'){ S.sel={type:'head'}; S.headSel=h.k; S.drag={kind:'head',k:h.k,x0:s.mouseX,y0:s.mouseY,start:headSnapshot()}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
+    else if(h&&h.kind==='head'){ S.sel={type:'head'}; S.headSel=h.k; S.drag={kind:'head',k:h.k,elev:!!h.elev,x0:s.mouseX,y0:s.mouseY,start:headSnapshot()}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else { S.sel=null; S.drag=null; renderContext(); renderTable(); } };
   s.mouseReleased=()=>{ if(S.drag){ S.drag=null; stage.style.cursor='grab'; } };
   s.mouseDragged=()=>{ if(!S.drag) return;
@@ -272,6 +288,10 @@ new p5(s=>{
       sendBody(); return; }
     // head: the body canvas runs fore-aft DOWN and across to the RIGHT, so remap the head editor's deltas
     const sc=headScale(); const pxH=sc*px; const st=S.drag.start, L=S.HD.diagram.size.length;
+    if(S.drag.elev){ const ev={};   // the HEAD SIDE view: height/z runs to the RIGHT, fore-aft runs DOWN
+      if(S.drag.k==='crown'){ ev.height=st.height+(s.mouseX-S.drag.x0)/pxH/0.357; ev.glab_rise=st.glab_rise+(s.mouseY-S.drag.y0)/pxH*0.3; }
+      else if(S.drag.k==='eyeH'){ ev.eye_height=st.eye_height+(s.mouseX-S.drag.x0)/90; }
+      for(const [k,val] of Object.entries(ev)) if(Number.isFinite(val)) setHeadKey(k,val,true); sendHead(); return; }
     const along=(s.mouseY-S.drag.y0)/pxH, across=(s.mouseX-S.drag.x0)/pxH;   // along:+rear  across:+outward
     const v={};
     switch(S.drag.k){
