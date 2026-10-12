@@ -7,6 +7,8 @@ web_out/
 web/cache/
 web/records/
 web/agent_token.txt
+.env
+/data/
 web/heads/
 web/bodies/
 segment/out/

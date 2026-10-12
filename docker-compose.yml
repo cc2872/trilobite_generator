@@ -1,0 +1,33 @@
+# Live deploy for trilomorph.org (the lab box). Watchtower polls ghcr every 2 min, pulls a new
+# :latest (built by .github/workflows/deploy.yml on every push to main) and restarts `app` — so a
+# push reaches the site on its own. Secrets live in .env (git-ignored); saved heads/bodies and the
+# recordings are bind-mounted under ./data so they survive the auto-restarts.
+#
+#   on the box:  cp .env.example .env   # then fill it in
+#                docker compose up -d
+#
+services:
+  app:
+    image: ghcr.io/cc2872/trilobite_generator:latest
+    restart: unless-stopped
+    ports:
+      - "8765:8765"               # the tunnel points here
+    env_file:
+      - .env                      # TRILO_AGENT_TOKEN, TRILO_RECORD_URL, TRILO_RECORD_SECRET, ...
+    volumes:
+      - ./data/records:/app/web/records   # readings.jsonl + agent_log.jsonl (not in the image)
+      - ./data/bodies:/app/web/bodies     # saved bodies (the editor's "save body")
+      - ./data/heads:/app/web/heads       # saved heads (the editor's "save head")
+    labels:
+      - "com.centurylinklabs.watchtower.scope=trilobite"
+
+  watchtower:
+    image: containrrr/watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # private ghcr package? also mount a docker config.json holding a read:packages token:
+      # - ./watchtower-config.json:/config.json:ro
+    command: --interval 120 --cleanup --scope trilobite
+    labels:
+      - "com.centurylinklabs.watchtower.scope=trilobite"
