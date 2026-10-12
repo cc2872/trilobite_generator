@@ -49,7 +49,7 @@
 <body>
 <div class="panel">
   <h1><span>Body · editor</span></h1>
-  <div class="nav"><button id="home" onclick="location.href='/?preset='+encodeURIComponent(S.preset||'')+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+(S.savedName?'&body='+encodeURIComponent(S.savedName):'')" title="back to the generator, keeping this head, preset and body">home</button><button id="headeditor" onclick="location.href='/head'+(S.head&&S.head!=='crescent'?'?style='+encodeURIComponent(S.head):'')" title="draw the head: plan and elevation with handles">head editor</button></div>
+  <div class="nav"><button id="home" onclick="goHome()" title="back to the generator, keeping this head, preset and body (your edits come too)">home</button><button id="headeditor" onclick="location.href='/head'+(S.head&&S.head!=='crescent'?'?style='+encodeURIComponent(S.head):'')" title="draw the head: plan and elevation with handles">head editor</button></div>
   <div class="hint">One list of rows, head to tail tip. Drag a row's handles; rows too short for the joint fuse (orange).</div>
 
   <div class="sect"><span>Start from</span><span id="pg"></span></div>
@@ -81,8 +81,13 @@
 
 <script>
 const $=id=>document.getElementById(id);
-const S={preset:'textured', head:'crescent', spec:{list:null}, D:null, H:null, meta:null, pinned:null, hover:null, drag:null, pendingSend:false, savedName:null, presets:[], saved:[]};
+const S={preset:'textured', head:'crescent', spec:{list:null}, D:null, H:null, meta:null, pinned:null, hover:null, drag:null, pendingSend:false, savedName:null, presets:[], saved:[], edited:false};
 let inflight=null;
+// back to the generator, carrying the live body so its build reflects these edits (sessionStorage; only when actually edited)
+function goHome(){
+  try{ if(S.edited) sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, spec:S.spec, savedName:S.savedName})); }catch(_){}
+  location.href='/?preset='+encodeURIComponent(S.preset||'')+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+(S.edited?'&bodydraft=1':'')+(S.savedName?'&body='+encodeURIComponent(S.savedName):'');
+}
 // slider ranges per row key (the page's; rows.py carries units and docs, not ranges) and per body key
 const R={len:[1,40], width:[1,80], axis:[0.12,0.5], relief:[3,40], margin:[0.05,0.6], sweep:[-20,70], curve:[-30,60], tip:[0,80], tip_w:[0.1,1.5], arch:[0,0.5], fulcrum:[0.1,0.95], slope:[0,1.2], rear_round:[0,1]};
 const RB={term_spine:[0,60], min_joint_mm:[8,40], print_scale:[0.5,6]};   // in list mode the row counts and lengths ARE the list
@@ -105,11 +110,11 @@ async function load(preset, bodyName, start){
   S.spec=Object.assign({}, d.spec||{}); delete S.spec.rows; for(const k of ['thorax_rows','pyg_rows','thorax_len','pyg_len']) delete S.spec[k];
   S.spec.list=d.diagram.list.map(r=>Object.assign({},r));            // whatever the start was, from here on the list is explicit
   S.spec.model=S.spec.model||d.diagram.model||'thorax'; $('model').value=S.spec.model;
-  S.D=d.diagram; S.H=d.head.diagram; S.presets=d.presets; S.saved=d.saved_bodies; S.pinned=null;
+  S.D=d.diagram; S.H=d.head.diagram; S.presets=d.presets; S.saved=d.saved_bodies; S.pinned=null; S.edited=false;
   $('savename').value=S.savedName||''; $('del').style.display=S.savedName?'':'none'; $('openlink').innerHTML=S.savedName?`<a href="/?preset=${encodeURIComponent(S.preset)}&body=${encodeURIComponent(S.savedName)}${S.head!=='crescent'?'&head='+encodeURIComponent(S.head):''}">open ${S.savedName} in the generator →</a>`:'';
   fillPickers(); renderBody(); renderSliders(); renderTable(); kv();
 }
-async function send(){ renderTable();
+async function send(){ S.edited=true; renderTable();
   if(inflight){ S.pendingSend=true; return; }
   inflight=fetch('/api/body_diagram',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({preset:S.preset, spec:S.spec, head:S.head})})
     .then(r=>r.json()).then(d=>{ if(d.error){ status(d.error,true); return; } S.D=d.diagram; S.H=d.head.diagram; kv(); renderBody(false); renderSliders(false); renderTable(); })

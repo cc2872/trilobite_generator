@@ -593,8 +593,11 @@ let building=false, pending=false;
 let joint='isopod', fillMm=0, cmap='none';   // default: black & white blueprint; a colormap switches to the heatmap aesthetic
 let headStyle=_u.get('head')||'crescent', HEADS=[];
 let bodyName=_u.get('body')||null;                          // a saved body (the body editor's rows model) to build with, by name (10 Oct 2026)
+let bodyDraft=null;                                         // unsaved body edits carried from the editor via sessionStorage (?bodydraft=1, 11 Oct 2026)
+if(_u.get('bodydraft')){ try{ const d=JSON.parse(sessionStorage.getItem('trilo_body_draft')||'null'); if(d&&d.spec) bodyDraft=d.spec; }catch(_){} }
+const bodyArg=()=>bodyDraft||bodyName;                      // live edits win over the saved name; null = the preset's own rows
 window.__page={get headStyle(){return headStyle}, get joint(){return joint}, get preset(){return (document.getElementById('preset')||{}).value||''}, get body(){return bodyName}, shareURL:()=>shareURL()};   // read-only view of the page's state for the nav buttons and tests (the script is a module)           // head type (isopod model only): 'crescent' = the approved head on the isopod head piece
-const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0, head: joint==='isopod'?headStyle:null, body: joint==='isopod'?bodyName:null});
+const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0, head: joint==='isopod'?headStyle:null, body: joint==='isopod'?bodyArg():null});
 // relief style picker: "blueprint" (b&w, default) or a scientific colormap (the wave-optics heatmap). Just re-renders.
 (function(){ const sel=$('cmap');
   const bp=document.createElement('option'); bp.value='none'; bp.textContent='blueprint'; bp.selected=true; sel.appendChild(bp);
@@ -656,7 +659,7 @@ const SHEET_TRIES=3;                       // so the overlay lifts on the painte
 async function sheet(){ status('drawing sheet',true);
   for(let a=1;a<=SHEET_TRIES;a++){
     let r;
-    try{ r=await retryPost('/api/sheet','sheet',2,{P,joint,cmap,head:joint==='isopod'?headStyle:null,body:joint==='isopod'?bodyName:null}); if(!r.url) throw new Error(r.error||'no sheet'); }
+    try{ r=await retryPost('/api/sheet','sheet',2,{P,joint,cmap,head:joint==='isopod'?headStyle:null,body:joint==='isopod'?bodyArg():null}); if(!r.url) throw new Error(r.error||'no sheet'); }
     catch(ex){
       if(a>=SHEET_TRIES){ status('sheet failed · '+why(ex),false); return; }
       status(`sheet failed · retry ${a}/${SHEET_TRIES-1}`,true); await new Promise(z=>setTimeout(z,800*a)); continue; }
@@ -716,11 +719,11 @@ $('headstyle').onchange=async e=>{ headStyle=e.target.value; const h=HEADS.find(
 // parameters (/api/macro: row counts and lengths, the width field, medians of the row numbers, the spine field; the
 // head's guide values, face keys, genal spine, front, dome, length). The sliders then show roughly the edited animal,
 // and the pin model and the instrument see it too. A projection, not an inverse: the editors hold more detail.
-async function applyMacro(){ const h=HEADS.find(x=>x.name===headStyle); const savedHead=!!(h&&h.saved); if(!bodyName&&!savedHead) return 0;
-  try{ const r=await fetch('/api/macro',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, head:savedHead?headStyle:null, body:bodyName})});
+async function applyMacro(){ const h=HEADS.find(x=>x.name===headStyle); const savedHead=!!(h&&h.saved); const b=bodyArg(); if(!b&&!savedHead) return 0;
+  try{ const r=await fetch('/api/macro',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, head:savedHead?headStyle:null, body:b})});
     const j=await r.json(); if(!r.ok) throw new Error(j.error||'macro failed'); let n=0; for(const k in j.P) if(k in P){ P[k]=j.P[k]; n++; }
     if(n&&typeof redraw==='function') redraw();
-    status(`macro mirrors ${[bodyName?'body '+bodyName:'',savedHead?'head '+headStyle:''].filter(Boolean).join(' + ')} · ${n} parameters`,false); return n; }
+    status(`macro mirrors ${[b?'body '+(bodyName||'(edited)'):'',savedHead?'head '+headStyle:''].filter(Boolean).join(' + ')} · ${n} parameters`,false); return n; }
   catch(ex){ status('macro mirror failed · '+why(ex),false); return 0; } }
 $('fill').onchange=e=>{ fillMm=Math.max(0,+e.target.value||0); if(joint==='pin') build(); };
 // ---- 3D — v1's model view: black fill with white feature edges (blueprint look) or shaded (model look), Z-up root, grid

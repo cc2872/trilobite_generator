@@ -63,21 +63,19 @@
 <div class="panel">
   <h1><span>Head · editor</span></h1>
   <div class="nav"><button id="home" onclick="const h=S.savedName||S.style; location.href='/'+(h&&h!=='crescent'?'?head='+encodeURIComponent(h):'')" title="back to the generator, keeping this head, preset and body">home</button><button id="bodyeditor" onclick="const h=S.savedName||S.style; location.href='/body'+(h&&h!=='crescent'?'?head='+encodeURIComponent(h):'')" title="the body as rows: length, width, trajectory and height per row">body editor</button></div>
-  <div class="hint">Drag a handle on the drawing. Each redraw is the builder's own geometry, not an approximation.</div>
 
   <div class="sect"><span>Head type</span><span id="pg"></span></div>
   <select id="style"></select>
   <div class="hint" id="doc"></div>
 
   <div class="sect"><span id="hname">Handle</span><span id="allkeys">all keys</span></div>
-  <div id="sliders"><div class="hint">Hover a handle to see what it drags; click it to pin its sliders here.</div></div>
+  <div id="sliders"></div>
 
   <div class="sect"><span id="edhead">Edits</span><span id="reset">reset</span></div>
   <div class="edits" id="edits">none</div>
 
   <div class="sect"><span>Save</span><span id="del" style="display:none">delete saved</span></div>
   <div class="row" style="margin-top:8px"><input type="text" id="savename" placeholder="name (letters, digits, - _)" style="flex:1;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--line);padding:4px 0;font:inherit"><button class="btn" id="save" style="flex:0 0 90px">save</button></div>
-  <div class="hint">A saved head is a name the generator understands: it appears in the head picker on the opening page, in share links (<span class="mono">?head=name</span>), and here. Re-saving a name replaces it.</div>
   <div class="links" id="openlink"></div>
 
   <div class="row"><button class="btn" id="copy">copy JSON</button><button class="btn primary" id="build">build</button></div>
@@ -85,7 +83,6 @@
   <div class="status" id="status"></div>
   <div class="links" id="links"></div>
   <div class="spacer"></div>
-  <div class="hint">Plan above, elevation below, one scale, front to the left. Half-width = 1. Dotted lines: the first thorax segment's half-width. Section on the axis is solid; the highest profile is grey.</div>
 </div>
 <div id="stage"><div class="kv" id="kv"></div></div>
 
@@ -146,7 +143,7 @@ function renderSliders(rebuild=true){
   const box=$('sliders'); const h=S.pinned||S.hover;
   let keys; if(showAll){ keys=[...Object.keys(S.meta.outline_defaults),...Object.keys(S.meta.face_defaults)]; $('hname').textContent='All keys'; }
   else if(h){ keys=keysFor(h); $('hname').textContent='Handle · '+h; }
-  else { if(rebuild){ box.innerHTML='<div class="hint">Hover a handle to see what it drags; click it to pin its sliders here.</div>'; $('hname').textContent='Handle'; } return; }
+  else { if(rebuild){ box.innerHTML=''; $('hname').textContent='Handle'; } return; }
   if(rebuild||box.dataset.keys!==keys.join()){ box.innerHTML=''; box.dataset.keys=keys.join();
     for(const k of keys){ const r=R[k]||[0,1]; const d=document.createElement('div'); d.className='ctrl';
       d.innerHTML=`<div class="lab"><span>${k}${isOut(k)?'':' <span style="color:var(--mid)">· face</span>'}</span><span class="val" id="v_${k}"></span></div><input type="range" min="${r[0]}" max="${r[1]}" step="${r[2]||((r[1]-r[0])/200)}" id="s_${k}">`;
