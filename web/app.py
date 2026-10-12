@@ -511,7 +511,7 @@ def api_build():
                                build_notes=[("isopod", "build failed", str(ex)[:160])], build_seconds=round(time.time() - t0, 1)), 500
             man = dict(key=key, parts=out, kinematics=kin, print=checks, schema_notes=notes,
                        build_notes=bnotes, build_seconds=round(time.time() - t0, 1), schema=schema.SCHEMA_VERSION, joint="isopod", fill_mm=0,
-                       head=head or "crescent")
+                       head=head or "crescent", body=bspec)
             json.dump(P, open(os.path.join(folder, "params.json"), "w")); json.dump(man, open(manifest, "w")); _evict()
             PROGRESS.update(done=n_parts); return jsonify(man)
     jtag = ("" if joint == "pin" else f"-{joint}") + (f"-fill{fill:g}" if fill > 0.05 and joint == "pin" else "")  # pin stays untagged (matches the sheet key)
@@ -604,7 +604,9 @@ def api_sheet():
             IB = _isopod_body(); kin = man.get("kinematics", {})
             info = dict(names=[p["name"] for p in parts], pivots=kin.get("pivots", []), curl_deg=getattr(IB, "CURL", 30.0),
                         params=key, schema=man.get("schema", ""), build_seconds=man.get("build_seconds"),
-                        volumes=[p.get("volume") for p in parts])
+                        volumes=[p.get("volume") for p in parts], meta=[dict(bodies=p.get("bodies"), watertight=p.get("watertight")) for p in parts],
+                        checks=man.get("print", {}), head=man.get("head"), body=man.get("body"),   # the editors' specs, as the manifest records them
+                        date=time.strftime("%Y-%m-%d"))
             blueprint.isopod_sheet(meshes, P, info, png, cmap=cmap)
         return jsonify(url=f"/files/{key}/sheet_isopod_{cmap}.png", measured=False)
     P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())

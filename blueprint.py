@@ -6,7 +6,7 @@ Plan (dorsal) as contour lines, lateral silhouette, midline section, dimension l
 import math, numpy as np, trimesh
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.patches import Arc, Circle, Ellipse
+from matplotlib.patches import Arc, Circle, Ellipse, Rectangle
 
 INK, BG, DIM = "#ffffff", "#000000", "#9a9a9a"
 CMAPS = ("magma", "viridis", "twilight", "inferno", "cividis", "gray", "rainbow")   # scientific field colormaps (wave-optics look) + rainbow (full spectrum, vivid)
@@ -447,94 +447,275 @@ def _curl_mats(pivots, curl_deg):
         T.append(T[-1] @ trimesh.transformations.rotation_matrix(math.radians(-curl_deg), (1, 0, 0), (0, yc, zc)))
     return T
 
+PLA_G_CM3 = 1.24       # PLA density, for the schedule's mass column
+PRINT_CM3_PER_H = 15.0 # a nominal FDM deposition rate (0.4 nozzle, 0.2 mm layers, ~20 % infill) for the schedule's time estimate
+OVERHANG_DEG = 45.0    # faces steeper than this, facing down, count as unsupported overhang
+
+def _sections_x0(parts):
+    """The midline (x = 0) section of every part as a list of (y, z) polylines, in the parts' own frame. A rotation
+    about x keeps that plane, so posed sections are these polylines rotated in 2D (no re-sectioning)."""
+    out = []
+    for p in parts:
+        polys = []
+        try:
+            s = p.section(plane_origin=[0, 0, 0], plane_normal=[1, 0, 0])
+            if s is not None:
+                for e in s.entities: polys.append(s.vertices[e.points][:, 1:3].copy())
+        except Exception: pass
+        out.append(polys)
+    return out
+
+def _rot2(pts, yc, zc, deg):
+    """Rotate (y, z) points about (yc, zc) by deg (positive = the chain behind curls down, as body.pose does)."""
+    c, s = math.cos(math.radians(-deg)), math.sin(math.radians(-deg))
+    d = pts - [yc, zc]
+    return np.c_[d[:, 0] * c - d[:, 1] * s, d[:, 0] * s + d[:, 1] * c] + [yc, zc]
+
+def _posed_sections(secs, pivots, curl_deg):
+    """Every part's midline polylines carried through the chain curled curl_deg per joint (2D kinematics)."""
+    out = [list(secs[0])]
+    for k in range(1, len(secs)):
+        polys = secs[k]
+        for j in range(k - 1, -1, -1):                      # joints ahead of this part, innermost first (same as the matrix chain)
+            yc, zc = pivots[j]; polys = [_rot2(q, yc, zc, curl_deg) for q in polys]
+        out.append(polys)
+    return out
+
+def _overhang_fraction(m, z_floor, deg=OVERHANG_DEG):
+    """Area fraction of the mesh facing down steeper than deg, excluding the flat bottom on the bed (a slicer's
+    support estimate)."""
+    try:
+        nz = m.face_normals[:, 2]; cz = m.triangles_center[:, 2]; A = m.area_faces
+        over = (nz < -math.cos(math.radians(deg))) & (cz > z_floor + 0.6)
+        return float(A[over].sum() / max(A.sum(), 1e-9))
+    except Exception: return float("nan")
+
+def _pack_bed(sizes, bed=BED_MM, margin=4.0):
+    """Shelf-pack (name, w, l) footprints onto bed x bed plates, each piece turned long side along x. Returns
+    [plate, ...], plate = [(name, x, y, w, h)], plus the names that fit on no plate."""
+    items = []
+    for nm, w, l in sizes:
+        a, b = (w, l) if w >= l else (l, w)
+        items.append((nm, a + margin, b + margin))
+    items.sort(key=lambda t: -t[2])
+    plates, nofit = [], []
+    for nm, w, h in items:
+        if w > bed + margin: nofit.append(nm); continue
+        placed = False
+        for pl in plates:
+            x, y, shelf_h, boxes = pl["x"], pl["y"], pl["h"], pl["boxes"]
+            if x + w <= bed: pass
+            else: x, y, shelf_h = 0.0, y + shelf_h, 0.0
+            if y + h <= bed:
+                boxes.append((nm, x, y, w - margin, h - margin)); pl.update(x=x + w, y=y, h=max(shelf_h, h)); placed = True; break
+        if not placed:
+            plates.append(dict(x=w, y=0.0, h=h, boxes=[(nm, 0.0, 0.0, w - margin, h - margin)]))
+    return [pl["boxes"] for pl in plates], nofit
+
+def _spark(vals, n=8):
+    """A one-line sparkline of values (block glyphs), for the editor's row-width profile."""
+    if not vals: return ""
+    lo, hi = min(vals), max(vals); blocks = "▁▂▃▄▅▆▇█"
+    return "".join(blocks[min(n - 1, int((v - lo) / (hi - lo + 1e-9) * n))] for v in vals)
+
+def _box(ax, color="#555555"):
+    for s in ax.spines.values(): s.set_visible(True); s.set_color(color); s.set_linewidth(0.7)
+    ax.set_xticks([]); ax.set_yticks([]); ax.axis("on")
+
 def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
     """parts: the pieces in their rest frame (print mm, head first). info: {names, pivots, curl_deg, params, schema,
-    build_seconds, volumes}. cmap: a relief colormap, or 'none' for the black & white blueprint (default)."""
-    bw = cmap not in CMAPS                                                                  # 'none'/invalid -> black & white blueprint
-    names = info.get("names") or [f"piece {i}" for i in range(len(parts))]
-    pivots = info.get("pivots") or []
-    curl = float(info.get("curl_deg", 30.0))
-    flat = trimesh.util.concatenate([p.copy() for p in parts]); flat.apply_translation([-flat.centroid[0], 0, 0])
-    (x0, y0, z0), (x1, y1, z1) = flat.bounds
+    build_seconds, volumes, meta (per-piece bodies/watertight), checks (the manifest's print block), head, body,
+    swing (free swing per joint, deg)}. cmap: a relief colormap, or 'none' for the black & white blueprint (default).
+    The sheet (12 Oct 2026): dorsal and ventral plans with the joints numbered, lateral section, the coil at its true
+    size, a sectioned joint at 2:1 with the curl drawn, the enrolment in five frames, a piece schedule (size, volume,
+    mass, checks, pivot), the bed layout, print checks, morphospace + editor coordinates, and a title strip."""
+    import json as _json
+    bw = cmap not in CMAPS
+    n = len(parts)
+    names = info.get("names") or [f"piece {i}" for i in range(n)]
+    pivots = [tuple(map(float, pv)) for pv in (info.get("pivots") or [])]
+    curl = float(info.get("curl_deg", 30.0)); nj = len(pivots)
+    meta = info.get("meta") or [{} for _ in parts]
+    checks = info.get("checks") or {}
+    flat = trimesh.util.concatenate([p.copy() for p in parts]); cx = float(flat.centroid[0]); flat.apply_translation([-cx, 0, 0])
+    parts = [p.copy().apply_translation([-cx, 0, 0]) for p in parts]
+    (x0, y0, z0), (x1, y1, z1) = flat.bounds; W, L, H = x1 - x0, y1 - y0, z1 - z0
+    secs = _sections_x0(parts)
     T = _curl_mats(pivots, curl)
-    posed = trimesh.util.concatenate([parts[k].copy().apply_transform(T[k]) for k in range(len(parts))])
-    posed.apply_translation([-posed.centroid[0], 0, 0])
+    posed = trimesh.util.concatenate([parts[k].copy().apply_transform(T[k]) for k in range(n)])
+    psec = _posed_sections(secs, pivots, curl)
+    mono = dict(family="monospace", color=INK)
 
     fig = plt.figure(figsize=(16.5, 11.7), facecolor=BG)                       # A3 landscape
-    gs = fig.add_gridspec(6, 9, left=0.03, right=0.98, top=0.95, bottom=0.05, wspace=0.25, hspace=0.35)
+    gs = fig.add_gridspec(24, 24, left=0.03, right=0.98, top=0.95, bottom=0.075, wspace=0.3, hspace=0.9)   # the plan fills the upper left, the section sits low under it
     bgax = fig.add_axes([0, 0, 1, 1], zorder=-1); bgax.set_facecolor(BG); bgax.set_xticks([]); bgax.set_yticks([])
     for s in bgax.spines.values(): s.set_visible(False)
     for gx in np.linspace(0, 1, 41): bgax.axvline(gx, color="#1c1c1c", lw=0.4)
     for gy in np.linspace(0, 1, 29): bgax.axhline(gy, color="#1c1c1c", lw=0.4)
-    # ---- PLAN (dorsal): relief as a colormapped scalar field + fine contour lines + outline
-    ax = fig.add_subplot(gs[0:4, 0:5]); ax.set_facecolor(BG); ax.set_aspect("equal"); ax.axis("off")
-    GX, GY, Z, Mask = _relief_grid(flat, view="top", field=not bw)
-    if not bw: _field(ax, GX, GY, Z, cmap)                                                 # the dorsal relief field (heatmap mode)
-    for c in _contours(flat, np.linspace(z0 + 0.4, z1 - 0.2, 14)):
-        ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.45 if bw else 0.4, alpha=0.9 if bw else 0.22)   # topographic lines
-    _strong_outline(ax, GX, GY, Mask, draw=bw)                                            # the strong silhouette in blueprint mode
-    _eye_lenses(ax, parts[0], P)                                                           # the eyes' lens packing, as circles
-    for yc, _ in pivots: ax.axhline(yc, color=DIM, lw=0.35, ls=(0, (3, 4)), alpha=0.45)  # the joint lines across the axis
-    ax.axvline(0, color=DIM, lw=0.4, ls=(0, (6, 4)), alpha=0.6)
-    W, L = x1 - x0, y1 - y0
-    _dim(ax, x0, y0, x1, y0, f"{W:.1f}", off=-8); _dim(ax, x1, y0, x1, y1, f"{L:.1f}", off=10)
-    ax.text(x0, y1 + 6, ("PLAN · blueprint · %.1f mm" % (z1 - z0)) if bw else ("PLAN · relief field (%s) · %.1f mm" % (cmap, z1 - z0)), color=INK, fontsize=8, family="monospace")
-    ax.set_xlim(x0 - 20, x1 + 20); ax.set_ylim(y0 - 14, y1 + 12)
-    # ---- LATERAL: the flank relief (depth from the side) + midline section + silhouette
-    ax2 = fig.add_subplot(gs[4:6, 0:5]); ax2.set_facecolor(BG); ax2.set_aspect("equal"); ax2.axis("off")
-    GYs, GZs, Zs, Ms = _relief_grid(flat, view="side", field=not bw)
-    if not bw: _field(ax2, GYs, GZs, Zs, cmap)                                             # the lateral relief field (heatmap mode)
-    try:
-        s = flat.section(plane_origin=[0, 0, 0], plane_normal=[1, 0, 0])
-        for e in s.entities: p = s.vertices[e.points]; ax2.plot(p[:, 1], p[:, 2], color=INK, lw=0.6 if bw else 0.5, alpha=0.9 if bw else 0.5)
-    except Exception: pass
-    _strong_outline(ax2, GYs, GZs, Ms, draw=bw)                                           # the side silhouette in blueprint mode
-    _dim(ax2, y1 + 10, z0, y1 + 10, z1, f"{z1 - z0:.1f}", off=0)
-    ax2.text(y0, z1 + 5, ("SECTION A–A · lateral" if bw else "SECTION A–A · lateral relief (%s)" % cmap), color=INK, fontsize=8, family="monospace")
-    ax2.set_xlim(y0 - 10, y1 + 26); ax2.set_ylim(z0 - 6, z1 + 10)
-    # ---- CURLED: the chain enrolled on its ball joints (midline section + faint silhouette)
-    ax3 = fig.add_subplot(gs[0:4, 5:9]); ax3.set_facecolor(BG); ax3.set_aspect("equal"); ax3.axis("off")
-    # (the flat rest state is already shown in PLAN and SECTION A-A; drawing it here only clutters the coil)
-    try:
-        poly = trimesh.path.polygons.projected(posed, normal=[1, 0, 0])
-        for ring in ([poly.exterior] + list(poly.interiors)) if poly is not None else []:
-            xy = np.array(ring.coords); ax3.plot(xy[:, 0], xy[:, 1], color=INK, lw=0.5, alpha=0.35)
-    except Exception: pass
-    try:
-        s = posed.section(plane_origin=[0, 0, 0], plane_normal=[1, 0, 0])
-        for e in s.entities: p = s.vertices[e.points]; ax3.plot(p[:, 1], p[:, 2], color=INK, lw=0.9)
-    except Exception: pass
+
+    def plan(ax, m, mirror, levels, label, strong=True, fs=8, joints=True, pad=(20.0, 9.0)):
+        GX, GY, Z, Mask = _relief_grid(m, view="top", field=not bw)
+        if not bw: _field(ax, GX, GY, Z, cmap)
+        sx = -1.0 if mirror else 1.0
+        for c in _contours(m, levels): ax.plot(sx * c[:, 0], c[:, 1], color=INK, lw=0.45 if bw else 0.4, alpha=0.9 if bw else 0.22)
+        if GX is not None and bw: _strong_outline(ax, sx * GX, GY, Mask, draw=strong)
+        for k, (yc, _) in enumerate(pivots):
+            ax.axhline(yc, color=DIM, lw=0.35, ls=(0, (3, 4)), alpha=0.5)
+            if joints: ax.text(x1 + 2, yc, f"J{k + 1}", fontsize=5.5, va="center", color=DIM, family="monospace")
+        ax.axvline(0, color=DIM, lw=0.4, ls=(0, (6, 4)), alpha=0.6)
+        ax.text(x0, y1 + 4, label, fontsize=fs, **mono)
+        ax.set_xlim(x0 - pad[0], x1 + pad[1]); ax.set_ylim(y0 - 14, y1 + 9)
+
+    # ---- PLAN · dorsal
+    ax = fig.add_subplot(gs[0:19, 0:8]); ax.set_facecolor(BG); ax.set_aspect("equal"); ax.axis("off")
+    plan(ax, flat, False, np.linspace(z0 + 0.4, z1 - 0.2, 14), ("PLAN · dorsal · relief %.1f mm" % H) if bw else ("PLAN · relief field (%s) · %.1f mm" % (cmap, H)))
+    _eye_lenses(ax, parts[0], P)
+    _dim(ax, x0, y0, x1, y0, f"{W:.1f}", off=-8); _dim(ax, x0, y0, x0, y1, f"{L:.1f}", off=-13)      # length on the left, joints on the right
+    ax.text(x0, y0 - 13, "A", fontsize=7, **mono); ax.text(x1, y0 - 13, "A", fontsize=7, ha="right", **mono)
+    sb = 100.0 if W >= 120 else 50.0                                                          # a scale bar in the plan's own mm
+    sx0 = x0 + 0.5 * (W - sb)                                                                # centred between the A marks
+    for i in range(5): ax.add_patch(Rectangle((sx0 + i * sb / 5, y0 - 20), sb / 5, 2.5, facecolor=INK if i % 2 == 0 else BG, edgecolor=INK, lw=0.5))
+    ax.text(sx0, y0 - 21.5, "0", fontsize=5, va="top", **mono); ax.text(sx0 + sb, y0 - 21.5, f"{sb:.0f} mm", fontsize=5, va="top", ha="right", **mono)
+    ax.set_ylim(y0 - 27, y1 + 9)
+    # ---- PLAN · ventral (the animal turned over about its long axis: x mirrored, z flipped; the joint kit shows)
+    axv = fig.add_subplot(gs[1:13, 8:12]); axv.set_facecolor(BG); axv.set_aspect("equal"); axv.axis("off")
+    under = flat.copy(); under.apply_transform(np.diag([-1.0, 1.0, -1.0, 1.0])); under.apply_translation([0, 0, z0 + z1])  # z0..z1 kept
+    kit_top = z0 + min(14.5, 0.6 * H)
+    plan(axv, under, False, np.linspace(z0 + 0.3, kit_top, 11), "VENTRAL · sections z 0–%.0f (kit)" % (kit_top - z0), fs=7, joints=False, pad=(10.0, 10.0))
+    axv.set_ylim(y0 - 27, y1 + 9)
+
+    # ---- ENROLLED · the coil at its own size
+    ax3 = fig.add_subplot(gs[0:9, 12:18]); ax3.set_facecolor(BG); ax3.set_aspect("equal"); ax3.axis("off")
+    GYs, GZs, _, Ms = _relief_grid(posed, n=220, view="side", field=False)
+    if GYs is not None: _strong_outline(ax3, GYs, GZs, Ms, draw=True, lw=0.5)
+    for polys in psec:
+        for q in polys: ax3.plot(q[:, 0], q[:, 1], color=INK, lw=0.9)
     (py0, pz0), (py1, pz1) = posed.bounds[0][1:], posed.bounds[1][1:]
-    ax3.set_title(f"ENROLLED · {curl:.0f}°/joint · {curl * len(pivots):.0f}° over {len(pivots)} joints", color=INK, fontsize=8, family="monospace", loc="left")
-    ax3.set_xlim(min(y0, py0) - 8, max(y1, py1) + 8); ax3.set_ylim(min(z0, pz0) - 6, max(z1, pz1) + 10)
-    # ---- TITLE BLOCK
-    ax4 = fig.add_subplot(gs[4:6, 5:7]); ax4.set_facecolor(BG); ax4.axis("off")
+    coil = max(py1 - py0, pz1 - pz0)
+    ax3.set_title(f"ENROLLED · {curl:.0f}°/joint · {curl * nj:.0f}° over {nj} joints · Ø {coil:.0f} mm", fontsize=8, loc="left", **mono)
+    _dim(ax3, py0, pz0 - 6, py1, pz0 - 6, f"{py1 - py0:.1f}", off=0)
+    ax3.set_xlim(py0 - 12, py1 + 12); ax3.set_ylim(pz0 - 16, pz1 + 8)
+
+    # ---- DETAIL B · one joint sectioned at the midline, 2:1, the piece behind drawn at rest and curled
+    axb = fig.add_subplot(gs[0:9, 18:24]); axb.set_facecolor(BG); axb.set_aspect("equal"); axb.axis("off")
+    if nj:
+        j = nj // 2; yc, zc = pivots[j]; win = 30.0; ztop = min(z1, zc + 26)
+        for q in secs[j]: axb.plot(q[:, 0], q[:, 1], color=INK, lw=1.0)                                   # the piece ahead (socket)
+        for q in secs[j + 1]: axb.plot(q[:, 0], q[:, 1], color=INK, lw=1.0, ls=(0, (4, 2)))              # the piece behind (ball)
+        for q in secs[j + 1]: r = _rot2(q, yc, zc, curl); axb.plot(r[:, 0], r[:, 1], color=DIM, lw=0.45, alpha=0.55)   # ... curled
+        axb.plot([yc - 2.5, yc + 2.5], [zc, zc], color=INK, lw=0.5); axb.plot([yc, yc], [zc - 2.5, zc + 2.5], color=INK, lw=0.5)
+        try:
+            import joints.ball as _B; ballD = 2.0 * float(_B._ASSET_R)               # the kit is printed 1:1 (18 mm pitch)
+        except Exception: ballD = None
+        lo_z = z0 - 1.0
+        if ballD: _dim(axb, yc - ballD / 2, lo_z - 2.0, yc + ballD / 2, lo_z - 2.0, f"Ø {ballD:.1f} ball", off=0)
+        _dim(axb, yc + win - 5, z0, yc + win - 5, zc, f"{zc - z0:.1f}", off=0)
+        for a, lab in ((0.0, "rest"), (curl, f"enrol {curl:.0f}°")):
+            axb.plot([yc, yc + (win - 2) * math.cos(math.radians(-a))], [zc, zc + (win - 2) * math.sin(math.radians(-a))], color=DIM, lw=0.45, ls=(0, (5, 3)))
+            axb.text(yc + (win - 1) * math.cos(math.radians(-a)), zc + (win - 1) * math.sin(math.radians(-a)), lab, fontsize=5.5, color=DIM, family="monospace", va="center")
+        gv = lambda k, d=0.0: float(P.get(k, d))
+        axb.text(yc - win + 1, lo_z - 9.5,
+                 f"clearance {gv('clearance'):.2f} mm · pivot z {zc:.1f} · solid = ahead, dashed = behind, grey = behind curled", fontsize=5.5, color=DIM, family="monospace")
+        axb.set_title(f"DETAIL B · joint J{j + 1} ({names[j]}–{names[j + 1]}) · section y–z · 2:1", fontsize=8, loc="left", **mono)
+        axb.set_xlim(yc - win, yc + win); axb.set_ylim(lo_z - 12, ztop + 3)
+    else: axb.set_title("DETAIL B · no joints", fontsize=8, loc="left", **mono)
+
+    # ---- ENROLMENT · five frames, lateral midline, the pieces' sections posed in 2D
+    axs = fig.add_subplot(gs[9:14, 12:24]); axs.set_facecolor(BG); axs.set_aspect("equal"); axs.axis("off")
+    fr = [0.0, 0.25, 0.5, 0.75, 1.0]; xoff = 0.0; extents = []
+    for f in fr:
+        ps = _posed_sections(secs, pivots, curl * f)
+        allp = np.vstack([q for polys in ps for q in polys]) if any(ps) else np.zeros((1, 2))
+        fy0, fy1, fz0, fz1 = allp[:, 0].min(), allp[:, 0].max(), allp[:, 1].min(), allp[:, 1].max()
+        for polys in ps:
+            for q in polys: axs.plot(q[:, 0] - fy0 + xoff, q[:, 1], color=INK, lw=0.6)
+        axs.plot([xoff, xoff + fy1 - fy0], [fz0 - 1, fz0 - 1], color=DIM, lw=0.3)
+        extents.append((fz0, fz1, xoff + 0.5 * (fy1 - fy0), f)); xoff += (fy1 - fy0) + 16
+    lo = min(e[0] for e in extents); hi = max(e[1] for e in extents)
+    for _, _, xm, f in extents: axs.text(xm, lo - 7, f"{curl * f * nj:.0f}°", fontsize=6.5, ha="center", va="top", **mono)
+    axs.set_title(f"ENROLMENT · 0 → {curl * nj:.0f}° · lateral midline", fontsize=8, loc="left", **mono)
+    axs.set_xlim(-6, xoff - 8); axs.set_ylim(lo - 14, hi + 6)
+
+    # ---- SECTION A–A · lateral
+    ax2 = fig.add_subplot(gs[20:24, 0:9]); ax2.set_facecolor(BG); ax2.set_aspect("equal"); ax2.axis("off")
+    GYs, GZs, Zs, Ms = _relief_grid(flat, view="side", field=not bw)
+    if not bw: _field(ax2, GYs, GZs, Zs, cmap)
+    for k, polys in enumerate(secs):
+        for q in polys: ax2.plot(q[:, 0], q[:, 1], color=INK, lw=0.6 if bw else 0.5, alpha=0.9 if bw else 0.5)
+    _strong_outline(ax2, GYs, GZs, Ms, draw=bw, lw=1.2)
+    for k, (yc, zc) in enumerate(pivots):
+        ax2.add_patch(Circle((yc, zc), 1.0, fill=False, ec=INK, lw=0.5)); ax2.text(yc, z0 - 4.5, f"J{k + 1}", fontsize=5, ha="center", color=DIM, family="monospace")
+    _dim(ax2, y1 + 10, z0, y1 + 10, z1, f"{H:.1f}", off=0)
+    ax2.text(y0, z1 + 5, ("SECTION A–A · lateral · midline cut, pivots ○" if bw else "SECTION A–A · lateral relief (%s)" % cmap), fontsize=8, **mono)
+    ax2.set_xlim(y0 - 10, y1 + 26); ax2.set_ylim(z0 - 9, z1 + 10)
+
+    # ---- PIECE SCHEDULE
+    ax5 = fig.add_subplot(gs[15:24, 9:15]); ax5.set_facecolor(BG); ax5.axis("off")
+    vols = info.get("volumes") or [None] * n
+    rows = ["PIECE     W      L      H    cm3     g  b wt  PIVOT y,z"]
+    tot_v = 0.0; sizes = []
+    for k, (nm, p) in enumerate(zip(names, parts)):
+        (bx0, by0, bz0), (bx1, by1, bz1) = p.bounds; pw, pl, ph = bx1 - bx0, by1 - by0, bz1 - bz0
+        v = float(vols[k]) if vols[k] is not None else float(abs(p.volume)); tot_v += v; sizes.append((nm, pw, pl))
+        mk = meta[k] if k < len(meta) else {}
+        b = mk.get("bodies", p.body_count); wt = mk.get("watertight", p.is_watertight)
+        piv = f"{pivots[k - 1][0]:6.1f},{pivots[k - 1][1]:4.1f}" if 0 < k <= nj else "     —     "
+        rows.append(f"{nm:<7} {pw:6.1f} {pl:6.1f} {ph:5.1f} {v / 1000:6.1f} {v / 1000 * PLA_G_CM3:5.1f}  {b} {'✓' if wt else '✗'}  {piv}")
+    if len(rows) > 24: rows = rows[:23] + [f"… {len(rows) - 23} more pieces"]
+    hours = tot_v / 1000 / PRINT_CM3_PER_H
+    rows += ["─" * 56, f"TOTAL  {n} pieces · {tot_v / 1000:.0f} cm3 · {tot_v / 1000 * PLA_G_CM3:.0f} g PLA · ≈ {int(hours)} h {int(60 * (hours % 1)):02d} m @ {PRINT_CM3_PER_H:.0f} cm3/h"]
+    ax5.set_title("PIECE SCHEDULE · mm · cm3 · g PLA · bodies · watertight · pivot", fontsize=7, loc="left", **mono)
+    ax5.text(0.0, 0.97, "\n".join(rows), fontsize=5.9, va="top", ha="left", linespacing=1.45, transform=ax5.transAxes, **mono)
+    _box(ax5)
+
+    # ---- BED LAYOUT
+    ax6 = fig.add_subplot(gs[15:24, 15:19]); ax6.set_facecolor(BG); ax6.set_aspect("equal"); ax6.axis("off")
+    plates, nofit = _pack_bed(sizes)
+    ax6.add_patch(Rectangle((0, 0), BED_MM, BED_MM, fill=False, ec=INK, lw=0.9))
+    for nm, bx, by, bwid, bh in (plates[0] if plates else []):
+        ax6.add_patch(Rectangle((bx, by), bwid, bh, fill=False, ec=INK, lw=0.5))
+        ax6.text(bx + 2.5, by + bh / 2, nm, fontsize=5.3, va="center", **mono)
+    others = " · ".join(f"plate {i + 2}: {', '.join(b[0] for b in pl)}" for i, pl in enumerate(plates[1:]))
+    foot = (others if others else "one plate") + (f" · NO FIT (> {BED_MM} mm): {', '.join(nofit)} — scale" if nofit else "")
+    ax6.text(0, -12, foot[:90], fontsize=5.2, va="top", **mono)
+    ax6.set_title(f"BED LAYOUT · {BED_MM} × {BED_MM} mm · {len(plates)} plate{'s' if len(plates) != 1 else ''}", fontsize=7.5, loc="left", **mono)
+    ax6.set_xlim(-6, BED_MM + 6); ax6.set_ylim(-34, BED_MM + 6)
+
+    # ---- INFO · print checks, morphospace, editor coordinates
+    ax4 = fig.add_subplot(gs[15:24, 19:24]); ax4.set_facecolor(BG); ax4.axis("off")
     gv = lambda k, d=0.0: float(P.get(k, d))
-    lines = ["    " + title, "", f"DRAWING  {info.get('params', '—')}", "",
-             f"LENGTH   {L:.1f} mm", f"WIDTH    {W:.1f} mm", f"RELIEF   {z1 - z0:.1f} mm", f"CLEAR    {gv('clearance'):.2f} mm",
-             f"BED      {BED_MM} mm  ·  {'FITS' if _fits_bed(W, L) else 'EXCEEDS — split or scale'}",
-             f"PIECES   {len(parts)}  ·  JOINTS {len(pivots)} ball", f"CURL     {curl:.0f}°/joint · {curl * len(pivots):.0f}° total", "",
-             "MORPHOSPACE COORDINATES",                                                 # the specimen's place in the space, not just its hash
-             f" cephFrac {gv('cephFrac'):.2f}   pygFrac  {gv('pygFrac'):.2f}",
-             f" axisFrac {gv('axisFrac'):.2f}   glabInfl {gv('glabInflate'):.2f}",
-             f" eyeSize  {gv('eyeSize'):.2f}   eyePos   {gv('eyePos'):.2f}",
-             f" genalSp  {gv('genalSpine'):.2f}   pygSp    {gv('pygSpine'):.2f}", "",
-             f"SCHEMA   {info.get('schema', '—')}  ·  REV A",
-             f"BUILD    {info.get('build_seconds', '—')} s  ·  mm  ·  3rd-angle"]
-    ax4.text(0.02, 0.98, "\n".join(lines), color=INK, fontsize=8, family="monospace", va="top", ha="left", linespacing=1.5)
-    for s in ax4.spines.values(): s.set_visible(True); s.set_color(INK); s.set_linewidth(0.8)
-    ax4.set_xticks([]); ax4.set_yticks([]); ax4.axis("on")
-    # ---- PIECES + PIVOTS table
-    ax5 = fig.add_subplot(gs[4:6, 7:9]); ax5.set_facecolor(BG); ax5.axis("off")
-    vols = info.get("volumes") or [None] * len(parts)
-    rows = ["PIECE        PIVOT y,z (mm)"]
-    for k, nm in enumerate(names):
-        piv = f"{pivots[k-1][0]:6.1f},{pivots[k-1][1]:5.1f}" if 0 < k <= len(pivots) else "   —  (head)"
-        rows.append(f"{nm:<11} {piv}")
-    ax5.set_title("PIECES · joint pivots", color=INK, fontsize=7.5, family="monospace", loc="left")
-    ax5.text(0.0, 0.96, "\n".join(rows), color=INK, fontsize=6.6, family="monospace", va="top", ha="left", linespacing=1.5, transform=ax5.transAxes)
-    fig.text(0.98, 0.018, "Claire Choi · Cornell", color=INK, fontsize=8, ha="right", va="bottom", family="monospace")
-    import json as _json
+    oh = _overhang_fraction(flat, z0)
+    touching = checks.get("touching") or []; debris = checks.get("debris_mm3") or {}
+    cuts = [c for c in (checks.get("notes") or []) if "cut away" in c]
+    valid = checks.get("print_valid")
+    head = info.get("head"); body = info.get("body")
+    if isinstance(head, dict): head_s = f"{head.get('style', 'custom')} (editor {head.get('id', '')})" + (f" · {len(head.get('outline') or {})} outline keys" if head.get("outline") else "")
+    else: head_s = str(head or "crescent")
+    if isinstance(body, dict) and body.get("rows"):
+        rw = [float(r.get("width", 0)) for r in body["rows"]]
+        body_s = [f"BODY     {body.get('model', 'thorax')} · {len(rw)} rows · width {min(rw):.0f}–{max(rw):.0f} mm", f"         {_spark(rw)}"]
+    elif isinstance(body, dict): body_s = ["BODY     " + ", ".join(f"{k} {v}" for k, v in body.items() if k != "rows")[:46]]
+    else: body_s = ["BODY     preset rows (segCount %d)" % int(gv("segCount", 0))]
+    lines = [f"LENGTH {L:6.1f}  WIDTH {W:6.1f}  RELIEF {H:5.1f}", f"CLEAR  {gv('clearance'):5.2f}  PIECES {n:2d}  JOINTS {nj} ball",
+             f"CURL   {curl:.0f}°/joint · {curl * nj:.0f}°  BED {BED_MM} · {len(plates)} plate{'s' if len(plates) != 1 else ''}", "",
+             "PRINT CHECKS",
+             f" valid     {'✓' if valid else ('✗' if valid is not None else '— (not checked)')}",
+             f" contacts  {('none at rest' if not touching else ', '.join('%s–%s %.2f mm3' % (t['a'], t['b'], t['mm3']) for t in touching))[:44]}",
+             f" cuts      {'none' if not cuts else str(len(cuts)) + ' — see notes'}   debris {sum(debris.values()):.1f} mm3",
+             f" overhang  {100 * oh:4.1f} % of area > {OVERHANG_DEG:.0f}°" if oh == oh else " overhang  —", "",
+             "MORPHOSPACE", f" ceph {gv('cephFrac'):.2f}  pyg {gv('pygFrac'):.2f}  axis {gv('axisFrac'):.2f}  glab {gv('glabInflate'):.2f}",
+             f" eye  {gv('eyeSize'):.2f}/{gv('eyePos'):.2f}  genalSp {gv('genalSpine'):.2f}  pygSp {gv('pygSpine'):.2f}", "",
+             f"HEAD     {head_s}"[:50], *body_s, "",
+             f"SCHEMA {info.get('schema', '—')} · REV A · BUILD {info.get('build_seconds', '—')} s"]
+    ax4.set_title("    " + title, fontsize=8, loc="left", **mono)
+    ax4.text(0.03, 0.97, "\n".join(lines), fontsize=5.9, va="top", ha="left", linespacing=1.42, transform=ax4.transAxes, **mono)
+    _box(ax4, INK)
+
+    # ---- TITLE STRIP
+    st = fig.add_axes([0.03, 0.012, 0.95, 0.042]); st.set_facecolor(BG); _box(st, INK)
+    st.text(0.008, 0.5, f"{title} · {info.get('params', '—')}", fontsize=8, va="center", **mono)
+    st.text(0.50, 0.5, "SHEET 1/1 · mm · 3rd-angle · A3", fontsize=7.5, va="center", ha="center", **mono)
+    st.text(0.992, 0.5, f"REV A · {info.get('date', '')} · Claire Choi · Cornell".replace("·  ·", "·"), fontsize=8, va="center", ha="right", **mono)
     spec = _json.dumps({"hash": info.get("params", ""), "schema": info.get("schema", ""), "model": "isopod", "params": P}, sort_keys=True, default=str)
     fig.savefig(path, dpi=110, facecolor=BG, metadata={"trilobite": spec}); plt.close(fig); return path
 
