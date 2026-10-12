@@ -195,6 +195,9 @@ def head_page(): return send_file(os.path.join(ROOT, "web", "head.html"))       
 @app.get("/body")
 def body_page(): return send_file(os.path.join(ROOT, "web", "body.html"))              # the body editor (p5): the rows, head to tail tip
 
+@app.get("/studio")
+def studio_page(): return send_file(os.path.join(ROOT, "web", "studio.html"))          # the combined editor (p5): head + body on one whole-animal drawing
+
 # ---- saved bodies (the body editor's "save"): web/bodies/<name>.json = {name, preset, spec, doc}. A saved body's
 # name goes wherever a body spec goes (?body=name, /api/build "body").
 BODIES = os.path.join(ROOT, "web", "bodies")
