@@ -22,7 +22,7 @@
   .panel input[type=text]{min-width:0}
   h1,.sect,.status,.kv,.edits,.val,.btn,.links,.mono,.rowtag{font-family:var(--mono)}
   h1{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:normal;margin:0 0 4px;display:flex;justify-content:space-between}
-  .nav{display:grid;grid-template-columns:1fr;gap:6px;margin:4px 0 10px} .nav button{background:var(--bg);color:var(--mid);border:1px solid var(--line);padding:6px 0;font:inherit;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} .nav button:hover{color:var(--ink);border-color:var(--ink)}
+  .nav{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:4px 0 10px} .nav button{background:var(--bg);color:var(--mid);border:1px solid var(--line);padding:6px 0;font:inherit;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} .nav button:hover{color:var(--ink);border-color:var(--ink)}
   .sect{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mid);margin:18px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
   .sect span:last-child{color:var(--mid);cursor:pointer;letter-spacing:.06em} .sect span:last-child:hover{color:var(--ink)}
   select{width:100%;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--ink);padding:6px 0;font:inherit;border-radius:0}
@@ -47,12 +47,14 @@
   body.embed #embedbuild{display:block} #embedbuild:hover{background:#ddd}
   #sheetwrap{display:none;position:absolute;inset:0;background:#000;z-index:5;align-items:center;justify-content:center} #sheetwrap img{max-width:100%;max-height:100%;object-fit:contain}
   #sheetback{position:absolute;left:16px;top:14px;z-index:6;background:var(--bg);color:var(--ink);border:1px solid var(--ink);padding:8px 14px;font:inherit;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} #sheetback:hover{background:var(--soft)}
+  #sheettoggle{position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:6;display:flex;border:1px solid var(--line)} #sheettoggle button{background:var(--bg);color:var(--mid);border:none;border-right:1px solid var(--line);padding:8px 14px;font:inherit;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} #sheettoggle button:last-child{border-right:none} #sheettoggle button.on{background:var(--ink);color:var(--bg)}
+  #view3dframe{display:none;width:100%;height:100%;border:0;background:#000}
 </style>
 </head>
 <body>
 <div class="panel">
   <h1><span>Studio</span><span class="mono" style="color:var(--mid)">head + body</span></h1>
-  <div class="nav"><button id="generator" title="the generator: build, measure, 3D, download, share">open in generator →</button></div>
+  <div class="nav"><button onclick="location.href='/tree'" title="browse the orders as a ring/spiral family tree">family tree</button><button id="generator" title="the generator: build, measure, 3D, download, share">generator →</button></div>
   <div class="hint">One animal. Click the <b>head</b> or a <b>row</b> on the drawing; its controls appear below. Drag a handle to shape it.</div>
 
   <div class="sect"><span>Start from</span><span id="pg"></span></div>
@@ -77,7 +79,7 @@
   <div class="status" id="status"></div>
   <div class="links" id="links"></div>
 </div>
-<div id="stage"><div class="kv" id="kv"></div><button id="embedbuild" title="build the blueprint and 3D in the generator">build · blueprint + 3d</button><div id="sheetwrap"><button id="sheetback">← editor</button><img id="sheetimg" alt="blueprint"></div></div>
+<div id="stage"><div class="kv" id="kv"></div><button id="embedbuild" title="build the blueprint and 3D in the generator">build · blueprint + 3d</button><div id="sheetwrap"><button id="sheetback">← editor</button><span id="sheettoggle"><button id="toblue" class="on">blueprint</button><button id="to3d">view 3d</button></span><img id="sheetimg" alt="blueprint"><iframe id="view3dframe" title="3D view"></iframe></div></div>
 
 <script>
 const $=id=>document.getElementById(id);
@@ -211,8 +213,14 @@ $('build').onclick=async()=>{ const b=$('build'); b.disabled=true; const t0=Date
       $('links').innerHTML=`<a href="/api/stl/${m.key}">download STL (all pieces, print mm)</a>`;
       try{ status('drawing blueprint…',true); const sr=await fetch('/api/sheet',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, joint:'isopod', cmap:'none', head:headArg(), body:S.spec})}); const sj=await sr.json(); if(sj.url){ showSheet(sj.url); status(`built · ${m.parts.length} pieces · blueprint ready`,false); } else status('built · blueprint failed',true); }catch(_){ status('built · blueprint failed',true); } }
   }catch(e){ clearInterval(tick); status('build failed · '+e,true); } b.disabled=false; };
-function showSheet(url){ $('sheetimg').src=url+(url.indexOf('?')>=0?'&':'?')+'t='+Date.now(); $('sheetwrap').style.display='flex'; }   // Build shows the blueprint over the drawing; "← editor" returns to editing
+function showSheet(url){ $('sheetimg').src=url+(url.indexOf('?')>=0?'&':'?')+'t='+Date.now(); mode3d(false); $('sheetwrap').style.display='flex'; }   // Build shows the blueprint over the drawing; "← editor" returns to editing
+function mode3d(on){ $('sheetimg').style.display=on?'none':'block'; const f=$('view3dframe'); f.style.display=on?'block':'none';
+  if(on){ try{ sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec})); }catch(_){}
+    const want='/generator?preset='+encodeURIComponent(S.preset)+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+'&bodydraft=1&only3d=1';   // the generator's proven 3D, panel hidden, on this animal
+    if(f.getAttribute('src')!==want) f.setAttribute('src',want); }
+  $('toblue').classList.toggle('on',!on); $('to3d').classList.toggle('on',on); }
 $('sheetback').onclick=()=>{ $('sheetwrap').style.display='none'; };
+$('toblue').onclick=()=>mode3d(false); $('to3d').onclick=()=>mode3d(true);
 $('generator').onclick=()=>{ try{ if(S.edited) sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, spec:S.spec, savedName:S.savedBody})); }catch(_){}
   location.href='/?preset='+encodeURIComponent(S.preset||'')+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+(S.edited?'&bodydraft=1':'')+(S.savedBody?'&body='+encodeURIComponent(S.savedBody):''); };
 

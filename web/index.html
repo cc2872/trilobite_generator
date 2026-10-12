@@ -16,6 +16,7 @@
   /* instrument data reads in mono; descriptive text stays sans */
   h1,.sect,.readout,.status,.printopt,.look,.rollbar .val,.loading .count,#classif,.ctrl .lab span:last-child,.pack div{font-family:var(--mono)}
   #app{display:grid;grid-template-columns:340px 1fr;height:100vh}
+  body.only3d #app{grid-template-columns:1fr} body.only3d .panel{display:none}   /* 3D-only viewer mode (the studio's View 3D embeds this) */
   .panel{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
   .controls{overflow-y:auto;padding:18px 20px;flex:1}
   h1{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:normal;margin:0 0 14px}
@@ -597,7 +598,7 @@ let headOutline={}, headFace={};                            // live shaped-head 
 const headArg=()=>(Object.keys(headOutline).length||Object.keys(headFace).length)?{style:headStyle, outline:headOutline, face:headFace}:headStyle;   // the NAME when unedited (native crescent path, identical to before); the live {style,outline,face} dict only once edited; 12 Oct 2026
 let bodyName=_u.get('body')||null;                          // a saved body (the body editor's rows model) to build with, by name (10 Oct 2026)
 let bodyDraft=null;                                         // unsaved body edits carried from the editor via sessionStorage (?bodydraft=1, 11 Oct 2026)
-if(_u.get('bodydraft')){ try{ const d=JSON.parse(sessionStorage.getItem('trilo_body_draft')||'null'); if(d&&d.spec) bodyDraft=d.spec; }catch(_){} }
+if(_u.get('bodydraft')){ try{ const d=JSON.parse(sessionStorage.getItem('trilo_body_draft')||'null'); if(d){ if(d.spec) bodyDraft=d.spec; if(d.headOutline) headOutline=d.headOutline; if(d.headFace) headFace=d.headFace; if(d.head) headStyle=d.head; } }catch(_){} }
 let bodySpec=null;                                          // live rows spec from the in-page editor (the studio S.spec shape); 12 Oct 2026
 const bodyArg=()=>bodySpec||bodyDraft||bodyName;            // live spec wins, then a carried draft, then a saved name; null = the preset's own rows
 window.__page={get headStyle(){return headStyle}, get joint(){return joint}, get preset(){return (document.getElementById('preset')||{}).value||''}, get body(){return bodyName}, shareURL:()=>shareURL()};   // read-only view of the page's state for the nav buttons and tests (the script is a module)           // head type (isopod model only): 'crescent' = the approved head on the isopod head piece
@@ -880,7 +881,8 @@ if(_jq&&['pin','flexi','ball','isopod'].includes(_jq)){ joint=_jq; [...$('joints
 await HEADS_READY.catch(()=>{});
 if(bodyName&&!_u.get('head')){ try{ const b=(await (await fetch('/api/bodies')).json()).find(x=>x.name===bodyName); if(b&&b.head&&HEADS.some(h=>h.name===b.head)){ headStyle=b.head; $('headstyle').value=headStyle; } }catch(_){} }   // a saved body brings its head
 await applyMacro();
-render(); build(); placeView3D(); classify(); pushHist();   // the generator (now at /generator) builds its blueprint on load, as before
+render(); placeView3D(); classify(); pushHist();
+if(_u.get('only3d')){ document.body.classList.add('only3d'); to3D(true); } else build();   // only3d: a panel-less 3D viewer (studio's View 3D embeds this); else the generator builds its blueprint as before
 </script>
 </body>
 </html>
