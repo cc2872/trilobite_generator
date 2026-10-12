@@ -603,7 +603,9 @@ const bodyArg=()=>bodySpec||bodyDraft||bodyName;            // live spec wins, t
 window.__page={get headStyle(){return headStyle}, get joint(){return joint}, get preset(){return (document.getElementById('preset')||{}).value||''}, get body(){return bodyName}, shareURL:()=>shareURL()};   // read-only view of the page's state for the nav buttons and tests (the script is a module)           // head type (isopod model only): 'crescent' = the approved head on the isopod head piece
 const buildBody=()=>({P, joint, fill: joint==='pin'?fillMm:0, head: joint==='isopod'?headArg():null, body: joint==='isopod'?bodyArg():null});
 window.addEventListener('message', async e=>{                       // the embedded editor (/studio) streams its live head + body here, so Build/sheet/3D use them (12 Oct 2026)
-  const m=e.data||{}; if(m.type!=='trilo-studio') return;
+  const m=e.data||{};
+  if(m.type==='trilo-build'){ build(); return; }                   // the editor's Build button -> the generator's blueprint (+ 3D on the toggle)
+  if(m.type!=='trilo-studio') return;
   headStyle=m.head||'crescent'; headOutline=m.headOutline||{}; headFace=m.headFace||{}; bodySpec=(m.spec&&m.spec.list&&m.spec.list.length)?m.spec:null;
   if(m.preset && m.preset!==ps.value && S.presets.includes(m.preset)){ ps.value=m.preset; try{ P=await (await fetch('/api/preset/'+encodeURIComponent(m.preset))).json(); }catch(_){} }
 });

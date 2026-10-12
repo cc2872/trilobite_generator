@@ -42,6 +42,9 @@
   .seg{display:flex;gap:0;margin:4px 0 0;border:1px solid var(--line)} .seg button{flex:1;background:var(--bg);color:var(--mid);border:none;border-right:1px solid var(--line);padding:6px 0;font:inherit;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} .seg button:last-child{border-right:none} .seg button.on{background:var(--ink);color:var(--bg)}
   input.name{flex:1;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--line);padding:4px 0;font:inherit}
   textarea{width:100%;height:100px;background:var(--bg);color:var(--mid);border:1px solid var(--line);font:11px var(--mono);padding:6px;resize:vertical;display:none}
+  body.embed{grid-template-columns:1fr} body.embed .panel{display:none}                 /* embedded in the generator: show only the drawing */
+  #embedbuild{display:none;position:absolute;right:16px;bottom:16px;z-index:6;background:var(--ink);color:var(--bg);border:none;padding:10px 20px;font:inherit;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+  body.embed #embedbuild{display:block} #embedbuild:hover{background:#ddd}
 </style>
 </head>
 <body>
@@ -72,7 +75,7 @@
   <div class="status" id="status"></div>
   <div class="links" id="links"></div>
 </div>
-<div id="stage"><div class="kv" id="kv"></div></div>
+<div id="stage"><div class="kv" id="kv"></div><button id="embedbuild" title="build the blueprint and 3D in the generator">build · blueprint + 3d</button></div>
 
 <script>
 const $=id=>document.getElementById(id);
@@ -84,6 +87,8 @@ const fmt=v=>Number.isInteger(v)?String(v):(+v).toFixed(Math.abs(v)<1?3:(Math.ab
 function status(t,bad){ $('status').textContent=t||''; $('status').classList.toggle('busy',!!bad); }
 // when embedded in the generator, stream the live head + body so the host's Build/sheet/3D use them (12 Oct 2026)
 function postState(){ try{ if(window.parent && window.parent!==window) window.parent.postMessage({type:'trilo-studio', preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec}, '*'); }catch(_){} }
+const EMBED=(()=>{ try{ return !!(window.parent && window.parent!==window); }catch(_){ return true; } })();   // inside the generator's iframe: show only the drawing, hand Build to the host
+if(EMBED){ document.body.classList.add('embed'); const b=document.getElementById('embedbuild'); if(b) b.onclick=()=>{ postState(); try{ window.parent.postMessage({type:'trilo-build'}, '*'); }catch(_){} }; }
 
 // ---------- ranges (the page's own; the model files carry units/docs, not ranges) ----------
 const R={len:[1,40], width:[1,80], axis:[0.12,0.5], relief:[3,40], margin:[0.05,0.6], sweep:[-20,70], curve:[-30,60], tip:[0,80], tip_w:[0.1,1.5], arch:[0,0.5], fulcrum:[0.1,0.95], slope:[0,1.2], rear_round:[0,1]};
