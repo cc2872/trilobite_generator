@@ -86,7 +86,7 @@ const $=id=>document.getElementById(id);
 const S={ preset:'textured', head:'crescent', savedBody:null, savedHead:null,
           spec:{list:null, model:'thorax'}, headOutline:{}, headFace:{}, headBaseOutline:{}, headBaseFace:{}, headMeta:null,
           BD:null, HD:null, presets:[], savedBodies:[], savedHeads:[],
-          sel:null, pinned:null, hover:null, drag:null, pendingB:false, pendingH:false, edited:false };
+          sel:null, pinned:null, hover:null, drag:null, pendingB:false, pendingH:false, edited:false, P:null, eyeParams:[] };
 const fmt=v=>Number.isInteger(v)?String(v):(+v).toFixed(Math.abs(v)<1?3:(Math.abs(v)<10?2:1));
 function status(t,bad){ $('status').textContent=t||''; $('status').classList.toggle('busy',!!bad); }
 // when embedded in the generator, stream the live head + body so the host's Build/sheet/3D use them (12 Oct 2026)
@@ -116,6 +116,7 @@ const headCur=k=>S.HD?(isOut(k)?S.HD.outline[k]:S.HD.face[k]):undefined;
 function clampR(k,v,T){ const r=(T||R)[k]||[-1e9,1e9]; v=Math.min(r[1],Math.max(r[0],v)); if(r[2]) v=Math.round(v); return v; }
 function clampH(k,v){ const r=RH[k]||[-1e9,1e9]; v=Math.min(r[1],Math.max(r[0],v)); if(r[2]) v=Math.round(v); return v; }
 function setHeadKey(k,v,quiet){ v=clampH(k,v); const edits=isOut(k)?S.headOutline:S.headFace; if(Math.abs(v-headBaseOf(k))<1e-9) delete edits[k]; else edits[k]=+v.toFixed(4); if(!quiet) sendHead(); }
+function setEyeParam(k,v){ if(!S.P) return; S.P[k]=+v; S.edited=true; status('eye edited · Build to see it',false); }   // schema eye params; the shaped-head 2D drawing can't show them, so feedback is on Build / 3D
 
 // ---------- row helpers ----------
 const rowOf=i=>S.spec.list[i];
@@ -139,6 +140,7 @@ async function loadAll(preset, bodyName, start){
   S.spec=Object.assign({}, bd.spec||{}); delete S.spec.rows; for(const k of ['thorax_rows','pyg_rows','thorax_len','pyg_len']) delete S.spec[k];
   S.spec.list=bd.diagram.list.map(r=>Object.assign({},r)); S.spec.model=S.spec.model||bd.diagram.model||'thorax'; $('model').value=S.spec.model;
   S.BD=bd.diagram; S.presets=bd.presets; S.savedBodies=bd.saved_bodies; S.pinned=null; S.sel=null;
+  try{ S.P=await (await fetch('/api/preset/'+encodeURIComponent(preset))).json(); }catch(_){ S.P=S.P||{}; }   // the schema params (incl. the eye): editable here, built as-is by the generator pipeline
   $('savebody').value=S.savedBody||''; $('savehead').value=S.savedHead||'';
   $('del').style.display=S.savedBody?'':'none';
   fillPickers(); renderContext(); renderTable(); kv(); postState();
@@ -179,8 +181,11 @@ function renderContext(rebuild=true){ const box=$('context');
   if(S.sel.type==='head'){ $('ctxname').textContent='Head · '+(S.savedHead||S.head); $('ctxtools').innerHTML='';
     const keys=[...Object.keys(S.headMeta.outline_defaults),...Object.keys(S.headMeta.face_defaults)];
     if(rebuild||box.dataset.k!=='head'){ box.innerHTML=''; box.dataset.k='head';
-      for(const k of keys){ const r=RH[k]||[0,1]; slider(box,k,headCur(k),r[0],r[1],r[2]||((r[1]-r[0])/200),val=>setHeadKey(k,val),isOut(k)?'':'face'); } }
-    else for(const k of keys){ const s=$('s_'+k); if(s&&document.activeElement!==s){ const v=headCur(k); s.value=v; $('v_'+k).textContent=fmt(v); $('v_'+k).classList.toggle('on',Math.abs(v-headBaseOf(k))>1e-9); } }
+      for(const k of keys){ const r=RH[k]||[0,1]; slider(box,k,headCur(k),r[0],r[1],r[2]||((r[1]-r[0])/200),val=>setHeadKey(k,val),isOut(k)?'':'face'); }
+      if(S.P && S.eyeParams.length){ const hdr=document.createElement('div'); hdr.className='sect'; hdr.innerHTML='<span>Eye</span><span class="mono" style="color:var(--mid);text-transform:none;letter-spacing:0">shows on build / 3D</span>'; box.appendChild(hdr);
+        for(const p of S.eyeParams){ const v=(S.P[p.key]!=null?S.P[p.key]:p.default); slider(box,p.key,v,p.lo,p.hi,p.step||((p.hi-p.lo)/200),val=>setEyeParam(p.key,val),p.unit||''); } } }
+    else { for(const k of keys){ const s=$('s_'+k); if(s&&document.activeElement!==s){ const v=headCur(k); s.value=v; $('v_'+k).textContent=fmt(v); $('v_'+k).classList.toggle('on',Math.abs(v-headBaseOf(k))>1e-9); } }
+      if(S.P) for(const p of S.eyeParams){ const s=$('s_'+p.key); if(s&&document.activeElement!==s){ s.value=S.P[p.key]; $('v_'+p.key).textContent=fmt(S.P[p.key]); } } }
     return; }
   // a row
   const i=S.sel.i; if(i>=S.spec.list.length){ S.sel=null; return renderContext(); }
@@ -206,7 +211,7 @@ $('del').onclick=async()=>{ if(!S.savedBody) return; const n=S.savedBody; const 
 $('copy').onclick=()=>{ const txt=JSON.stringify({preset:S.preset, head:{style:S.head, outline:S.headOutline, face:S.headFace}, body:S.spec}); const ta=$('json'); ta.value=txt; ta.style.display='block'; ta.select(); try{ navigator.clipboard.writeText(txt); status('copied'); }catch(_){ status('select and copy'); } };
 const headArg=()=>(Object.keys(S.headOutline).length||Object.keys(S.headFace).length||S.savedHead||S.head!=='crescent')?{style:S.head, outline:S.headOutline, face:S.headFace}:null;
 $('build').onclick=async()=>{ const b=$('build'); b.disabled=true; const t0=Date.now(); const tick=setInterval(()=>status(`building · ${Math.round((Date.now()-t0)/1000)} s`,true),500);
-  try{ const P=await (await fetch('/api/preset/'+encodeURIComponent(S.preset))).json();
+  try{ const P=S.P||await (await fetch('/api/preset/'+encodeURIComponent(S.preset))).json();
     const r=await fetch('/api/build',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, joint:'isopod', head:headArg(), body:S.spec})}); const m=await r.json(); clearInterval(tick);
     if(!r.ok||!m.parts||!m.parts.length){ status('build failed · '+((m.build_notes||[]).map(n=>n[2]).join('; ')||m.error||r.status),true); }
     else{ const bad=m.parts.filter(p=>!p.watertight||p.bodies!==1).length; status(`built ${m.parts.length} pieces in ${m.build_seconds} s${bad?` · ${bad} not watertight`:''}`,!!bad);
@@ -215,7 +220,7 @@ $('build').onclick=async()=>{ const b=$('build'); b.disabled=true; const t0=Date
   }catch(e){ clearInterval(tick); status('build failed · '+e,true); } b.disabled=false; };
 function showSheet(url){ $('sheetimg').src=url+(url.indexOf('?')>=0?'&':'?')+'t='+Date.now(); mode3d(false); $('sheetwrap').style.display='flex'; }   // Build shows the blueprint over the drawing; "← editor" returns to editing
 function mode3d(on){ $('sheetimg').style.display=on?'none':'block'; const f=$('view3dframe'); f.style.display=on?'block':'none';
-  if(on){ try{ sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec})); }catch(_){}
+  if(on){ try{ sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec, P:S.P})); }catch(_){}
     const want='/generator?preset='+encodeURIComponent(S.preset)+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+'&bodydraft=1&only3d=1';   // the generator's proven 3D, panel hidden, on this animal
     if(f.getAttribute('src')!==want) f.setAttribute('src',want); }
   $('toblue').classList.toggle('on',!on); $('to3d').classList.toggle('on',on); }
@@ -334,6 +339,8 @@ function headKeysFor(h){ const ks=((S.headMeta&&S.headMeta.handles[h])||[]).map(
 
 // ---------- start ----------
 (async()=>{ const u=new URLSearchParams(location.search); S.head=u.get('head')||'crescent';
+  try{ const sc=await (await fetch('/api/schema')).json(); const EK=new Set(['eyeSize','eyeArc','eyePos','eyeLat','eyeHeight','eyeProfile','eyeStalk','eyeStalkR','eyeStalkBend','eyeLean','eyeSphere','lensD','lensGap']);
+       S.eyeParams=(sc.params||[]).filter(p=>EK.has(p.key)); }catch(_){ S.eyeParams=[]; }   // the eye's fold / stalk / shape params -> the Eye sliders
   const body=u.get('body'); if(body){ const b=(await (await fetch('/api/bodies')).json()).find(x=>x.name===body); if(b){ if(b.head) S.head=b.head; await loadAll(b.preset, body); return; } }
   if(u.get('preset')) await loadAll(u.get('preset')); else await loadAll('textured', null, 'plain'); })();
 </script>
