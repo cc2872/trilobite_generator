@@ -284,22 +284,29 @@ new p5(s=>{
     for(const [k,v] of Object.entries(HH)){ if(HEADHANDLE_SKIP.has(k)) continue; const sx=headSX(v), sy=headSY(v); const on=headOn&&S.headSel===k;
       s.stroke(headOn?s.color(246,112,79):s.color(255,210)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):0); s.circle(sx,sy,on?8:5); HP.push({kind:'head',k,sx,sy});
       if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(k+'  '+headKeysFor(k).join(' · '), sx+9, sy-6); } }
-    // head elevation handles: overall height (the crown) and eye height, dragged on the HEAD SIDE view
-    if(HS.profile&&HS.profile.length){ let mi=0; HS.profile.forEach((p,k)=>{ if(p[1]>HS.profile[mi][1]) mi=k; }); const cp=HS.profile[mi];
-      const csx=heX(cp[1]), csy=heY(cp[0]); const con=headOn&&S.headSel==='crown';
-      s.stroke(headOn?s.color(246,112,79):s.color(255,210)); s.strokeWeight(1); s.fill(con?s.color(246,112,79):0); s.circle(csx,csy,con?8:5); HP.push({kind:'head',k:'crown',elev:true,sx:csx,sy:csy});
-      let be=cp[0], ze=Math.max(cp[1]*0.6,0.15); if(HS.eye&&HS.eye.length) be=HS.eye.reduce((m,p)=>m+p[1],0)/HS.eye.length;   // eye-height handle at the eye's fore-aft
-      const esx=heX(ze), esy=heY(be); const eon=headOn&&S.headSel==='eyeH';
-      s.stroke(headOn?s.color(246,112,79):s.color(255,210)); s.strokeWeight(1); s.fill(eon?s.color(246,112,79):0); s.circle(esx,esy,eon?8:5); HP.push({kind:'head',k:'eyeH',elev:true,sx:esx,sy:esy});
-      if(con){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text('head height · drag ↔', csx+9, csy-6); }
-      if(eon){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text('eye height · drag ↔', esx+9, esy-6); } }
+    // the P-eye side editor: drawn from P with draggable stalk / lean / height handles (these drive the BUILT eye)
+    if(headOn && S.P) drawEye();
     s.noStroke(); s.fill(255,90); s.textAlign(s.RIGHT,s.BOTTOM); s.text(((inflightB||inflightH)?'drawing…':'')+' ', W-12, H-10);
   };
   const HEADHANDLE_SKIP=new Set(['crown']);                 // elevation-only; edit via the slider in the panel
+  function drawEye(){ const P=S.P; const ex=W-165, ey=250;                        // the eye in side view, drawn from P (top-right); drives the built eye
+    const eyeSize=+P.eyeSize||0.14, eyeStalk=+P.eyeStalk||0, eyeLean=+P.eyeLean||0, eyeHeight=+P.eyeHeight||0.8;
+    const er=Math.max(eyeSize*150,7), lean=eyeLean*Math.PI/180, dx=Math.sin(lean), dy=-Math.cos(lean), stalkPx=eyeStalk*er;
+    const bx=ex+dx*stalkPx, by=ey+dy*stalkPx, domeH=Math.max(eyeHeight*er,2), htx=bx+dx*domeH, hty=by+dy*domeH;
+    s.noStroke(); s.fill(255,110); s.textAlign(s.LEFT,s.BOTTOM); s.text('EYE · side — drag to shape', ex-er-12, ey-er-stalkPx-domeH-16);
+    hair(45); s.line(ex-er-12, ey, ex+er+80, ey);                                 // the cheek baseline
+    if(stalkPx>1){ hair(190,1.2); s.line(ex,ey,bx,by); }                          // the stalk
+    hair(255,1.3); s.circle(bx,by,er*2);                                          // the eye
+    hair(150,1); s.line(bx,by,htx,hty);                                           // the dome height
+    const sOn=S.eyeSel==='stalk', hOn=S.eyeSel==='height';
+    s.stroke(246,112,79); s.strokeWeight(1); s.fill(sOn?s.color(246,112,79):0); s.circle(bx,by,sOn?9:6); HP.push({kind:'eye',k:'stalk',sx:bx,sy:by,ex:ex,ey:ey,er:er});
+    s.fill(hOn?s.color(246,112,79):0); s.circle(htx,hty,hOn?9:6); HP.push({kind:'eye',k:'height',sx:htx,sy:hty,bx:bx,by:by,dx:dx,dy:dy,er:er});
+    s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.CENTER); s.text('stalk '+eyeStalk.toFixed(1)+' · lean '+Math.round(eyeLean)+'°', ex+er+14, ey-6); s.text('height '+eyeHeight.toFixed(2), htx+12, hty); }
   function nearest(mx,my){ let best=null,bd=12; for(const h of HP){ const d=Math.hypot(h.sx-mx,h.sy-my); if(d<bd){ bd=d; best=h; } } return best; }
   s.mouseMoved=()=>{ const h=nearest(s.mouseX,s.mouseY); const hi=h&&h.kind==='row'?h.i:null; if(hi!==S.hover){ S.hover=hi; } stage.style.cursor=h?'grab':'default'; };
   s.mousePressed=()=>{ if(s.mouseX<0||s.mouseY<0||s.mouseX>W||s.mouseY>H) return; const h=nearest(s.mouseX,s.mouseY);
     if(h&&h.kind==='row'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; S.drag={kind:'row',i:h.i,k:h.k,x0:s.mouseX,y0:s.mouseY,start:Object.assign({},rowOf(h.i))}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
+    else if(h&&h.kind==='eye'){ S.sel={type:'head'}; S.eyeSel=h.k; S.drag={kind:'eye',k:h.k,d:h}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='head'){ S.sel={type:'head'}; S.headSel=h.k; S.drag={kind:'head',k:h.k,elev:!!h.elev,x0:s.mouseX,y0:s.mouseY,start:headSnapshot()}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else { S.sel=null; S.drag=null; renderContext(); renderTable(); } };
   s.mouseReleased=()=>{ if(S.drag){ S.drag=null; stage.style.cursor='grab'; } };
@@ -311,12 +318,13 @@ new p5(s=>{
         case 'tip': { const r=rowOf(i); const ex=S.BD.rows[i].handles.edge; const tx=(s.mouseX-ox)/px, ty=(s.mouseY-oy)/px; const L=Math.hypot(tx-ex[0],ty-ex[1]); const ang=Math.atan2(ty-ex[1],Math.max(tx-ex[0],0.3))*180/Math.PI;
           setRow(i,'tip',L,true); setRow(i,'curve',ang-r.sweep,true); break; } }
       sendBody(); return; }
+    if(S.drag.kind==='eye'){ const d=S.drag.d, mx=s.mouseX, my=s.mouseY;         // the P-eye side editor drives P directly; p5 redraws it live
+      if(S.drag.k==='stalk'){ const dist=Math.hypot(mx-d.ex,my-d.ey)/d.er, lean=Math.atan2(mx-d.ex, d.ey-my)*180/Math.PI;
+        S.P.eyeStalk=Math.max(0,Math.min(4,+dist.toFixed(2))); S.P.eyeLean=Math.max(0,Math.min(90,Math.round(lean))); }
+      else if(S.drag.k==='height'){ const proj=((mx-d.bx)*d.dx+(my-d.by)*d.dy)/d.er; S.P.eyeHeight=Math.max(0.2,Math.min(1.6,+proj.toFixed(2))); }
+      S.edited=true; renderContext(false); return; }
     // head: the body canvas runs fore-aft DOWN and across to the RIGHT, so remap the head editor's deltas
     const sc=headScale(); const pxH=sc*px; const st=S.drag.start, L=S.HD.diagram.size.length;
-    if(S.drag.elev){ const ev={};   // the HEAD SIDE view: height/z runs to the RIGHT, fore-aft runs DOWN
-      if(S.drag.k==='crown'){ ev.height=st.height+(s.mouseX-S.drag.x0)/pxH/0.357; ev.glab_rise=st.glab_rise+(s.mouseY-S.drag.y0)/pxH*0.3; }
-      else if(S.drag.k==='eyeH'){ ev.eye_height=st.eye_height+(s.mouseX-S.drag.x0)/90; }
-      for(const [k,val] of Object.entries(ev)) if(Number.isFinite(val)) setHeadKey(k,val,true); sendHead(); return; }
     const along=(s.mouseY-S.drag.y0)/pxH, across=(s.mouseX-S.drag.x0)/pxH;   // along:+rear  across:+outward
     const v={};
     switch(S.drag.k){
