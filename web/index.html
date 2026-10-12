@@ -146,7 +146,7 @@
   <div class="panel">
     <div class="controls">
       <h1>Trilobite Morphospace</h1>
-      <div class="nav"><button id="familytree" onclick="location.href='/tree'" title="browse the orders as a ring/spiral family tree">family tree</button><button id="headeditor" onclick="const h=window.__page&&window.__page.headStyle; location.href='/head'+(h&&h!=='crescent'?'?style='+encodeURIComponent(h):'')" title="draw the isopod model's head: plan and elevation with handles; save a head and it appears in the head picker here">head editor</button><button id="bodyeditor" onclick="const p=window.__page; location.href='/body?preset='+encodeURIComponent(p?p.preset:'')+(p&&p.headStyle&&p.headStyle!=='crescent'?'&head='+encodeURIComponent(p.headStyle):'')+(p&&p.body?'&body='+encodeURIComponent(p.body):'')" title="the body as rows, head to tail tip: each row's length, width, trajectory and height; short rows fuse into one piece">body editor</button></div>
+      <div class="nav"><button id="familytree" onclick="location.href='/tree'" title="browse the orders as a ring/spiral family tree">family tree</button><button id="editor" title="edit the head and body together on the whole-animal drawing">head + body editor</button></div>
       <div class="ctrl"><div class="lab"><span>Order</span></div><select id="preset"></select></div>
       <svg class="map" id="map" viewBox="0 0 384 396" xmlns="http://www.w3.org/2000/svg"></svg>
       <div id="dhint"><span class="x" id="dhintx" title="dismiss">×</span><b>Tip:</b> the diagram is the control. <b>Drag</b> the marks to shape the animal, <b>tap</b> a region to edit it, <b>tap</b> a prong to add a tine.</div>
@@ -172,6 +172,7 @@
   <div class="stage">
     <img class="sheet" id="sheet" alt="">
     <div class="stage3d" id="stage3d"></div>
+    <div class="stage-edit" id="stageEdit" style="position:absolute;inset:0;display:none"><iframe id="edframe" title="head + body editor" style="width:100%;height:100%;border:0;background:#000"></iframe></div>
     <button id="view3d" style="display:none">View 3D</button>
     <div class="readout" id="readout"></div>
     <div class="status" id="status"></div>
@@ -847,8 +848,15 @@ function pose(th){ if(!kin||!threeReady) return; rbU.uRoll.value=((+$('roll').ma
   const pz=(posePivotZ!=null?posePivotZ:kin.hinge_z), py=posePivotY, offs=kin.offsets; let M=new THREE.Matrix4();
   kin.names.forEach((n,i)=>{ if(i>0){ M=M.clone().multiply(new THREE.Matrix4().makeTranslation(0,offs[i-1],0)).multiply(new THREE.Matrix4().makeTranslation(0,py,pz)).multiply(rot).multiply(new THREE.Matrix4().makeTranslation(0,-py,-pz)); } const g=partMeshes[n]; if(g){g.matrixAutoUpdate=false; g.matrix.copy(M);} }); }
 function highlight(row){ if(!threeReady) return; for(const [n,g] of Object.entries(partMeshes)){ const on=row&&(row==='seg'?n.startsWith('seg'):n===row); const e=g.getObjectByName('edges'); if(e) e.material.opacity=on?1.0:(row?0.35:0.9); } }
-async function to3D(load){ mode='3d'; $('sheet').style.display='none'; $('stage3d').style.display='block'; $('rollbar').style.display='grid'; $('look').style.display='block'; $('view3d').textContent='View sheet'; placeView3D(); updateRbCtl(); if(load) await load3d(null); }
-async function toSheet(){ mode='sheet'; $('stage3d').style.display='none'; $('rollbar').style.display='none'; $('look').style.display='none'; $('sheet').style.display='block'; $('view3d').textContent='View 3D'; placeView3D(); updateRbCtl(); await sheet(); }
+async function to3D(load){ mode='3d'; $('stageEdit').style.display='none'; $('sheet').style.display='none'; $('stage3d').style.display='block'; $('rollbar').style.display='grid'; $('look').style.display='block'; $('view3d').style.display='flex'; $('view3d').textContent='View sheet'; placeView3D(); updateRbCtl(); if(load) await load3d(null); }
+async function toSheet(){ mode='sheet'; $('stageEdit').style.display='none'; $('stage3d').style.display='none'; $('rollbar').style.display='none'; $('look').style.display='none'; $('sheet').style.display='block'; $('view3d').style.display='flex'; $('view3d').textContent='View 3D'; placeView3D(); updateRbCtl(); await sheet(); }
+// the in-page combined editor: the working studio page, embedded as a stage view (12 Oct 2026). Build-integration (its
+// edits driving the generator's Build/sheet/3D) is the next stage; for now it is the editor on the home page.
+function toEdit(){ mode='edit'; $('sheet').style.display='none'; $('stage3d').style.display='none'; $('rollbar').style.display='none'; $('look').style.display='none'; $('view3d').style.display='none';
+  const f=$('edframe'); const want='/studio?preset='+encodeURIComponent(ps.value||'')+(headStyle&&headStyle!=='crescent'?'&head='+encodeURIComponent(headStyle):'')+(bodyName?'&body='+encodeURIComponent(bodyName):'');
+  if(f.getAttribute('src')!==want) f.setAttribute('src',want);                 // (re)load the working studio editor, carrying the current animal
+  $('stageEdit').style.display='block'; status('editing head + body',false); }
+$('editor').onclick=()=>{ if(mode==='edit') toSheet(); else toEdit(); };
 $('view3d').onclick=async()=>{ if(mode==='sheet') await to3D(true);
   else await toSheet(); };
 function rollLabel(v){ const mx=+$('roll').max||1; return Math.round(100*v/mx)+'% · '+(+v).toFixed(1)+'° / joint'; }
