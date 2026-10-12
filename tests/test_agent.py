@@ -19,7 +19,7 @@ def test_guide_is_readable_without_javascript(client):
     t = client.get("/llms.txt"); assert t.status_code == 200 and t.mimetype == "text/plain"
     body = t.get_data(as_text=True); assert "/api/agent/make" in body and "proetida" in body and "isopygous" in body and "theta_joint_deg" in body
     g = client.get("/api/agent").get_json(); assert "proetida" in g["presets"] and g["versions"]["instrument"] == "2.1"
-    assert b"/llms.txt" in client.get("/").data                                                  # the page points programs at it
+    assert b"/llms.txt" in client.get("/generator").data                                         # the generator page points programs at it (12 Oct: generator moved to /generator)
 
 def test_params_table_and_search(client):
     r = client.get("/api/agent/params").get_json(); assert r["count"] == len(schema.PARAMS)

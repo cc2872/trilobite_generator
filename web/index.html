@@ -880,7 +880,7 @@ if(_jq&&['pin','flexi','ball','isopod'].includes(_jq)){ joint=_jq; [...$('joints
 await HEADS_READY.catch(()=>{});
 if(bodyName&&!_u.get('head')){ try{ const b=(await (await fetch('/api/bodies')).json()).find(x=>x.name===bodyName); if(b&&b.head&&HEADS.some(h=>h.name===b.head)){ headStyle=b.head; $('headstyle').value=headStyle; } }catch(_){} }   // a saved body brings its head
 await applyMacro();
-render(); placeView3D(); classify(); pushHist(); toEdit();   // land on the combined head+body editor; the sheet/3D build on demand
+render(); build(); placeView3D(); classify(); pushHist();   // the generator (now at /generator) builds its blueprint on load, as before
 </script>
 </body>
 </html>

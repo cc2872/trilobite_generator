@@ -181,7 +181,10 @@ def _presets():
     return out
 
 @app.get("/")
-def index(): return send_file(os.path.join(ROOT, "web", "index.html"))
+def index(): return send_file(os.path.join(ROOT, "web", "studio.html"))               # the combined head+body editor is the front page (12 Oct 2026)
+
+@app.get("/generator")
+def generator(): return send_file(os.path.join(ROOT, "web", "index.html"))             # the parametric generator (blueprint / 3D / measure / params), now the build backend
 
 @app.get("/tree")
 def tree(): return send_file(os.path.join(ROOT, "web", "tree.html"))                  # the ring/spiral family tree

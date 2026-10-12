@@ -65,8 +65,10 @@ def test_saved_heads_round_trip(c, tmp_path, monkeypatch):
     assert [h["name"] for h in c.get("/api/heads").get_json()] == ["t-harpes"]
 
 def test_opening_page_links_and_share(c):
-    html = c.get("/").get_data(as_text=True)
-    assert 'id="editor"' in html and 'id="familytree"' in html                                   # the nav row on the opening page (12 Oct: one combined head+body editor button)
+    front = c.get("/").get_data(as_text=True)                                                    # 12 Oct: the front page is now the combined editor (studio.html)
+    assert 'id="stage"' in front and 'id="build"' in front                                       # its canvas + build button
+    html = c.get("/generator").get_data(as_text=True)                                            # the parametric generator moved to /generator
+    assert 'id="editor"' in html and 'id="familytree"' in html                                   # the generator's nav row
     body = c.get("/body").get_data(as_text=True); head = c.get("/head").get_data(as_text=True)
     assert 'id="home"' in body and 'id="headeditor"' in body and 'id="home"' in head and 'id="bodyeditor"' in head   # 11 Oct: each editor links home and to the other
     assert "&head=" in html and "&joint=" in html                                                 # the share link carries the head and joint
@@ -216,7 +218,7 @@ def test_macro_projection_and_saved_body_head(c, tmp_path, monkeypatch):
     assert c.post("/api/macro", json={"preset": "textured", "head": "dalmanites"}).get_json()["P"].get("genalSpine") is None   # a guide style: its values only
     assert c.post("/api/macro", json={"preset": "textured", "body": {"rows": {"0": {"len": -1}}}}).status_code == 400
     assert c.post("/api/macro", json={"preset": "textured", "head": "nope"}).status_code == 404
-    html = c.get("/").get_data(as_text=True); assert "/api/macro" in html and "applyMacro" in html
+    html = c.get("/generator").get_data(as_text=True); assert "/api/macro" in html and "applyMacro" in html   # the generator moved to /generator (12 Oct)
 
 def test_isopod_progress_counts_parts():
     """The loading count for the isopod model is in parts (head + pieces + tail), not 0 of 1 (11 Oct 2026)."""

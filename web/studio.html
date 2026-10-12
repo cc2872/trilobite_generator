@@ -45,6 +45,8 @@
   body.embed{grid-template-columns:1fr} body.embed .panel{display:none}                 /* embedded in the generator: show only the drawing */
   #embedbuild{display:none;position:absolute;right:16px;bottom:16px;z-index:6;background:var(--ink);color:var(--bg);border:none;padding:10px 20px;font:inherit;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
   body.embed #embedbuild{display:block} #embedbuild:hover{background:#ddd}
+  #sheetwrap{display:none;position:absolute;inset:0;background:#000;z-index:5;align-items:center;justify-content:center} #sheetwrap img{max-width:100%;max-height:100%;object-fit:contain}
+  #sheetback{position:absolute;left:16px;top:14px;z-index:6;background:var(--bg);color:var(--ink);border:1px solid var(--ink);padding:8px 14px;font:inherit;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} #sheetback:hover{background:var(--soft)}
 </style>
 </head>
 <body>
@@ -75,7 +77,7 @@
   <div class="status" id="status"></div>
   <div class="links" id="links"></div>
 </div>
-<div id="stage"><div class="kv" id="kv"></div><button id="embedbuild" title="build the blueprint and 3D in the generator">build · blueprint + 3d</button></div>
+<div id="stage"><div class="kv" id="kv"></div><button id="embedbuild" title="build the blueprint and 3D in the generator">build · blueprint + 3d</button><div id="sheetwrap"><button id="sheetback">← editor</button><img id="sheetimg" alt="blueprint"></div></div>
 
 <script>
 const $=id=>document.getElementById(id);
@@ -206,8 +208,11 @@ $('build').onclick=async()=>{ const b=$('build'); b.disabled=true; const t0=Date
     const r=await fetch('/api/build',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, joint:'isopod', head:headArg(), body:S.spec})}); const m=await r.json(); clearInterval(tick);
     if(!r.ok||!m.parts||!m.parts.length){ status('build failed · '+((m.build_notes||[]).map(n=>n[2]).join('; ')||m.error||r.status),true); }
     else{ const bad=m.parts.filter(p=>!p.watertight||p.bodies!==1).length; status(`built ${m.parts.length} pieces in ${m.build_seconds} s${bad?` · ${bad} not watertight`:''}`,!!bad);
-      $('links').innerHTML=`<a href="/api/stl/${m.key}">download STL (all pieces, print mm)</a>`; }
+      $('links').innerHTML=`<a href="/api/stl/${m.key}">download STL (all pieces, print mm)</a>`;
+      try{ status('drawing blueprint…',true); const sr=await fetch('/api/sheet',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, joint:'isopod', cmap:'none', head:headArg(), body:S.spec})}); const sj=await sr.json(); if(sj.url){ showSheet(sj.url); status(`built · ${m.parts.length} pieces · blueprint ready`,false); } else status('built · blueprint failed',true); }catch(_){ status('built · blueprint failed',true); } }
   }catch(e){ clearInterval(tick); status('build failed · '+e,true); } b.disabled=false; };
+function showSheet(url){ $('sheetimg').src=url+(url.indexOf('?')>=0?'&':'?')+'t='+Date.now(); $('sheetwrap').style.display='flex'; }   // Build shows the blueprint over the drawing; "← editor" returns to editing
+$('sheetback').onclick=()=>{ $('sheetwrap').style.display='none'; };
 $('generator').onclick=()=>{ try{ if(S.edited) sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, spec:S.spec, savedName:S.savedBody})); }catch(_){}
   location.href='/?preset='+encodeURIComponent(S.preset||'')+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+(S.edited?'&bodydraft=1':'')+(S.savedBody?'&body='+encodeURIComponent(S.savedBody):''); };
 
