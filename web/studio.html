@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Trilobite · Studio</title>
+<title>Trilobite - Studio</title>
 <!-- The studio (12 Oct 2026): head and body edited on ONE whole-animal drawing. Pick the head or a row; the panel
      shows its controls. Rows come from isopod_model/rows.diagram (/api/body_diagram); the head from the same Shape /
      head_crescent functions the solid is built from (/api/head_diagram), composed onto the first row exactly as the
@@ -14,7 +14,7 @@
 <script src="/static/p5.min.js"></script>
 <style>
   :root{--bg:#000;--ink:#fff;--mid:#9a9a9a;--line:#262626;--soft:#141414;--accent:#f6704f;--accent-dim:#7a3326;
-        --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"IBM Plex Sans",system-ui,"Helvetica Neue",Arial,sans-serif}
+ --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"IBM Plex Sans",system-ui,"Helvetica Neue",Arial,sans-serif}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:12px;overflow:hidden;-webkit-font-smoothing:antialiased}
   body{display:grid;grid-template-columns:292px 1fr;height:100%}
@@ -49,6 +49,13 @@
   #sheetback{position:absolute;left:16px;top:14px;z-index:6;background:var(--bg);color:var(--ink);border:1px solid var(--ink);padding:8px 14px;font:inherit;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} #sheetback:hover{background:var(--soft)}
   #sheettoggle{position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:6;display:flex;border:1px solid var(--line)} #sheettoggle button{background:var(--bg);color:var(--mid);border:none;border-right:1px solid var(--line);padding:8px 14px;font:inherit;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} #sheettoggle button:last-child{border-right:none} #sheettoggle button.on{background:var(--ink);color:var(--bg)}
   #view3dframe{display:none;width:100%;height:100%;border:0;background:#000}
+  @media (max-width:760px){                                   /* mobile: the drawing on top, the controls below, the page scrolls */
+    html,body{height:auto;overflow:auto}
+    body{grid-template-columns:1fr;min-height:100%}
+    #stage{order:0;height:56vh;min-height:300px;border-bottom:1px solid var(--line)}
+    .panel{order:1;border-right:none;overflow:visible;max-height:none;padding:14px 14px 24px}
+    .edits{max-height:none}
+  }
 </style>
 </head>
 <body>
@@ -79,7 +86,7 @@
   <div class="status" id="status"></div>
   <div class="links" id="links"></div>
 </div>
-<div id="stage"><div class="kv" id="kv"></div><button id="embedbuild" title="build the blueprint and 3D in the generator">build · blueprint + 3d</button><div id="sheetwrap"><button id="sheetback">← editor</button><span id="sheettoggle"><button id="toblue" class="on">blueprint</button><button id="to3d">view 3d</button></span><img id="sheetimg" alt="blueprint"><iframe id="view3dframe" title="3D view"></iframe></div></div>
+<div id="stage"><div class="kv" id="kv"></div><button id="embedbuild" title="build the blueprint and 3D in the generator">build - blueprint + 3d</button><div id="sheetwrap"><button id="sheetback">← editor</button><span id="sheettoggle"><button id="toblue" class="on">blueprint</button><button id="to3d">view 3d</button></span><img id="sheetimg" alt="blueprint"><iframe id="view3dframe" title="3D view"></iframe></div></div>
 
 <script>
 const $=id=>document.getElementById(id);
@@ -116,7 +123,7 @@ const headCur=k=>S.HD?(isOut(k)?S.HD.outline[k]:S.HD.face[k]):undefined;
 function clampR(k,v,T){ const r=(T||R)[k]||[-1e9,1e9]; v=Math.min(r[1],Math.max(r[0],v)); if(r[2]) v=Math.round(v); return v; }
 function clampH(k,v){ const r=RH[k]||[-1e9,1e9]; v=Math.min(r[1],Math.max(r[0],v)); if(r[2]) v=Math.round(v); return v; }
 function setHeadKey(k,v,quiet){ v=clampH(k,v); const edits=isOut(k)?S.headOutline:S.headFace; if(Math.abs(v-headBaseOf(k))<1e-9) delete edits[k]; else edits[k]=+v.toFixed(4); if(!quiet) sendHead(); }
-function setEyeParam(k,v){ if(!S.P) return; S.P[k]=+v; S.edited=true; status('eye edited · Build to see it',false); }   // schema eye params; the shaped-head 2D drawing can't show them, so feedback is on Build / 3D
+function setEyeParam(k,v){ if(!S.P) return; S.P[k]=+v; S.edited=true; status('eye edited - Build to see it',false); }   // schema eye params; the shaped-head 2D drawing can't show them, so feedback is on Build / 3D
 
 // ---------- row helpers ----------
 const rowOf=i=>S.spec.list[i];
@@ -156,12 +163,12 @@ async function sendHead(){ S.edited=true; postState(); renderContext(false);
   inflightH=fetch('/api/head_diagram',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({style:S.head, outline:S.headOutline, face:S.headFace})})
     .then(r=>r.json()).then(d=>{ if(d.error){ status(d.error,true); return; } S.HD=d; kv(); renderContext(false); })
     .catch(e=>status(String(e),true)).finally(()=>{ inflightH=null; if(S.pendingH){ S.pendingH=false; sendHead(); } }); }
-function kv(){ const D=S.BD; if(!D) return; $('kv').innerHTML=`<b>${S.savedBody?S.savedBody:(S.start==='plain'?'plain trilobite':S.preset)}</b> · head <b>${S.savedHead||S.head}</b><br>rows <b>${D.rows.length}</b> · pieces <b>${D.pieces.length}</b><br>print <b>${D.print_size_mm.length} × ${D.print_size_mm.width} mm</b> · scale <b>${D.scale.toFixed(2)}</b>`+((D.problems||[]).length?`<br><span style="color:var(--accent)">cannot build: ${D.problems.join(' · ')}</span>`:''); $('build').disabled=!!(D.problems||[]).length; }
+function kv(){ const D=S.BD; if(!D) return; $('kv').innerHTML=`<b>${S.savedBody?S.savedBody:(S.start==='plain'?'plain trilobite':S.preset)}</b> - head <b>${S.savedHead||S.head}</b><br>rows <b>${D.rows.length}</b> - pieces <b>${D.pieces.length}</b><br>print <b>${D.print_size_mm.length} × ${D.print_size_mm.width} mm</b> - scale <b>${D.scale.toFixed(2)}</b>`+((D.problems||[]).length?`<br><span style="color:var(--accent)">cannot build: ${D.problems.join(' - ')}</span>`:''); $('build').disabled=!!(D.problems||[]).length; }
 
 // ---------- panel ----------
-function fillPickers(){ const ps=$('preset'); ps.innerHTML=`<option value="plain">plain trilobite</option><optgroup label="presets">${S.presets.map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+(S.savedBodies.length?`<optgroup label="saved bodies">${S.savedBodies.map(b=>`<option value="saved:${b.name}">${b.name} · ${b.preset}</option>`).join('')}</optgroup>`:''); ps.value=S.savedBody?'saved:'+S.savedBody:(S.start==='plain'?'plain':S.preset);
+function fillPickers(){ const ps=$('preset'); ps.innerHTML=`<option value="plain">plain trilobite</option><optgroup label="presets">${S.presets.map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+(S.savedBodies.length?`<optgroup label="saved bodies">${S.savedBodies.map(b=>`<option value="saved:${b.name}">${b.name} - ${b.preset}</option>`).join('')}</optgroup>`:''); ps.value=S.savedBody?'saved:'+S.savedBody:(S.start==='plain'?'plain':S.preset);
   const hsOpts=['crescent',...(S.headMeta.styles||[]).map(x=>x.name)]; const hs=$('headstyle');
-  hs.innerHTML=`<optgroup label="guide">${hsOpts.map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+((S.headMeta.saved_heads||[]).length?`<optgroup label="saved">${S.headMeta.saved_heads.map(h=>`<option value="${h.name}">${h.name} · ${h.style}</option>`).join('')}</optgroup>`:'');
+  hs.innerHTML=`<optgroup label="guide">${hsOpts.map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+((S.headMeta.saved_heads||[]).length?`<optgroup label="saved">${S.headMeta.saved_heads.map(h=>`<option value="${h.name}">${h.name} - ${h.style}</option>`).join('')}</optgroup>`:'');
   hs.value=S.savedHead||S.head;
 }
 $('preset').onchange=e=>{ const v=e.target.value; if(v==='plain') loadAll('textured',null,'plain'); else if(v.startsWith('saved:')){ const b=S.savedBodies.find(x=>x.name===v.slice(6)); loadAll(b.preset,b.name); } else loadAll(v); };
@@ -172,13 +179,13 @@ $('plus').onclick=()=>{ const at=(S.sel&&S.sel.type==='row')?S.sel.i+1:S.spec.li
 $('minus').onclick=()=>{ const i=(S.sel&&S.sel.type==='row')?S.sel.i:S.spec.list.length-1; removeRow(i); status(`row ${i} removed`); };
 
 function slider(box,k,val,lo,hi,step,onin,tag,faint){ const d=document.createElement('div'); d.className='ctrl';
-  d.innerHTML=`<div class="lab"><span>${k}${tag?' <span style="color:var(--mid)">· '+tag+'</span>':''}</span><span class="val" id="v_${k}"></span></div><input type="range" min="${lo}" max="${hi}" step="${step}" id="s_${k}">`;
+  d.innerHTML=`<div class="lab"><span>${k}${tag?' <span style="color:var(--mid)">- '+tag+'</span>':''}</span><span class="val" id="v_${k}"></span></div><input type="range" min="${lo}" max="${hi}" step="${step}" id="s_${k}">`;
   if(faint) d.style.opacity=0.4; box.appendChild(d); const inp=d.querySelector('input'); inp.value=val; d.querySelector('.val').textContent=fmt(val);
   inp.oninput=()=>{ onin(+inp.value); d.querySelector('.val').textContent=fmt(+inp.value); d.querySelector('.val').classList.add('on'); }; return d; }
 
 function renderContext(rebuild=true){ const box=$('context');
   if(!S.sel){ if(rebuild){ box.innerHTML='<div class="hint">Click the head or a row on the drawing to edit it.</div>'; $('ctxname').textContent='Nothing selected'; $('ctxtools').innerHTML=''; } return; }
-  if(S.sel.type==='head'){ $('ctxname').textContent='Head · '+(S.savedHead||S.head); $('ctxtools').innerHTML='';
+  if(S.sel.type==='head'){ $('ctxname').textContent='Head - '+(S.savedHead||S.head); $('ctxtools').innerHTML='';
     const keys=[...Object.keys(S.headMeta.outline_defaults),...Object.keys(S.headMeta.face_defaults)];
     if(rebuild||box.dataset.k!=='head'){ box.innerHTML=''; box.dataset.k='head';
       for(const k of keys){ const r=RH[k]||[0,1]; slider(box,k,headCur(k),r[0],r[1],r[2]||((r[1]-r[0])/200),val=>setHeadKey(k,val),isOut(k)?'':'face'); }
@@ -189,7 +196,7 @@ function renderContext(rebuild=true){ const box=$('context');
     return; }
   // a row
   const i=S.sel.i; if(i>=S.spec.list.length){ S.sel=null; return renderContext(); }
-  const r=rowOf(i); const dr=S.BD&&S.BD.rows[i]; $('ctxname').textContent=`Row ${i} · ${r.kind}${dr&&dr.small?' · fused':''}`;
+  const r=rowOf(i); const dr=S.BD&&S.BD.rows[i]; $('ctxname').textContent=`Row ${i} - ${r.kind}${dr&&dr.small?' - fused':''}`;
   if(rebuild||box.dataset.k!=='row'+i){ box.innerHTML=''; box.dataset.k='row'+i;
     for(const k of ROWKEYS){ const rr=R[k]; slider(box,k,r[k],rr[0],rr[1],(rr[1]-rr[0])/300,val=>setRow(i,k,val),S.BD.keys[k].unit, S.BD.model!=='slab'&&/slab model only/.test(S.BD.keys[k].doc)); }
     $('ctxtools').innerHTML=`<select id="kind" style="width:auto;padding:2px 0;font-size:10px"><option value="thorax">thorax</option><option value="pyg">pyg</option></select>`;
@@ -197,7 +204,7 @@ function renderContext(rebuild=true){ const box=$('context');
   else for(const k of ROWKEYS){ const s=$('s_'+k); if(s&&document.activeElement!==s){ s.value=r[k]; $('v_'+k).textContent=fmt(r[k]); } }
 }
 function renderTable(){ const e=$('rowtable'); const L=S.spec.list; const D=S.BD; if(!L) return;
-  e.innerHTML=L.map((r,i)=>{ const dr=D&&D.rows[i]; const on=S.sel&&S.sel.type==='row'&&i===S.sel.i; return `<div data-i="${i}" style="cursor:pointer;${on?'color:var(--accent)':''}"><b${on?' style="color:var(--accent)"':''}>${String(i).padStart(2,' ')}</b> ${r.kind==='pyg'?'pyg ':'thx '}len ${fmt(r.len)} · w ${fmt(r.width)}${dr&&dr.small?' <span style="color:var(--accent)">fused</span>':''}</div>`; }).join('');
+  e.innerHTML=L.map((r,i)=>{ const dr=D&&D.rows[i]; const on=S.sel&&S.sel.type==='row'&&i===S.sel.i; return `<div data-i="${i}" style="cursor:pointer;${on?'color:var(--accent)':''}"><b${on?' style="color:var(--accent)"':''}>${String(i).padStart(2,' ')}</b> ${r.kind==='pyg'?'pyg ':'thx '}len ${fmt(r.len)} - w ${fmt(r.width)}${dr&&dr.small?' <span style="color:var(--accent)">fused</span>':''}</div>`; }).join('');
   e.querySelectorAll('div[data-i]').forEach(x=>x.onclick=()=>{ S.sel={type:'row',i:+x.dataset.i}; S.pinned=+x.dataset.i; renderContext(); renderTable(); }); }
 
 // ---------- save / build ----------
@@ -210,14 +217,14 @@ $('saveHeadBtn').onclick=async()=>{ const name=$('savehead').value.trim(); if(!n
 $('del').onclick=async()=>{ if(!S.savedBody) return; const n=S.savedBody; const r=await fetch('/api/bodies/'+encodeURIComponent(n),{method:'DELETE'}); if(!r.ok){ status('delete failed',true); return; } status(`deleted ${n}`); loadAll(S.preset,null,'plain'); };
 $('copy').onclick=()=>{ const txt=JSON.stringify({preset:S.preset, head:{style:S.head, outline:S.headOutline, face:S.headFace}, body:S.spec}); const ta=$('json'); ta.value=txt; ta.style.display='block'; ta.select(); try{ navigator.clipboard.writeText(txt); status('copied'); }catch(_){ status('select and copy'); } };
 const headArg=()=>(Object.keys(S.headOutline).length||Object.keys(S.headFace).length||S.savedHead||S.head!=='crescent')?{style:S.head, outline:S.headOutline, face:S.headFace}:null;
-$('build').onclick=async()=>{ const b=$('build'); b.disabled=true; const t0=Date.now(); const tick=setInterval(()=>status(`building · ${Math.round((Date.now()-t0)/1000)} s`,true),500);
+$('build').onclick=async()=>{ const b=$('build'); b.disabled=true; const t0=Date.now(); const tick=setInterval(()=>status(`building - ${Math.round((Date.now()-t0)/1000)} s`,true),500);
   try{ const P=S.P||await (await fetch('/api/preset/'+encodeURIComponent(S.preset))).json();
     const r=await fetch('/api/build',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, joint:'isopod', head:headArg(), body:S.spec})}); const m=await r.json(); clearInterval(tick);
-    if(!r.ok||!m.parts||!m.parts.length){ status('build failed · '+((m.build_notes||[]).map(n=>n[2]).join('; ')||m.error||r.status),true); }
-    else{ const bad=m.parts.filter(p=>!p.watertight||p.bodies!==1).length; status(`built ${m.parts.length} pieces in ${m.build_seconds} s${bad?` · ${bad} not watertight`:''}`,!!bad);
+    if(!r.ok||!m.parts||!m.parts.length){ status('build failed - '+((m.build_notes||[]).map(n=>n[2]).join('; ')||m.error||r.status),true); }
+    else{ const bad=m.parts.filter(p=>!p.watertight||p.bodies!==1).length; status(`built ${m.parts.length} pieces in ${m.build_seconds} s${bad?` - ${bad} not watertight`:''}`,!!bad);
       $('links').innerHTML=`<a href="/api/stl/${m.key}">download STL (all pieces, print mm)</a>`;
-      try{ status('drawing blueprint…',true); const sr=await fetch('/api/sheet',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, joint:'isopod', cmap:'none', head:headArg(), body:S.spec})}); const sj=await sr.json(); if(sj.url){ showSheet(sj.url); status(`built · ${m.parts.length} pieces · blueprint ready`,false); } else status('built · blueprint failed',true); }catch(_){ status('built · blueprint failed',true); } }
-  }catch(e){ clearInterval(tick); status('build failed · '+e,true); } b.disabled=false; };
+      try{ status('drawing blueprint…',true); const sr=await fetch('/api/sheet',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, joint:'isopod', cmap:'none', head:headArg(), body:S.spec})}); const sj=await sr.json(); if(sj.url){ showSheet(sj.url); status(`built - ${m.parts.length} pieces - blueprint ready`,false); } else status('built - blueprint failed',true); }catch(_){ status('built - blueprint failed',true); } }
+  }catch(e){ clearInterval(tick); status('build failed - '+e,true); } b.disabled=false; };
 function showSheet(url){ $('sheetimg').src=url+(url.indexOf('?')>=0?'&':'?')+'t='+Date.now(); mode3d(false); $('sheetwrap').style.display='flex'; }   // Build shows the blueprint over the drawing; "← editor" returns to editing
 function mode3d(on){ $('sheetimg').style.display=on?'none':'block'; const f=$('view3dframe'); f.style.display=on?'block':'none';
   if(on){ try{ sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec, P:S.P})); }catch(_){}
@@ -273,17 +280,17 @@ new p5(s=>{
     const heX=z=>oxE+z*hsc*ZX*px, heY=b=>Y(b*hsc+HEADDY);
     if(HS.section&&HS.section.length){ if(headOn) orange(1.2); else hair(255,1.1); s.beginShape(); for(const p of HS.section) s.vertex(heX(p[1]), heY(p[0])); s.endShape(); }
     if(HS.profile&&HS.profile.length){ hair(130); s.beginShape(); for(const p of HS.profile) s.vertex(heX(p[1]), heY(p[0])); s.endShape(); }
-    s.noStroke(); s.fill(255,120); s.textAlign(s.LEFT,s.TOP); s.text('PLAN', 44, 30); s.text('HEAD SIDE', oxE+2, 30); s.text('ROWS SIDE · true scale', oxE+2, Y(-1.5));
+    s.noStroke(); s.fill(255,120); s.textAlign(s.LEFT,s.TOP); s.text('PLAN', 44, 30); s.text('HEAD SIDE', oxE+2, 30); s.text('ROWS SIDE - true scale', oxE+2, Y(-1.5));
     // handles: rows (rear/edge/tip), the head's plan handles, and its elevation handles (height, eye height)
     HP=[];
     D.rows.forEach((r,i)=>{ const h=r.handles; const on=S.sel&&S.sel.type==='row'&&i===S.sel.i; const col=on?s.color(246,112,79):(r.small?s.color(246,112,79,160):s.color(255));
       const pts=[['rear',X(h.rear[0]),Y(h.rear[1])],['edge',X(h.edge[0]),Y(h.edge[1])]]; if(r.row.tip>0.05) pts.push(['tip',X(h.tip[0]),Y(h.tip[1])]);
       for(const [k,sx,sy] of pts){ s.stroke(col); s.strokeWeight(1); s.fill(on?col:0); s.circle(sx,sy,on?8:5); HP.push({kind:'row',i,k,sx,sy}); }
-      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`row ${i} · ${r.print_len.toFixed(1)} mm${r.small?' · fused':''}`, X(h.edge[0])+10, Y(h.edge[1])-6); } });
+      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`row ${i} - ${r.print_len.toFixed(1)} mm${r.small?' - fused':''}`, X(h.edge[0])+10, Y(h.edge[1])-6); } });
     const HH=S.HD.diagram.handles||{};
     for(const [k,v] of Object.entries(HH)){ if(HEADHANDLE_SKIP.has(k)) continue; const sx=headSX(v), sy=headSY(v); const on=headOn&&S.headSel===k;
       s.stroke(headOn?s.color(246,112,79):s.color(255,210)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):0); s.circle(sx,sy,on?8:5); HP.push({kind:'head',k,sx,sy});
-      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(k+'  '+headKeysFor(k).join(' · '), sx+9, sy-6); } }
+      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(k+'  '+headKeysFor(k).join(' - '), sx+9, sy-6); } }
     // the P-eye side editor: drawn from P with draggable stalk / lean / height handles (these drive the BUILT eye)
     if(headOn && S.P) drawEye();
     s.noStroke(); s.fill(255,90); s.textAlign(s.RIGHT,s.BOTTOM); s.text(((inflightB||inflightH)?'drawing…':'')+' ', W-12, H-10);
@@ -293,7 +300,7 @@ new p5(s=>{
     const eyeSize=+P.eyeSize||0.14, eyeStalk=+P.eyeStalk||0, eyeLean=+P.eyeLean||0, eyeHeight=+P.eyeHeight||0.8;
     const er=Math.max(eyeSize*150,7), lean=eyeLean*Math.PI/180, dx=Math.sin(lean), dy=-Math.cos(lean), stalkPx=eyeStalk*er;
     const bx=ex+dx*stalkPx, by=ey+dy*stalkPx, domeH=Math.max(eyeHeight*er,2), htx=bx+dx*domeH, hty=by+dy*domeH;
-    s.noStroke(); s.fill(255,110); s.textAlign(s.LEFT,s.BOTTOM); s.text('EYE · side — drag to shape', ex-er-12, ey-er-stalkPx-domeH-16);
+    s.noStroke(); s.fill(255,110); s.textAlign(s.LEFT,s.BOTTOM); s.text('EYE - side - drag to shape', ex-er-12, ey-er-stalkPx-domeH-16);
     hair(45); s.line(ex-er-12, ey, ex+er+80, ey);                                 // the cheek baseline
     if(stalkPx>1){ hair(190,1.2); s.line(ex,ey,bx,by); }                          // the stalk
     hair(255,1.3); s.circle(bx,by,er*2);                                          // the eye
@@ -301,7 +308,7 @@ new p5(s=>{
     const sOn=S.eyeSel==='stalk', hOn=S.eyeSel==='height';
     s.stroke(246,112,79); s.strokeWeight(1); s.fill(sOn?s.color(246,112,79):0); s.circle(bx,by,sOn?9:6); HP.push({kind:'eye',k:'stalk',sx:bx,sy:by,ex:ex,ey:ey,er:er});
     s.fill(hOn?s.color(246,112,79):0); s.circle(htx,hty,hOn?9:6); HP.push({kind:'eye',k:'height',sx:htx,sy:hty,bx:bx,by:by,dx:dx,dy:dy,er:er});
-    s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.CENTER); s.text('stalk '+eyeStalk.toFixed(1)+' · lean '+Math.round(eyeLean)+'°', ex+er+14, ey-6); s.text('height '+eyeHeight.toFixed(2), htx+12, hty); }
+    s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.CENTER); s.text('stalk '+eyeStalk.toFixed(1)+' - lean '+Math.round(eyeLean)+'°', ex+er+14, ey-6); s.text('height '+eyeHeight.toFixed(2), htx+12, hty); }
   function nearest(mx,my){ let best=null,bd=12; for(const h of HP){ const d=Math.hypot(h.sx-mx,h.sy-my); if(d<bd){ bd=d; best=h; } } return best; }
   s.mouseMoved=()=>{ const h=nearest(s.mouseX,s.mouseY); const hi=h&&h.kind==='row'?h.i:null; if(hi!==S.hover){ S.hover=hi; } stage.style.cursor=h?'grab':'default'; };
   s.mousePressed=()=>{ if(s.mouseX<0||s.mouseY<0||s.mouseX>W||s.mouseY>H) return; const h=nearest(s.mouseX,s.mouseY);

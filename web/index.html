@@ -9,8 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root{--bg:#000000;--ink:#ffffff;--mid:#9a9a9a;--line:#262626;--soft:#141414;
-        --accent:#f6704f;--accent-dim:#7a3326;   /* magma-derived, used sparingly on active/primary states */
-        --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"IBM Plex Sans",system-ui,"Helvetica Neue",Arial,sans-serif}
+ --accent:#f6704f;--accent-dim:#7a3326;   /* magma-derived, used sparingly on active/primary states */
+ --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"IBM Plex Sans",system-ui,"Helvetica Neue",Arial,sans-serif}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;font-size:12px;-webkit-font-smoothing:antialiased}
   /* instrument data reads in mono; descriptive text stays sans */
@@ -159,15 +159,15 @@
     <div class="actions">
       <div class="printopt">
         <span>Joint</span>
-        <span class="seg" id="jointseg"><span class="on" data-joint="isopod">isopod model</span> · <span data-joint="ball">print · ball</span> · <span data-joint="flexi">print · flexi</span> · <span data-joint="pin">measure · pin</span></span>
-        <span class="headwrap" id="headwrap">· <span>head</span> <select id="headstyle" title="head type: a silhouette and a sculpted face (isopod model only)"></select></span>
-        <span class="fillwrap off" id="fillwrap">· <input type="number" id="fill" min="0" max="3" step="0.5" value="0"> mm fill</span>
-        <span class="cmapwrap">· <span>relief</span> <select id="cmap" title="colormap for the blueprint's relief field"></select></span>
+        <span class="seg" id="jointseg"><span class="on" data-joint="isopod">isopod model</span> - <span data-joint="ball">print - ball</span> - <span data-joint="flexi">print - flexi</span> - <span data-joint="pin">measure - pin</span></span>
+        <span class="headwrap" id="headwrap">- <span>head</span> <select id="headstyle" title="head type: a silhouette and a sculpted face (isopod model only)"></select></span>
+        <span class="fillwrap off" id="fillwrap">- <input type="number" id="fill" min="0" max="3" step="0.5" value="0"> mm fill</span>
+        <span class="cmapwrap">- <span>relief</span> <select id="cmap" title="colormap for the blueprint's relief field"></select></span>
       </div>
       <button class="primary" id="buildBtn" style="grid-column:1/-1">Build</button>
       <button id="dl">Download STL</button>
       <button id="share">Copy link</button>
-      <button id="tps" style="grid-column:1/-1" title="dorsal homologous landmarks for geometric morphometrics (geomorph / tpsDig)">Landmarks · TPS</button>
+      <button id="tps" style="grid-column:1/-1" title="dorsal homologous landmarks for geometric morphometrics (geomorph / tpsDig)">Landmarks - TPS</button>
     </div>
   </div>
   <div class="stage">
@@ -177,10 +177,10 @@
     <button id="view3d" style="display:none">View 3D</button>
     <div class="readout" id="readout"></div>
     <div class="status" id="status"></div>
-    <div class="look" id="look"><span class="on" data-look="blueprint">Blueprint</span> · <span data-look="model">Relief</span></div>
+    <div class="look" id="look"><span class="on" data-look="blueprint">Blueprint</span> - <span data-look="model">Relief</span></div>
     <div class="rollbar" id="rollbar"><input type="range" id="roll" min="0" max="45" step="0.1" value="0"><div class="val" id="rollval"></div><button id="go">Roll</button></div>
     <div class="rbctl" id="rbctl">
-      <span class="rbmode" id="rbmode"><span class="on" data-m="flow">flow</span> · <span data-m="roll">enrollment</span></span>
+      <span class="rbmode" id="rbmode"><span class="on" data-m="flow">flow</span> - <span data-m="roll">enrollment</span></span>
       <label>speed <input type="range" id="rbspeed" min="0.1" max="3" step="0.1" value="1"></label>
       <label>bands <input type="range" id="rbbands" min="0.5" max="6" step="0.5" value="1"></label>
       <span class="rbdir" id="rbdir" title="reverse the flow direction">⇵</span>
@@ -208,7 +208,7 @@ const ROWOF={b1:'head',a1:'head',b2:'seg',a2:'seg',b3:'tail',a3:'tail'};
 const C=$('C');
 const ps=$('preset'); S.presets.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;if(n===START)o.selected=true;ps.appendChild(o);});
 // morph between orders: tween the continuous parameters so the diagram flows from one body plan to the next
-// (discrete ones — segment count, expressions — snap at the end). Pure drawMap() per frame; no rebuild mid-tween.
+// (discrete ones - segment count, expressions - snap at the end). Pure drawMap() per frame; no rebuild mid-tween.
 let morphRAF=null;
 function tweenP(target,dur=600){ if(morphRAF) cancelAnimationFrame(morphRAF);
   const start={...P}, t0=performance.now();
@@ -234,13 +234,13 @@ function slider(k){ const m=META[k]; const r=document.createElement('div'); r.cl
   const inp=r.querySelector('input'); inp.oninput=e=>{P[k]=+e.target.value; r.querySelector('.lab span:last-child').textContent=fmt(P[k],m); redraw();}; inp.onchange=()=>{lastMeas=null; dirty();}; return r; }
 const GL={}; function glyph(id,vb){const s=document.createElement('div'); s.innerHTML=`<svg class="arm" id="${id}" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg>`; GL[id]=1; return s;}
 // the morphological characters (schema.CHARACTERS) grouped by the cell their parameters live in: a dropdown of named
-// features per cell — eye types and sutures in the head, pleural/pygidial spines in the thorax/tail, body plans on the frame.
+// features per cell - eye types and sutures in the head, pleural/pygidial spines in the thorax/tail, body plans on the frame.
 const FEATS={}; (S.characters||[]).forEach(ch=>{ (FEATS[ch.cell]||(FEATS[ch.cell]=[])).push(ch); });
 function featureSelect(cell){   // pick a named character; applies its parameter bundle, then the sliders fine-tune it
   const feats=FEATS[cell]||[]; if(!feats.length) return document.createTextNode('');
   const r=document.createElement('div'); r.className='ctrl'; r.dataset.k='__feat_'+cell;
   r.innerHTML=`<div class="lab"><span title="apply a named morphological character; fine-tune with the sliders below">Feature</span></div>`+
-    `<select><option value="">— choose a character —</option>${feats.map(t=>`<option value="${t.key}">${t.name}</option>`).join('')}</select>`;
+    `<select><option value="">- choose a character -</option>${feats.map(t=>`<option value="${t.key}">${t.name}</option>`).join('')}</select>`;
   r.querySelector('select').onchange=e=>{ const t=feats.find(x=>x.key===e.target.value); if(!t) return;
     Object.assign(P, t.set); lastMeas=null; render(); dirty(); };   // apply the bundle, rebuild the sliders to show new values
   return r; }
@@ -257,8 +257,8 @@ const DRAW={
 };
 // ================================================================ the anatomy map
 // Traced from the dorsal sketch: head up, tail down, the left side its dimmed mirror (c = mirror a).
-// Filled regions pick a cell. The callouts the sketch labels — prong, eye R and arc, genal and
-// pleural spine length, the w arrow, the head / thorax / tail brackets — are live handles, so the
+// Filled regions pick a cell. The callouts the sketch labels - prong, eye R and arc, genal and
+// pleural spine length, the w arrow, the head / thorax / tail brackets - are live handles, so the
 // annotations ARE the controls. Sliders under the map stay for numeric precision.
 const PLANW=300, MAPH=396, EX0=306;   // plan occupies 0..PLANW; the elevation strip starts at EX0
 let MAPW=384;                         // total width, set per redraw from how far the strip actually reaches
@@ -267,8 +267,8 @@ const F=v=>(+v).toFixed(1);
 function hnd(k,x,y,inv){ const i=HND.length; HND.push({k,inv}); return `<circle class="h" data-i="${i}" cx="${F(x)}" cy="${F(y)}" r="3.2"><title>${META[k].label}</title></circle>`; }
 function hnd2(kx,ky,x,y,invx,invy){       // one grip, two axes: across sets kx, along sets ky
   const i=HND.length; HND.push({kx,ky,invx,invy});
-  return `<circle class="h two" data-i="${i}" cx="${F(x)}" cy="${F(y)}" r="4"><title>${META[ky].label} · ${META[kx].label}</title></circle>`; }
-function hndBox(k,x,y,w,h,inv){           // the shape itself is the grip — drag the body, not a dot beside it
+  return `<circle class="h two" data-i="${i}" cx="${F(x)}" cy="${F(y)}" r="4"><title>${META[ky].label} - ${META[kx].label}</title></circle>`; }
+function hndBox(k,x,y,w,h,inv){           // the shape itself is the grip - drag the body, not a dot beside it
   const i=HND.length; HND.push({k,inv});
   return `<rect class="h grab" data-i="${i}" x="${F(x)}" y="${F(y)}" width="${F(Math.max(w,4))}" height="${F(Math.max(h,6))}"><title>${META[k].label}</title></rect>`; }
 function reg(c,d){ return `<path class="reg${sel===c?' on':''}" data-c="${c}" d="${d}"/>`; }
@@ -301,7 +301,7 @@ function headPath(g,s){
 function wAt(g,i){ return g.hw*(P.widthThoraxFront+(P.widthThoraxRear-P.widthThoraxFront)*(g.seg>1?i/(g.seg-1):0)); }
 function prong(g,which,x0,yr,dir,sc,base){   // dir: -1 forward off the head, +1 rearward off the tail
   // The fork is always drawn, tines or none: dotted when it is only a proposal, solid once it is real geometry.
-  // Two grips, always grabbable — the shaft (stem) and the tines (length across, splay along) — plus a stepper
+  // Two grips, always grabbable - the shaft (stem) and the tines (length across, splay along) - plus a stepper
   // for the count, so none of it depends on knowing that the prong can be tapped.
   const d=Math.round(P[which+'Prongs']||0), key=which+'ProngLen', cell=(which==='head'?'a1':'a3'), unit=base*sc;
   const SMIN=11, Lp=Math.max(P[key]*unit,20), st=P[which+'ProngStem']*Lp, sp=P[which+'ProngSplay'];
@@ -319,7 +319,7 @@ function prong(g,which,x0,yr,dir,sc,base){   // dir: -1 forward off the head, +1
   }
   if(st>2) ink+=`<circle class="dim" cx="${F(x0)}" cy="${F(ys)}" r="2.2"/>`;      // the knot, where the shaft splits
   const sx=x0-36, sy=yr+dir*15;
-  ink+=`<rect class="step" data-pstep="${which}Prongs:-1" x="${F(sx)}" y="${F(sy-7)}" width="14" height="14"/><text class="steplab" x="${F(sx+7)}" y="${F(sy+4)}" text-anchor="middle">–</text>`
+  ink+=`<rect class="step" data-pstep="${which}Prongs:-1" x="${F(sx)}" y="${F(sy-7)}" width="14" height="14"/><text class="steplab" x="${F(sx+7)}" y="${F(sy+4)}" text-anchor="middle">-</text>`
        + `<rect class="step" data-pstep="${which}Prongs:1" x="${F(sx+16)}" y="${F(sy-7)}" width="14" height="14"/><text class="steplab" x="${F(sx+23)}" y="${F(sy+4)}" text-anchor="middle">+</text>`
        + mt(sx, sy-11, d+' tine'+(d===1?'':'s'));
   return [ink, `<path class="hit" data-cyc="${which}Prongs" data-c="${cell}" d="M${F(x0)} ${F(yr)} L${F(x0)} ${F(yr+dir*Lp)}"/>`,
@@ -360,7 +360,7 @@ function drawMap(){
     o.push(`<circle class="ghost" cx="${F(xe)}" cy="${F(ye)}" r="4"/>`, `<circle class="hit" data-c="a1" cx="${F(xe)}" cy="${F(ye)}" r="4" stroke-width="8"/>`,
            hnd('eyeSize',xe+4,ye,q=>(q.x-xe)/hw));
   }
-  // genal spine: the long horn sweeping back off the cheek. The tip grip carries both of its numbers —
+  // genal spine: the long horn sweeping back off the cheek. The tip grip carries both of its numbers -
   // drag along the body for length, across it for curve (signed: out past the pleurae, or in over them).
   const Lg=P.genalSpine*hL*g.scGenal, gx=hw*0.96, gyr=headY(g,0.96,'rear');
   const outRoom=PLANW-16-(cx+gx), inRoom=Math.max(gx-a-6,8);
@@ -375,8 +375,8 @@ function drawMap(){
     o.push(`<path class="ghost" d="M${F(cx+gx)} ${F(gyr)} L${F(cx+gx+7)} ${F(gyr+9)}"/>`,
            hnd2('genalCurve','genalSpine',cx+gx+7,gyr+9,q=>invCurve(q,12),q=>(q.y-gyr)/(hL*g.scGenal)));
   }
-  // pleural spine: the sketch's outward arrow. Its tip is polar about the blade root — how far out is the
-  // length, how far back is the sweep — so the one grip carries both numbers, as the genal horn's does.
+  // pleural spine: the sketch's outward arrow. Its tip is polar about the blade root - how far out is the
+  // length, how far back is the sweep - so the one grip carries both numbers, as the genal horn's does.
   const im=Math.floor(seg/2), ym=yH+im*p+p*0.42, wm=wAt(g,im), Ls=P.spineBase*hw*g.scSpine, sa=P.spineSweep*Math.PI/180;
   const sx=cx+wm+Ls*Math.cos(sa), sy=ym+Ls*Math.sin(sa);
   const invSlen=q=>Math.hypot(q.x-(cx+wm),q.y-ym)/(hw*g.scSpine);
@@ -385,7 +385,7 @@ function drawMap(){
                    `<path class="hit" data-c="a2" d="M${F(cx+wm)} ${F(ym)} L${F(sx)} ${F(sy)}"/>`); }
   else o.push(`<path class="ghost" d="M${F(cx+wm)} ${F(ym)} L${F(cx+wm+8)} ${F(ym+5)}"/>`);
   o.push(hnd2('spineSweep','spineBase',Ls>2?sx:cx+wm+8,Ls>2?sy:ym+5,invSweep,invSlen));
-  // tail forks: same polar grip — reach from the tail tip is the length, angle off the midline is the splay
+  // tail forks: same polar grip - reach from the tail tip is the length, angle off the midline is the splay
   const Lf=P.pygSpine*tL*g.scFork, fs=P.pygSplay*Math.PI/180;
   const invFlen=q=>Math.hypot(q.x-cx,Math.max(q.y-y1,0))/(tL*g.scFork);
   const invSplay=q=>Math.atan2(Math.max(q.x-cx,0),Math.max(q.y-y1,0.001))*180/Math.PI;
@@ -411,10 +411,10 @@ function drawMap(){
   o.push(`<text x="${F(ox)}" y="${F(y0-16)}" text-anchor="middle">${Math.round(P.length)} mm</text>`, hnd('length',ox,y1,q=>q.v0+q.dy*0.9));
   // segment count: the sketch's ring stack, one tap per ring
   const sy0=yH+26;                         // below the width caliper, which now crosses the shoulder
-  o.push(`<rect class="step" data-seg="-1" x="${F(PLANW-42)}" y="${F(sy0)}" width="16" height="16"/><text class="steplab" x="${F(PLANW-34)}" y="${F(sy0+12)}" text-anchor="middle">–</text>`,
+  o.push(`<rect class="step" data-seg="-1" x="${F(PLANW-42)}" y="${F(sy0)}" width="16" height="16"/><text class="steplab" x="${F(PLANW-34)}" y="${F(sy0+12)}" text-anchor="middle">-</text>`,
          `<rect class="step" data-seg="1" x="${F(PLANW-22)}" y="${F(sy0)}" width="16" height="16"/><text class="steplab" x="${F(PLANW-14)}" y="${F(sy0+12)}" text-anchor="middle">+</text>`,
          mt(PLANW-42,sy0+26,seg+' seg'));
-  // lens packing: the lattice the eye is actually built with, three rows of it, with a dial for the gap —
+  // lens packing: the lattice the eye is actually built with, three rows of it, with a dial for the gap -
   // swept left (lenses touching, holochroal) to right (wide sclera between them).
   const eRp=Math.max(P.eyeSize*P.width/2,0.1), pp=11, lr=pp/(2*(1+P.lensGap)), lx=12, ly=MAPH-34;
   for(let r0=0;r0<3;r0++) for(let c0=0;c0<6;c0++){
@@ -422,7 +422,7 @@ function drawMap(){
     if(ox2>lx+6.5*pp) continue;
     o.push(`<circle class="lens" cx="${F(ox2)}" cy="${F(oy2)}" r="${F(lr)}"/>`);
   }
-  o.push(mt(lx,ly-9,'eye packing · '+(P.lensD*eRp).toFixed(2)+' mm'));
+  o.push(mt(lx,ly-9,'eye packing - '+(P.lensD*eRp).toFixed(2)+' mm'));
   o.push(`<rect class="hit" data-c="a1" x="${F(lx-4)}" y="${F(ly-14)}" width="${F(7*pp)}" height="${F(3*pp)}" stroke-width="0" fill="#000" fill-opacity="0.001" style="pointer-events:all"/>`);
   const gm=META.lensGap, dcx=lx+7*pp+16, dcy=ly+pp, dr=12;                      // the gap dial
   const gt=Math.PI*(1-(P.lensGap-gm.lo)/(gm.hi-gm.lo));                         // pi at the low end, 0 at the high
@@ -455,7 +455,7 @@ function drawMap(){
          + `<rect class="mir" x="${F(zx(bz))}" y="${F(by-0.5*barH)}" width="${F(barPx)}" height="${F(barH)}"/>`
          + hndBox('eyeStalk',zx(bz),by-0.5*barH,barPx,barH,q=>(zmm(q)-eb-0.5*barL*lc)/Math.max(lc,0.25)/eRmm)
          + `</g>`);
-  // the lean protractor: a quadrant at the eye's root, always there — a sessile eye tips about its base on the
+  // the lean protractor: a quadrant at the eye's root, always there - a sessile eye tips about its base on the
   // cheek, a stalked one about the foot of its stalk, and the builder does the same.
   const cxp=zx(eb), cyp=ye, rr=Math.max(Math.min((stk+barL)*pxmm*0.78, cyp-10), 22);
   o.push(`<path class="dim" d="M${F(cxp+rr)} ${F(cyp)} A${F(rr)} ${F(rr)} 0 0 0 ${F(cxp)} ${F(cyp-rr)}"/>`);
@@ -473,7 +473,7 @@ function drawMap(){
   o.push(hnd('eyeHeight',zx(bz)+barPx*lc,by-barPx*ls,q=>(zmm(q)-bz)/Math.max(lc,0.25)/eRmm));
   // dorsal spines: they stand out of the plan, so this is the only view that can show them. Drawn at the pitch
   // the builder uses (axial 60° off the body line, occipital 55°). `unit` converts the drag back into the key's
-  // own units — axialSpine is a fraction of relief, occipitalSpine a fraction of head length.
+  // own units - axialSpine is a fraction of relief, occipitalSpine a fraction of head length.
   const spineAt=(k,len,unit,zc,yc,pitch,grip)=>{
     const s=Math.sin(pitch), c=Math.cos(pitch), real=len>0.3, px=real?len*pxmm:9;
     o.push(`<path class="${real?'ink':'ghost'}" d="M${F(zx(zc))} ${F(yc)} L${F(zx(zc)+px*s)} ${F(yc+px*c)}"/>`);
@@ -500,7 +500,7 @@ const keysOf=H=>H.k?[H.k]:[H.kx,H.ky];
 function flashCtrl(k){ const el=C.querySelector('.ctrl[data-k="'+k+'"]'); if(!el) return;
   if(!el.classList.contains('flash')) el.scrollIntoView({block:'nearest'});   // scroll into view once, not on every drag move
   el.classList.add('flash'); clearTimeout(el._ft); el._ft=setTimeout(()=>el.classList.remove('flash'),650); }
-function dragShow(e,H){ const dt=$('dragtip'); dt.textContent=keysOf(H).filter(k=>k&&META[k]).map(k=>META[k].label+' '+fmt(P[k],META[k])).join('  ·  ');
+function dragShow(e,H){ const dt=$('dragtip'); dt.textContent=keysOf(H).filter(k=>k&&META[k]).map(k=>META[k].label+' '+fmt(P[k],META[k])).join('  - ');
   dt.style.left=(e.clientX+13)+'px'; dt.style.top=(e.clientY-10)+'px'; dt.style.display='block'; keysOf(H).forEach(k=>k&&flashCtrl(k)); }
 function dragHide(){ $('dragtip').style.display='none'; }
 // --- one-time hint: the diagram is the control
@@ -579,12 +579,12 @@ function classify(){ clearTimeout(classifT); classifT=setTimeout(async()=>{
   try{ const r=await post('/api/classify',{P}); const el=$('classif'); if(!el) return;
     const names=(r.characters||[]).map(c=>c.name);
     el.innerHTML = names.length
-      ? `<span class="lab">Characters</span>${names.join(' · ')}` + (r.nearest?` <span class="reads">→ reads as <b>${r.nearest}</b></span>`:'')
+      ? `<span class="lab">Characters</span>${names.join(' - ')}` + (r.nearest?` <span class="reads">→ reads as <b>${r.nearest}</b></span>`:'')
       : `<span class="lab">Characters</span><span style="opacity:.6">none named</span>`;
   }catch(_){} },300); }
 $('buildBtn').onclick=()=>build();
 function status(s,busy){$('status').textContent=s; $('status').className='status'+(busy?' busy':'');}
-function readout(){ const m=lastMeas; let h=`<b>${ps.value}</b> · ${Math.round(P.segCount)} segments · ${Math.round(P.length)} mm`; if(m&&m.theta_joint_deg!=null){ const w={sphaeroidal:'closes, margins meet',double:'closes, tail under head',spiral:'closes, tail past head',discoidal:'closes flat',open:'stops on itself'}[m.enroll_class]||m.enroll_class; h+=`<br>${m.theta_joint_deg}° per joint · ${m.total_deg}° total · ${w}`; if(m.stopped_by&&m.stopped_by.length) h+=`<br>limited by ${kin.names[m.stopped_by[0][0]]}–${kin.names[m.stopped_by[0][1]]}`; h+=`<br>instrument ${m.instrument} · bevel ${m.bevel_built_deg}°`; } else if(m) h+=`<br>${m.limited_by}: ${m.reason||''}`; $('readout').innerHTML=h; }
+function readout(){ const m=lastMeas; let h=`<b>${ps.value}</b> - ${Math.round(P.segCount)} segments - ${Math.round(P.length)} mm`; if(m&&m.theta_joint_deg!=null){ const w={sphaeroidal:'closes, margins meet',double:'closes, tail under head',spiral:'closes, tail past head',discoidal:'closes flat',open:'stops on itself'}[m.enroll_class]||m.enroll_class; h+=`<br>${m.theta_joint_deg}° per joint - ${m.total_deg}° total - ${w}`; if(m.stopped_by&&m.stopped_by.length) h+=`<br>limited by ${kin.names[m.stopped_by[0][0]]}-${kin.names[m.stopped_by[0][1]]}`; h+=`<br>instrument ${m.instrument} - bevel ${m.bevel_built_deg}°`; } else if(m) h+=`<br>${m.limited_by}: ${m.reason||''}`; $('readout').innerHTML=h; }
 // ---- build -> sheet. Both endpoints can 500 (a build that raises before the per-part catch, a sheet that
 // fails in matplotlib); one retry covers the transient case, and the reason is put on the status line rather
 // than left as an unhandled rejection with the status stuck on 'building'.
@@ -624,7 +624,7 @@ async function retryPost(url,what,tries=2,body=null){  // covers a dropped conne
   for(let a=1;;a++){                                   // widening gap; a request that fails on the geometry just fails
     try{ return await post(url,body||{P}); }
     catch(ex){ if(a>=tries) throw ex;
-      status(`${what} failed · retry ${a}/${tries-1}`,true); await new Promise(r=>setTimeout(r,900*a)); } } }
+      status(`${what} failed - retry ${a}/${tries-1}`,true); await new Promise(r=>setTimeout(r,900*a)); } } }
 // ---- loading: a trilobite enrolling and unrolling (the paper's own subject), blueprint style. A chain of tergites,
 // the head fixed, each joint curling about the one ahead; re-centred and re-fit every frame so it stays framed as it
 // rolls into a ball and back. Pure SVG + requestAnimationFrame; runs only while a build is in flight.
@@ -661,9 +661,9 @@ async function build(){ if(building){pending=true;return;} building=true; status
   try{
     let man;
     try{ man=await retryPost('/api/build','build',2,buildBody()); }
-    catch(ex){ status('build failed · '+why(ex),false); return; }
+    catch(ex){ status('build failed - '+why(ex),false); return; }
     kin=man.kinematics; buildKey=man.key; readout();
-    status(`built in ${man.build_seconds}s · ${man.print.print_valid?'printable':(man.print.violations||man.print.notes||['not printable']).join('; ')}`,false);
+    status(`built in ${man.build_seconds}s - ${man.print.print_valid?'printable':(man.print.violations||man.print.notes||['not printable']).join('; ')}`,false);
     if(mode==='edit') await toSheet(); else if(mode==='3d') await load3d(man); else await sheet();   // building from the editor shows the result on the sheet
   } finally { building=false; loadingOff(); if(pending){pending=false; build();} } }
 let sheetWait=null;                        // resolved true by the img's load, false by its error or the timeout,
@@ -673,13 +673,13 @@ async function sheet(){ status('drawing sheet',true);
     let r;
     try{ r=await retryPost('/api/sheet','sheet',2,{P,joint,cmap,head:joint==='isopod'?headArg():null,body:joint==='isopod'?bodyArg():null}); if(!r.url) throw new Error(r.error||'no sheet'); }
     catch(ex){
-      if(a>=SHEET_TRIES){ status('sheet failed · '+why(ex),false); return; }
-      status(`sheet failed · retry ${a}/${SHEET_TRIES-1}`,true); await new Promise(z=>setTimeout(z,800*a)); continue; }
+      if(a>=SHEET_TRIES){ status('sheet failed - '+why(ex),false); return; }
+      status(`sheet failed - retry ${a}/${SHEET_TRIES-1}`,true); await new Promise(z=>setTimeout(z,800*a)); continue; }
     const ok=await new Promise(res=>{ sheetWait=res; setTimeout(()=>{ if(sheetWait===res){ sheetWait=null; res(false); } },8000);
                                       $('sheet').style.opacity=0; $('sheet').src=r.url+'?'+Date.now(); });   // fade the new sheet in on load
-    if(ok){ status(r.measured?'sheet · measured':'sheet',false); return; }       // the image itself can fail or stall
+    if(ok){ status(r.measured?'sheet - measured':'sheet',false); return; }       // the image itself can fail or stall
     if(a>=SHEET_TRIES){ status('sheet image failed',false); return; }
-    status(`sheet image failed · retry ${a}/${SHEET_TRIES-1}`,true); await new Promise(z=>setTimeout(z,800*a));
+    status(`sheet image failed - retry ${a}/${SHEET_TRIES-1}`,true); await new Promise(z=>setTimeout(z,800*a));
   } }
 const SHEET_ASPECT=16.5/11.7, V3D=[0.80,0.585,0.13,0.08];        // blueprint.sheet is A3 landscape; the title block leaves this box blank
 function placeView3D(){ const b=$('view3d'); if(mode!=='sheet'){ b.className='corner'; return; } b.className='';
@@ -690,11 +690,11 @@ const sheetDone=ok=>{ if(sheetWait){ const r=sheetWait; sheetWait=null; r(ok); }
 $('sheet').onload=()=>{ $('sheet').style.opacity=1; $('view3d').style.display='flex'; placeView3D(); sheetDone(true); };   // fade in; the toggle appears with the sheet it sits on
 $('sheet').onerror=()=>sheetDone(false);                                                      // sheet() decides whether to try again
 $('dl').onclick=()=>{ if(buildKey) window.location='/api/stl/'+buildKey; };
-// dorsal homologous landmarks (geometric morphometrics): a .tps for geomorph/tpsDig — computed from params, no build needed
+// dorsal homologous landmarks (geometric morphometrics): a .tps for geomorph/tpsDig - computed from params, no build needed
 $('tps').onclick=async()=>{ try{ const r=await fetch('/api/tps',{method:'POST',body:JSON.stringify({P})}); if(!r.ok) throw new Error(r.status);
   const u=URL.createObjectURL(await r.blob()), a=document.createElement('a'); a.href=u; a.download='trilobite-'+ps.value+'-landmarks.tps'; a.click();
   setTimeout(()=>URL.revokeObjectURL(u),5000); status('landmarks saved',false);
-}catch(ex){ status('tps failed · '+why(ex),false); } };
+}catch(ex){ status('tps failed - '+why(ex),false); } };
 // shareable permalink: the full parameter set encoded in the URL, so a specific animal can be bookmarked or sent
 function shareURL(){ try{ const d={}; for(const k in P) if(k in DFLT && P[k]!==DFLT[k]) d[k]=P[k];   // only the params changed from the schema defaults
   let u=location.origin+location.pathname+'?p='+encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(d)))));
@@ -720,8 +720,8 @@ const _jq=_u.get('joint');   // ?joint=pin deep link (the agent interface's link
 // then rebuilds; the style's outline and sculpt travel as the build option `head`.
 const HEADS_READY=fetch('/api/head_styles').then(r=>r.json()).then(L=>{ HEADS=L; const s=$('headstyle');
   const g=L.filter(h=>!h.saved), v=L.filter(h=>h.saved);
-  s.innerHTML=g.map(h=>`<option value="${h.name}" title="${(h.doc||'').replace(/"/g,'&quot;')}">${h.name}${h.p?' · p. '+h.p:''}</option>`).join('')+
-    (v.length?`<optgroup label="saved">${v.map(h=>`<option value="${h.name}" title="${(h.doc||'').replace(/"/g,'&quot;')}">${h.name} · ${h.style}</option>`).join('')}</optgroup>`:'');
+  s.innerHTML=g.map(h=>`<option value="${h.name}" title="${(h.doc||'').replace(/"/g,'&quot;')}">${h.name}${h.p?' - p. '+h.p:''}</option>`).join('')+
+    (v.length?`<optgroup label="saved">${v.map(h=>`<option value="${h.name}" title="${(h.doc||'').replace(/"/g,'&quot;')}">${h.name} - ${h.style}</option>`).join('')}</optgroup>`:'');
   if(!L.some(h=>h.name===headStyle)) headStyle='crescent'; s.value=headStyle; }).catch(()=>{});
 $('headstyle').onchange=async e=>{ headStyle=e.target.value; const h=HEADS.find(x=>x.name===headStyle);
   if(h&&h.saved){ await applyMacro(); }                                       // a head from the editor: its projection (style values + outline + face)
@@ -735,13 +735,13 @@ async function applyMacro(){ const h=HEADS.find(x=>x.name===headStyle); const sa
   try{ const r=await fetch('/api/macro',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, head:savedHead?headStyle:null, body:b})});
     const j=await r.json(); if(!r.ok) throw new Error(j.error||'macro failed'); let n=0; for(const k in j.P) if(k in P){ P[k]=j.P[k]; n++; }
     if(n&&typeof redraw==='function') redraw();
-    status(`macro mirrors ${[b?'body '+(bodyName||'(edited)'):'',savedHead?'head '+headStyle:''].filter(Boolean).join(' + ')} · ${n} parameters`,false); return n; }
-  catch(ex){ status('macro mirror failed · '+why(ex),false); return 0; } }
+    status(`macro mirrors ${[b?'body '+(bodyName||'(edited)'):'',savedHead?'head '+headStyle:''].filter(Boolean).join(' + ')} - ${n} parameters`,false); return n; }
+  catch(ex){ status('macro mirror failed - '+why(ex),false); return 0; } }
 $('fill').onchange=e=>{ fillMm=Math.max(0,+e.target.value||0); if(joint==='pin') build(); };
-// ---- 3D — v1's model view: black fill with white feature edges (blueprint look) or shaded (model look), Z-up root, grid
+// ---- 3D - v1's model view: black fill with white feature edges (blueprint look) or shaded (model look), Z-up root, grid
 let scene,cam,ren,ctl,loader,root,grid,look='blueprint';   // 3D default: black & white blueprint (a colormap pick switches to Relief)
 // flexion pivot for the live pose: the instrument hinge for pin builds (y=0, z=hinge_z), the print
-// pivot for ball/flexi builds (behind the joint plane, above the bed) — set per build in load3d/measure.
+// pivot for ball/flexi builds (behind the joint plane, above the bed) - set per build in load3d/measure.
 let posePivotY=0, posePivotZ=null;
 const fillMat=new THREE.MeshBasicMaterial({color:0x000000,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
 const inkLine=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.9});
@@ -796,7 +796,7 @@ $('rbdir').onclick=()=>{ rbU.uDir.value*=-1; $('rbdir').classList.toggle('flip')
 $('rbmode').onclick=e=>{ const m=e.target.dataset.m; if(!m) return; rbU.uMode.value=(m==='roll'?1:0);
   [...$('rbmode').children].forEach(s=>s.classList.toggle('on',s.dataset.m===m)); };
 // record one seamless loop off the live canvas into a WebM. Flow: one full hue cycle (so the first and last frame
-// match). Enrollment: one roll out-and-back. MediaRecorder on captureStream — no libraries, no server round-trip.
+// match). Enrollment: one roll out-and-back. MediaRecorder on captureStream - no libraries, no server round-trip.
 let recording=false;
 async function recordLoop(){ if(recording||!threeReady) return;
   if(!window.MediaRecorder||!ren.domElement.captureStream){ status('recording unsupported here',false); return; }
@@ -816,8 +816,8 @@ async function recordLoop(){ if(recording||!threeReady) return;
     if(roll) pose(+$('roll').value);                                           // restore the posed angle the slider was at
     const blob=new Blob(chunks,{type:mime}), url=URL.createObjectURL(blob);
     const a=document.createElement('a'); a.href=url; a.download=`trilobite-${ps.value}-rainbow.webm`; a.click();
-    setTimeout(()=>URL.revokeObjectURL(url),15000); status('loop saved · '+(blob.size/1e6).toFixed(1)+' MB',false);
-  }catch(ex){ cancelAnimationFrame(rafid); status('record failed · '+why(ex),false); }
+    setTimeout(()=>URL.revokeObjectURL(url),15000); status('loop saved - '+(blob.size/1e6).toFixed(1)+' MB',false);
+  }catch(ex){ cancelAnimationFrame(rafid); status('record failed - '+why(ex),false); }
   finally{ recording=false; btn.disabled=false; btn.textContent=label; } }
 $('rbrec').onclick=recordLoop;
 function init3d(){ if(threeReady) return; threeReady=true; const view=$('stage3d'); scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
@@ -838,7 +838,7 @@ function setLook(l){ look=l; [...$('look').children].forEach(s=>s.classList.togg
   scene.remove(grid); grid=new THREE.GridHelper(400,40,0x2a2a2a,0x161616); grid.position.y=-0.5; scene.add(grid); updateRbCtl(); }
 $('look').onclick=e=>{ if(e.target.dataset.look) setLook(e.target.dataset.look); };
 async function load3d(man){ init3d(); root.clear(); partMeshes={};
-  if(!man){ try{ man=await post('/api/build',buildBody()); } catch(ex){ status('3D failed · '+why(ex),false); return; } }
+  if(!man){ try{ man=await post('/api/build',buildBody()); } catch(ex){ status('3D failed - '+why(ex),false); return; } }
   kin=man.kinematics;
   if(man.print_joint){ posePivotY=man.print_joint.pivot_y_beyond_joint; posePivotZ=man.print_joint.pivot_z; }   // any print joint (ball/flexi); pin has none
   else { posePivotY=0; posePivotZ=null; }
@@ -867,14 +867,14 @@ function toEdit(){ mode='edit'; $('sheet').style.display='none'; $('stage3d').st
 $('editor').onclick=()=>{ if(mode==='edit') toSheet(); else toEdit(); };
 $('view3d').onclick=async()=>{ if(mode==='sheet') await to3D(true);
   else await toSheet(); };
-function rollLabel(v){ const mx=+$('roll').max||1; return Math.round(100*v/mx)+'% · '+(+v).toFixed(1)+'° / joint'; }
+function rollLabel(v){ const mx=+$('roll').max||1; return Math.round(100*v/mx)+'% - '+(+v).toFixed(1)+'° / joint'; }
 $('roll').oninput=e=>{ $('rollval').textContent=rollLabel(+e.target.value); pose(+e.target.value); };
 // ---- measure
 $('go').onclick=async()=>{ status('measuring',true); $('go').disabled=true;
-  try{ lastMeas=await post('/api/measure',{P}); kin=lastMeas.kinematics; posePivotY=0; posePivotZ=null; readout(); status(`measured · ${lastMeas.limited_by}`,false);
+  try{ lastMeas=await post('/api/measure',{P}); kin=lastMeas.kinematics; posePivotY=0; posePivotZ=null; readout(); status(`measured - ${lastMeas.limited_by}`,false);
     const th=lastMeas.theta_joint_deg; if(th!=null){ $('roll').max=Math.max(th,1); $('roll').value=th; $('rollval').textContent=rollLabel(th); }
     if(th!=null){ let x=0; const step=()=>{x=Math.min(th,x+th/60); pose(x); if(x<th) requestAnimationFrame(step);}; step(); }
-  } catch(ex){ status('measure failed · '+why(ex),false); }
+  } catch(ex){ status('measure failed - '+why(ex),false); }
   finally { $('go').disabled=false; } };
 $('roll').max=P.maxAngle; $('roll').value=P.maxAngle; $('rollval').textContent=rollLabel(P.maxAngle);
 if(_jq&&['pin','flexi','ball','isopod'].includes(_jq)){ joint=_jq; [...$('jointseg').querySelectorAll('span[data-joint]')].forEach(x=>x.classList.toggle('on',x.dataset.joint===_jq)); $('fillwrap').classList.toggle('off',_jq!=='pin'); $('headwrap').classList.toggle('off',_jq!=='isopod'); }

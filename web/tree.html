@@ -7,8 +7,8 @@
 <style>
   :root{
     color-scheme: dark;
-    --bg:#000; --grid:#131313; --ink:#f0f0f0; --ink-dim:#8a8a8a; --ink-faint:#3a3a3a; --rule:#f0f0f0; --glass:rgba(0,0,0,.85);
-    --mono:"DejaVu Sans Mono", Menlo, Consolas, "Liberation Mono", ui-monospace, monospace;
+ --bg:#000; --grid:#131313; --ink:#f0f0f0; --ink-dim:#8a8a8a; --ink-faint:#3a3a3a; --rule:#f0f0f0; --glass:rgba(0,0,0,.85);
+ --mono:"DejaVu Sans Mono", Menlo, Consolas, "Liberation Mono", ui-monospace, monospace;
   }
   html,body{height:100%}
   body{background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:12px;margin:0;padding:0;overflow:hidden;position:relative;
@@ -164,8 +164,8 @@
     <dt>Chars</dt><dd id="p-feat"></dd>
   </dl>
   <dl>
-    <dt>Fits</dt><dd id="p-fits"><span class="dim">—</span></dd>
-    <dt>Window</dt><dd id="p-win"><span class="dim">—</span></dd>
+    <dt>Fits</dt><dd id="p-fits"><span class="dim">-</span></dd>
+    <dt>Window</dt><dd id="p-win"><span class="dim">-</span></dd>
   </dl>
   <div class="btns">
     <a class="btn primary" id="p-open" href="#open">Open</a>
@@ -274,15 +274,15 @@ N.forEach(n=>{ if(n.parent) byId[n.parent].kids.push(n); });
 // (the brim is a shaped head, not a parameter); param is what the hover text names.
 const FEAT = {
   eye:   {name:"holochroal eyes",   param:"lensD",          p:23, key:"holochroalEyes"},
-  schiz: {name:"schizochroal eyes", param:"lensD·lensGap",  p:73, key:"schizochroalEyes"},
+  schiz: {name:"schizochroal eyes", param:"lensD-lensGap",  p:73, key:"schizochroalEyes"},
   blind: {name:"eyes lost",         param:"eyeSize=0",      p:43, key:"eyesLost"},
-  big:   {name:"pelagic eyes",      param:"eyeSize·eyeArc", p:44, key:"pelagicEyes"},
+  big:   {name:"pelagic eyes",      param:"eyeSize-eyeArc", p:44, key:"pelagicEyes"},
   genal: {name:"genal spines",      param:"genalSpine",     p:41, key:"genalSpines"},
   pleur: {name:"pleural spines",    param:"spineBase",      p:42, key:"pleuralSpines"},
   pyg:   {name:"pygidial spines",   param:"pygSpine",       p:42, key:"pygidialSpines"},
   iso:   {name:"isopygous",         param:"pygFrac",        p:27, key:"isopygous"},
   eff:   {name:"effaced",           param:"effacement",     p:42, key:"effaced"},
-  olen:  {name:"olenimorph",        param:"segCount·width", p:44, key:"olenimorph"},
+  olen:  {name:"olenimorph",        param:"segCount-width", p:44, key:"olenimorph"},
   brim:  {name:"cephalic brim",     param:"head = harpes",  p:72, head:"harpes"},
   vinc:  {name:"vincular furrow",   param:null,             p:31},
   nat:   {name:"natant hypostome",  param:null,             p:7},
@@ -366,7 +366,7 @@ N.forEach((n,i)=>{
 });
 
 // ---- visual atlas: draw each modelled taxon's dorsal silhouette at its node, from the generator's own params.
-// Client-side (no build): a clean body outline — rounded cephalon, tapering thorax by segment, rounded pygidium.
+// Client-side (no build): a clean body outline - rounded cephalon, tapering thorax by segment, rounded pygidium.
 function silhouette(P){
   const g=(k,d)=>{const v=+P[k]; return isFinite(v)?v:d;}, F=v=>(+v).toFixed(1);
   const L=100, hw=Math.max(10, Math.min(46, 0.5*L*g('width',70)/g('length',150)));
@@ -448,7 +448,7 @@ const LAND = (()=>{ const bits = s => { const b=atob(s); return i => (b.charCode
 // approximate modern ones added here, and the seven Carolinites dots are read off the guide's small map (p.47).
 // who = tree lineages the guide ties to the site; t = date used for the time cursor (Ma, the guide's scale).
 const SITES = [
-  {name:"Burgess Shale", plate:"Laurentia", place:"British Columbia, Canada", lat:51.4, lon:-116.5, t:507, age:"Middle Cambrian", p:"35–36",
+  {name:"Burgess Shale", plate:"Laurentia", place:"British Columbia, Canada", lat:51.4, lon:-116.5, t:507, age:"Middle Cambrian", p:"35-36",
    who:["corynexochida"], taxa:"Olenoides serratus"},
   {name:"Pontyfenni Formation", plate:"Avalonia", place:"Whitland, South Wales", lat:51.8, lon:-4.6, t:470, age:"Ordovician (late Arenig)", p:"40",
    who:["asaphida"], taxa:"Cyclopyge, Pricyclopyge, Microparia, Degamella, Illaenopsis, Bergamia, Ampyx; also Ormathops, Colpocoryphe, Dindymene, Shumardia"},
@@ -456,7 +456,7 @@ const SITES = [
    who:["asaphida"], taxa:"Asaphus platyurus"},
   {name:"Haragan Formation", plate:"Laurentia", place:"Oklahoma, USA", lat:34.4, lon:-96.8, t:410, age:"Devonian", p:"45",
    who:["odontopleurida","dalmanitoidea"], taxa:"Dicranurus hamatus, Huntoniatonia"},
-  {name:"Hamar Laghdad", plate:"Gondwana", place:"Atlas Mountains, Morocco", lat:31.4, lon:-4.1, t:405, age:"Devonian", p:"45–46",
+  {name:"Hamar Laghdad", plate:"Gondwana", place:"Atlas Mountains, Morocco", lat:31.4, lon:-4.1, t:405, age:"Devonian", p:"45-46",
    who:["odontopleurida","dalmanitoidea","calymenina","illaenina","proetida"], taxa:"Dicranurus monstrosus, Zlichovaspis; Moroccan shelf: Digonus, Scutellum, Lepidoproetus, Odontochile, Otarion"},
   ...[["western Canada",53,-118,"Laurentia"],["western USA",40,-115,"Laurentia"],["Spitsbergen",79,16,"Laurentia"],["north-east Siberia",67,135,"Siberia"],["south China",28,111,"South China"],["western Australia",-22,128,"Gondwana"],["eastern Australia",-24,141,"Gondwana"]]
     .map(([place,lat,lon,plate])=>({name:"Carolinites", plate, place, lat, lon, t:480, age:"Early Ordovician", p:"47", who:["proetida"], taxa:"Carolinites genacinaca (the widest-ranging trilobite)", small:true})),
@@ -760,14 +760,14 @@ function locate(){
   const fits = want.size ? N.filter(n=>[...want].every(f=>n.cum.has(f))) : [];
   N.forEach(n=>{ n.el.classList.toggle('nofit', want.size>0 && !fits.includes(n)); n.el.classList.toggle('fit', fits.includes(n)); });
   const F=document.getElementById('p-fits'), W=document.getElementById('p-win');
-  if(!want.size){ F.innerHTML='<span class="dim">—</span>'; W.innerHTML='<span class="dim">—</span>'; band=null; gBand.setAttribute('d',''); siteFits(null);
+  if(!want.size){ F.innerHTML='<span class="dim">-</span>'; W.innerHTML='<span class="dim">-</span>'; band=null; gBand.setAttribute('d',''); siteFits(null);
     const cur=N.find(m=>m.el.classList.contains('sel')); if(cur) select(cur); return; }   // options cleared: the Open link goes back to the plain preset
-  if(!fits.length){ F.innerHTML='<span class="dim">none</span>'; W.innerHTML='<span class="dim">—</span>'; band=null; gBand.setAttribute('d',''); siteFits([]); return; }
+  if(!fits.length){ F.innerHTML='<span class="dim">none</span>'; W.innerHTML='<span class="dim">-</span>'; band=null; gBand.setAttribute('d',''); siteFits([]); return; }
   const tips = fits.filter(n=>!fits.some(m=>m!==n && m.parent && (function(x){ while(x){ if(x===n) return true; x=byId[x.parent]; } return false; })(byId[m.parent])));
   F.textContent = tips.slice(0,4).map(n=>n.name).join('\u2002\u2002') + (tips.length>4 ? ` +${tips.length-4}` : '');
   const ta=Math.max(...fits.map(n=>n.t0)), tb=Math.min(...fits.map(n=>n.t1));
   const abbr = c => c[0]+' '+LONG[c.slice(1)];
-  W.textContent = abbr(code(SUB,ta))+' – '+abbr(code(END,tb))+`\u2002\u2002${ta}–${tb} Ma`;
+  W.textContent = abbr(code(SUB,ta))+' - '+abbr(code(END,tb))+`\u2002\u2002${ta}-${tb} Ma`;
   band=[ta,tb]; gBand.setAttribute('d', spiralPath(ta,tb,0));                                     // the window: the trunk drawn solid
   // route the panel and its Open button to the fitting lineage whose own model shows the most of what was chosen
   // first where the guide puts the feature on the tree (not merely inherited), then whose model shows it, then one with its own preset
@@ -791,7 +791,7 @@ function selectSite(s){   // a fossil site on the globe: what the guide places t
   document.getElementById('p-range').textContent = s.age;
   document.getElementById('p-parent').innerHTML = `${s.place} <span class="dim">\u2002then ${s.plate}</span>`;
   document.getElementById('p-preset').innerHTML = s.lin.map(m=>m.name).join('\u2002\u2002');
-  document.getElementById('p-reading').innerHTML = dim('—');
+  document.getElementById('p-reading').innerHTML = dim('-');
   document.getElementById('p-diff').innerHTML = dim('Gon p.'+s.p);
   document.getElementById('p-feat').textContent = s.taxa;
   const open=document.getElementById('p-open'); open.textContent = `Open ${anc.id}`; open.href = `/?preset=${anc.id}`;
@@ -805,8 +805,8 @@ function selectEye(x){   // an eye-type node: a preset that opens the generator 
   document.getElementById('p-range').textContent = epochOf(x.t)+'  '+Math.round(x.t)+' Ma';
   document.getElementById('p-parent').innerHTML = '<span class="dim">trilobite-wide</span>';
   document.getElementById('p-preset').innerHTML = x.key;
-  document.getElementById('p-reading').innerHTML = '<span class="dim">—</span>';
-  document.getElementById('p-diff').innerHTML = '<span class="dim">—</span>';
+  document.getElementById('p-reading').innerHTML = '<span class="dim">-</span>';
+  document.getElementById('p-diff').innerHTML = '<span class="dim">-</span>';
   document.getElementById('p-feat').innerHTML = x.name;
   const open=document.getElementById('p-open'); open.textContent='Open'; open.href='/?eye='+encodeURIComponent(x.key);
   document.getElementById('p-child').textContent='Save as child';
@@ -818,12 +818,12 @@ function select(n){
   const abbr = c => c[0]+' '+LONG[c.slice(1)];
   document.getElementById('p-name').textContent = n.name;
   document.getElementById('p-rank').textContent = n.rank;
-  document.getElementById('p-range').textContent = abbr(code(SUB,n.t0))+' – '+abbr(code(END,n.t1));
-  document.getElementById('p-parent').innerHTML = (par?par.name:'<span class="dim">—</span>')+(n.unc?' <span class="dim">?</span>':'');
-  document.getElementById('p-preset').innerHTML = n.has ? `${n.id}.json` : `<span class="dim">—\u2002\u2002from ${anc.id}</span>`;
-  document.getElementById('p-reading').innerHTML = '<span class="dim">—</span>';
-  document.getElementById('p-diff').innerHTML = '<span class="dim">—</span>';
-  document.getElementById('p-feat').innerHTML = n.feats.length ? n.feats.map(f=>FEAT[f].param?FEAT[f].name:`<span class="dim">${FEAT[f].name}</span>`).join('\u2002\u2002') : '<span class="dim">—</span>';
+  document.getElementById('p-range').textContent = abbr(code(SUB,n.t0))+' - '+abbr(code(END,n.t1));
+  document.getElementById('p-parent').innerHTML = (par?par.name:'<span class="dim">-</span>')+(n.unc?' <span class="dim">?</span>':'');
+  document.getElementById('p-preset').innerHTML = n.has ? `${n.id}.json` : `<span class="dim">-\u2002\u2002from ${anc.id}</span>`;
+  document.getElementById('p-reading').innerHTML = '<span class="dim">-</span>';
+  document.getElementById('p-diff').innerHTML = '<span class="dim">-</span>';
+  document.getElementById('p-feat').innerHTML = n.feats.length ? n.feats.map(f=>FEAT[f].param?FEAT[f].name:`<span class="dim">${FEAT[f].name}</span>`).join('\u2002\u2002') : '<span class="dim">-</span>';
   const open=document.getElementById('p-open'); open.textContent = (n.has ? 'Open' : `Open ${anc.id}`) + (want.size ? ' + options' : ''); open.href = openHref(n);
   document.getElementById('p-child').textContent = n.has ? 'Save as child' : `Save as ${n.id}`;
   markSites(n); setTime(n.t0);                              // the point goes to where this lineage begins

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Trilobite · Body</title>
+<title>Trilobite - Body</title>
 <!-- The body editor (10 Oct 2026): the isopod model's body as ONE LIST OF ROWS, head to tail tip, each with its own
      length, width, pleural trajectory and height; rows too short for the joint at the print scale fuse into one
      piece. Surface model (10 Oct 2026, evening): "generator segments" (default) -- each row is the generator's own
@@ -15,7 +15,7 @@
 <script src="/static/p5.min.js"></script>
 <style>
   :root{--bg:#000;--ink:#fff;--mid:#9a9a9a;--line:#262626;--soft:#141414;--accent:#f6704f;--accent-dim:#7a3326;
-        --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"IBM Plex Sans",system-ui,"Helvetica Neue",Arial,sans-serif}
+ --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"IBM Plex Sans",system-ui,"Helvetica Neue",Arial,sans-serif}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:12px;overflow:hidden;-webkit-font-smoothing:antialiased}
   body{display:grid;grid-template-columns:284px 1fr;height:100%}
@@ -44,11 +44,16 @@
   .rowtag{font-size:10px;color:var(--accent);letter-spacing:.06em}
   textarea{width:100%;height:110px;background:var(--bg);color:var(--mid);border:1px solid var(--line);font:11px var(--mono);padding:6px;resize:vertical;display:none}
   input.name{flex:1;background:var(--bg);color:var(--ink);border:none;border-bottom:1px solid var(--line);padding:4px 0;font:inherit}
+  @media (max-width:760px){
+    html,body{height:auto;overflow:auto} body{grid-template-columns:1fr;min-height:100%}
+    #stage{order:0;height:56vh;min-height:300px;border-bottom:1px solid var(--line)}
+    .panel{order:1;border-right:none;overflow:visible;padding:14px 14px 24px} .edits{max-height:none}
+  }
 </style>
 </head>
 <body>
 <div class="panel">
-  <h1><span>Body · editor</span></h1>
+  <h1><span>Body - editor</span></h1>
   <div class="nav"><button id="home" onclick="goHome()" title="back to the generator, keeping this head, preset and body (your edits come too)">home</button><button id="headeditor" onclick="location.href='/head'+(S.head&&S.head!=='crescent'?'?style='+encodeURIComponent(S.head):'')" title="draw the head: plan and elevation with handles">head editor</button></div>
   <div class="hint">One list of rows, head to tail tip. Drag a row's handles; rows too short for the joint fuse (orange).</div>
 
@@ -119,22 +124,22 @@ async function send(){ S.edited=true; renderTable();
   inflight=fetch('/api/body_diagram',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({preset:S.preset, spec:S.spec, head:S.head})})
     .then(r=>r.json()).then(d=>{ if(d.error){ status(d.error,true); return; } S.D=d.diagram; S.H=d.head.diagram; kv(); renderBody(false); renderSliders(false); renderTable(); })
     .catch(e=>status(String(e),true)).finally(()=>{ inflight=null; if(S.pendingSend){ S.pendingSend=false; send(); } }); }
-function kv(){ const D=S.D; $('kv').innerHTML=`<b>${S.savedName?S.savedName:(S.start==='plain'?'plain trilobite':S.preset)}</b> · ${D.model==='slab'?'tergite slab':'generator segments'}<br>rows <b>${D.rows.length}</b> · pieces <b>${D.pieces.length}</b><br>print <b>${D.print_size_mm.length} × ${D.print_size_mm.width} mm</b> · scale <b>${D.scale.toFixed(2)}</b><br>joint min <b>${D.min_joint_mm} mm</b>`+((D.problems||[]).length?`<br><span style="color:var(--accent)">cannot build: ${D.problems.join(' · ')}</span>`:''); $('build').disabled=!!(D.problems||[]).length; }
+function kv(){ const D=S.D; $('kv').innerHTML=`<b>${S.savedName?S.savedName:(S.start==='plain'?'plain trilobite':S.preset)}</b> - ${D.model==='slab'?'tergite slab':'generator segments'}<br>rows <b>${D.rows.length}</b> - pieces <b>${D.pieces.length}</b><br>print <b>${D.print_size_mm.length} × ${D.print_size_mm.width} mm</b> - scale <b>${D.scale.toFixed(2)}</b><br>joint min <b>${D.min_joint_mm} mm</b>`+((D.problems||[]).length?`<br><span style="color:var(--accent)">cannot build: ${D.problems.join(' - ')}</span>`:''); $('build').disabled=!!(D.problems||[]).length; }
 
 // ---------- panel ----------
-function fillPickers(){ const ps=$('preset'); ps.innerHTML=`<option value="plain">plain trilobite</option><optgroup label="presets">${S.presets.map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+(S.saved.length?`<optgroup label="saved bodies">${S.saved.map(b=>`<option value="saved:${b.name}">${b.name} · ${b.preset}</option>`).join('')}</optgroup>`:''); ps.value=S.savedName?'saved:'+S.savedName:(S.start==='plain'?'plain':S.preset); }
+function fillPickers(){ const ps=$('preset'); ps.innerHTML=`<option value="plain">plain trilobite</option><optgroup label="presets">${S.presets.map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+(S.saved.length?`<optgroup label="saved bodies">${S.saved.map(b=>`<option value="saved:${b.name}">${b.name} - ${b.preset}</option>`).join('')}</optgroup>`:''); ps.value=S.savedName?'saved:'+S.savedName:(S.start==='plain'?'plain':S.preset); }
 $('preset').onchange=e=>{ const v=e.target.value; if(v==='plain') load('textured', null, 'plain'); else if(v.startsWith('saved:')){ const b=S.saved.find(x=>x.name===v.slice(6)); load(b.preset, b.name); } else load(v); };
 $('head').onchange=e=>{ S.head=e.target.value; send(); };
 let showBody=false; $('bodytoggle').onclick=()=>{ showBody=!showBody; $('bodytoggle').textContent=showBody?'hide':'show'; $('bodyctl').style.display=showBody?'':'none'; renderBody(); };
 function slider(box,k,val,lo,hi,step,onin,tag){ const d=document.createElement('div'); d.className='ctrl';
-  d.innerHTML=`<div class="lab"><span>${k}${tag?' <span style="color:var(--mid)">· '+tag+'</span>':''}</span><span class="val" id="v_${k}"></span></div><input type="range" min="${lo}" max="${hi}" step="${step}" id="s_${k}">`;
+  d.innerHTML=`<div class="lab"><span>${k}${tag?' <span style="color:var(--mid)">- '+tag+'</span>':''}</span><span class="val" id="v_${k}"></span></div><input type="range" min="${lo}" max="${hi}" step="${step}" id="s_${k}">`;
   box.appendChild(d); const inp=d.querySelector('input'); inp.value=val; d.querySelector('.val').textContent=fmt(val); inp.oninput=()=>{ onin(+inp.value); d.querySelector('.val').textContent=fmt(+inp.value); d.querySelector('.val').classList.add('on'); }; return d; }
 function renderBody(rebuild=true){ const box=$('bodyctl'); if(!showBody) return; const B=S.D.body; if(S.spec.rows) delete S.spec.rows;
   if(rebuild||!box.children.length){ box.innerHTML=''; for(const k of Object.keys(RB)){ const r=RB[k]; const v=S.spec[k]!=null?S.spec[k]:B[k]; slider(box,k,v,r[0],r[1],r[2]||((r[1]-r[0])/200),val=>setBody(k,val),S.D.body_keys[k].unit); } }
   else for(const k of Object.keys(RB)){ const s=$('s_'+k); if(s&&document.activeElement!==s){ const v=S.spec[k]!=null?S.spec[k]:B[k]; s.value=v; $('v_'+k).textContent=fmt(v); $('v_'+k).classList.toggle('on',S.spec[k]!=null); } } }
 function renderSliders(rebuild=true){ const box=$('sliders'); const i=S.pinned!=null?S.pinned:S.hover;
   if(i==null){ if(rebuild){ box.innerHTML='<div class="hint">Click a row to pin its sliders here. Shift-click a second row to ramp the pinned row\'s edits linearly across the rows between.</div>'; $('rowname').textContent='Row'; $('rowtools').innerHTML=''; } return; }
-  const r=rowOf(i); const dr=S.D.rows[i]; $('rowname').textContent=`Row ${i} · ${r.kind}${dr&&dr.small?' · fused':''}`;
+  const r=rowOf(i); const dr=S.D.rows[i]; $('rowname').textContent=`Row ${i} - ${r.kind}${dr&&dr.small?' - fused':''}`;
   if(rebuild||box.dataset.i!==String(i)){ box.innerHTML=''; box.dataset.i=String(i);
     for(const k of ROWKEYS){ const rr=R[k]; slider(box,k,r[k],rr[0],rr[1],(rr[1]-rr[0])/300,val=>setRow(i,k,val),S.D.keys[k].unit); if(S.D.model!=='slab'&&/slab model only/.test(S.D.keys[k].doc)) box.lastChild.style.opacity=0.35; }
     $('rowtools').innerHTML=`<select id="kind" style="width:auto;padding:2px 0;font-size:10px"><option value="thorax">thorax</option><option value="pyg">pyg</option></select> <button class="btn small" id="toall">→ rows behind</button>`;
@@ -142,7 +147,7 @@ function renderSliders(rebuild=true){ const box=$('sliders'); const i=S.pinned!=
     $('toall').onclick=()=>{ for(let j=i+1;j<S.spec.list.length;j++){ const kind=S.spec.list[j].kind; S.spec.list[j]=Object.assign({}, S.spec.list[i], {kind}); } send(); }; }
   else for(const k of ROWKEYS){ const s=$('s_'+k); if(s&&document.activeElement!==s){ s.value=r[k]; $('v_'+k).textContent=fmt(r[k]); } } }
 function renderTable(){ const e=$('rowtable'); const L=S.spec.list; const D=S.D;
-  e.innerHTML=L.map((r,i)=>{ const dr=D&&D.rows[i]; const on=i===S.pinned; return `<div data-i="${i}" style="cursor:pointer;${on?'color:var(--accent)':''}"><b${on?' style="color:var(--accent)"':''}>${String(i).padStart(2,' ')}</b> ${r.kind==='pyg'?'pyg ':'thx '}len ${fmt(r.len)} · w ${fmt(r.width)} · tip ${fmt(r.tip)} · sw ${fmt(r.sweep)}°${dr&&dr.small?' <span style="color:var(--accent)">fused</span>':''}</div>`; }).join('');
+  e.innerHTML=L.map((r,i)=>{ const dr=D&&D.rows[i]; const on=i===S.pinned; return `<div data-i="${i}" style="cursor:pointer;${on?'color:var(--accent)':''}"><b${on?' style="color:var(--accent)"':''}>${String(i).padStart(2,' ')}</b> ${r.kind==='pyg'?'pyg ':'thx '}len ${fmt(r.len)} - w ${fmt(r.width)} - tip ${fmt(r.tip)} - sw ${fmt(r.sweep)}°${dr&&dr.small?' <span style="color:var(--accent)">fused</span>':''}</div>`; }).join('');
   e.querySelectorAll('div[data-i]').forEach(x=>x.onclick=ev=>{ const i=+x.dataset.i; if(ev.shiftKey&&S.pinned!=null&&S.pinned!==i){ ramp(S.pinned,i); return; } S.pinned=i; renderSliders(); renderTable(); });
   $('copyfrom').max=L.length-1; }
 $('reset').onclick=()=>load('textured', null, 'plain');
@@ -157,13 +162,13 @@ $('save').onclick=async()=>{ const name=$('savename').value.trim(); if(!name){ s
   const r=await fetch('/api/bodies',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name, preset:S.preset, head:S.head, spec:S.spec})}); const j=await r.json(); if(!r.ok){ status(j.error||'save failed',true); return; }
   status(`saved as ${name}`); await load(S.preset, name); };
 $('del').onclick=async()=>{ if(!S.savedName) return; const n=S.savedName; const r=await fetch('/api/bodies/'+encodeURIComponent(n),{method:'DELETE'}); if(!r.ok){ status('delete failed',true); return; } status(`deleted ${n}`); S.savedName=null; $('savename').value=''; $('del').style.display='none'; $('openlink').innerHTML=''; const d=await (await fetch('/api/body_diagram?preset='+encodeURIComponent(S.preset))).json(); S.saved=d.saved_bodies; fillPickers(); send(); };
-$('build').onclick=async()=>{ const b=$('build'); b.disabled=true; const t0=Date.now(); const tick=setInterval(()=>status(`building · ${Math.round((Date.now()-t0)/1000)} s`,true),500);
+$('build').onclick=async()=>{ const b=$('build'); b.disabled=true; const t0=Date.now(); const tick=setInterval(()=>status(`building - ${Math.round((Date.now()-t0)/1000)} s`,true),500);
   try{ const P=await (await fetch('/api/preset/'+encodeURIComponent(S.preset))).json();
     const r=await fetch('/api/build',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, joint:'isopod', head:S.head, body:S.spec})}); const m=await r.json(); clearInterval(tick);
-    if(!r.ok||!m.parts||!m.parts.length){ status('build failed · '+((m.build_notes||[]).map(n=>n[2]).join('; ')||m.error||r.status),true); }
-    else{ const bad=m.parts.filter(p=>!p.watertight||p.bodies!==1).length; status(`built ${m.parts.length} pieces in ${m.build_seconds} s${bad?` · ${bad} not a single watertight body`:''}`,!!bad);
+    if(!r.ok||!m.parts||!m.parts.length){ status('build failed - '+((m.build_notes||[]).map(n=>n[2]).join('; ')||m.error||r.status),true); }
+    else{ const bad=m.parts.filter(p=>!p.watertight||p.bodies!==1).length; status(`built ${m.parts.length} pieces in ${m.build_seconds} s${bad?` - ${bad} not a single watertight body`:''}`,!!bad);
       $('links').innerHTML=`<a href="/api/stl/${m.key}">download STL (all pieces, print mm)</a>`; }
-  }catch(e){ clearInterval(tick); status('build failed · '+e,true); } b.disabled=false; };
+  }catch(e){ clearInterval(tick); status('build failed - '+e,true); } b.disabled=false; };
 
 // ---------- the drawing ----------
 new p5(s=>{
@@ -201,14 +206,14 @@ new p5(s=>{
     hair(160); for(const pv of D.pivots){ s.circle(oxE+pv[1]*ZX*px, Y(pv[0]), 3.4*ZX*px); }     // the ball at each joint (isopod 11.5 mm print)
     if(D.term_spine>0){ hair(255,1.2); const last=D.side[D.side.length-1]; const zt=last.top[last.top.length-1][1]; s.line(oxE+zt*ZX*px, Y(D.length), oxE+1.5*ZX*px, Y(D.length+D.term_spine)); }
     if(actRow!=null&&D.rows[actRow]){ const r=D.rows[actRow]; s.noStroke(); s.fill(246,112,79,30); s.beginShape(); for(const p of r.outline) s.vertex(X(p[0]),Y(p[1])); s.endShape(s.CLOSE); s.beginShape(); for(const p of r.outline) s.vertex(X(-p[0]),Y(p[1])); s.endShape(s.CLOSE); }
-    s.noStroke(); s.fill(255,120); s.textAlign(s.LEFT,s.TOP); s.text('SIDE · section on the axis · true scale', oxE+2, 30); s.text('PLAN', 40, 30);
+    s.noStroke(); s.fill(255,120); s.textAlign(s.LEFT,s.TOP); s.text('SIDE - section on the axis - true scale', oxE+2, 30); s.text('PLAN', 40, 30);
     // handles: rear (axis), edge, tip, and the relief handle on the elevation
     HP=[]; const act=S.drag?S.drag.i:(S.pinned!=null?S.pinned:S.hover);
     D.rows.forEach((r,i)=>{ const h=r.handles; const on=i===act; const col=on?s.color(246,112,79):(r.small?s.color(246,112,79,160):s.color(255));
       const pc=D.side.find(p=>p.rows.includes(i)); const inrow=pc?pc.top.filter(q=>q[0]>=r.y0-1e-6&&q[0]<=r.y1+1e-6):[]; const zc=inrow.length?Math.max(...inrow.map(q=>q[1])):h.top[1];
       const pts=[['rear',X(h.rear[0]),Y(h.rear[1])],['edge',X(h.edge[0]),Y(h.edge[1])],['top',oxE+zc*ZX*px,Y(0.5*(r.y0+r.y1))],['side_rear',oxE+0.45*zc*ZX*px,Y(r.y1)]]; if(r.row.tip>0.05) pts.push(['tip',X(h.tip[0]),Y(h.tip[1])]);
       for(const [k,sx,sy] of pts){ s.stroke(col); s.strokeWeight(1); s.fill(on?col:0); s.circle(sx,sy,on?8:(k==='rear'?6:5)); HP.push({i,k,sx,sy}); }
-      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`row ${i} · ${r.kind} · ${r.print_len.toFixed(1)} mm print${r.small?' · fused':''}`, X(h.edge[0])+10, Y(h.edge[1])-6); } });
+      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`row ${i} - ${r.kind} - ${r.print_len.toFixed(1)} mm print${r.small?' - fused':''}`, X(h.edge[0])+10, Y(h.edge[1])-6); } });
     s.noStroke(); s.fill(255,90); s.textAlign(s.RIGHT,s.BOTTOM); s.text((inflight?'drawing…':'')+' ', W-12, H-10);
   };
   function nearest(mx,my){ let best=null,bd=12; for(const h of HP){ const d=Math.hypot(h.sx-mx,h.sy-my); if(d<bd){ bd=d; best=h; } } return best; }
@@ -231,7 +236,7 @@ new p5(s=>{
 
 // ---------- start ----------
 (async()=>{ const u=new URLSearchParams(location.search); S.head=u.get('head')||'crescent';
-  const hs=await (await fetch('/api/head_styles')).json(); $('head').innerHTML=hs.map(h=>`<option value="${h.name}">${h.name}${h.saved?' · saved':''}</option>`).join(''); $('head').value=S.head;
+  const hs=await (await fetch('/api/head_styles')).json(); $('head').innerHTML=hs.map(h=>`<option value="${h.name}">${h.name}${h.saved?' - saved':''}</option>`).join(''); $('head').value=S.head;
   const body=u.get('body'); if(body){ const b=(await (await fetch('/api/bodies')).json()).find(x=>x.name===body); if(b){ await load(b.preset, body); return; } }
   if(u.get('preset')) await load(u.get('preset')); else await load('textured', null, 'plain'); })();
 </script>
