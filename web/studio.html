@@ -128,7 +128,12 @@ function clampH(k,v){ const r=RH[k]||[-1e9,1e9]; v=Math.min(r[1],Math.max(r[0],v
 function setHeadKey(k,v,quiet){ v=clampH(k,v); const edits=isOut(k)?S.headOutline:S.headFace; if(Math.abs(v-headBaseOf(k))<1e-9) delete edits[k]; else edits[k]=+v.toFixed(4); if(!quiet) sendHead(); }
 function setEyeParam(k,v){ if(!S.P) return; S.P[k]=+v; S.edited=true; status('edited - Build to see it',false); }   // a schema param on P (eye / prong); the 2D drawing can't show it, so feedback is on Build / 3D
 function renderProngs(){ const box=$('prongctl'); if(!box) return; if(!S.P||!S.prongParams.length){ box.innerHTML=''; return; } box.innerHTML='';
-  for(const p of S.prongParams){ const v=(S.P[p.key]!=null?S.P[p.key]:p.default); slider(box,p.key,v,p.lo,p.hi,p.step||((p.hi-p.lo)/200),val=>setEyeParam(p.key,val),p.unit||''); } }
+  for(const p of S.prongParams){ const v=(S.P[p.key]!=null?S.P[p.key]:p.default);
+    if(p.key==='headProngs'||p.key==='tailProngs') prongStepper(box,p);
+    else slider(box,p.key,v,p.lo,p.hi,p.step||((p.hi-p.lo)/200),val=>setEyeParam(p.key,val),p.unit||''); } }
+function prongStepper(box,p){ const cur=()=>Math.round(S.P[p.key]!=null?S.P[p.key]:p.default); const d=document.createElement('div'); d.className='ctrl';
+  d.innerHTML=`<div class="lab"><span>${p.label.toLowerCase()} (tines)</span><span class="val" id="v_${p.key}">${cur()}</span></div><div class="row" style="margin-top:4px"><button class="btn small" data-s="-1">- tine</button><button class="btn small" data-s="1">+ tine</button></div>`;
+  box.appendChild(d); d.querySelectorAll('button').forEach(b=>b.onclick=()=>{ const nv=Math.max(p.lo,Math.min(p.hi,cur()+(+b.dataset.s))); S.P[p.key]=nv; $('v_'+p.key).textContent=nv; S.edited=true; status('edited - Build to see it',false); }); }
 let showProngs=false;
 $('prongtoggle').onclick=()=>{ showProngs=!showProngs; $('prongtoggle').textContent=showProngs?'hide':'show'; $('prongctl').style.display=showProngs?'':'none'; if(showProngs) renderProngs(); };
 
@@ -274,6 +279,7 @@ new p5(s=>{
     for(const r of D.rows){ if(r.small) orange(1); else hair(255,1.1); poly(r.outline,false); poly(r.outline,true); }
     hair(120); for(const j of D.joints) s.line(X(-6), Y(j), X(6), Y(j));
     if(D.term_spine>0){ hair(255,1.5); s.line(X(0), Y(D.length), X(0), Y(D.length+D.term_spine)); }
+    drawProngs();                                                                    // head + tail prongs, drawn live from P
     // the side view (rows), beside the plan
     const actRow=S.drag&&S.drag.kind==='row'?S.drag.i:(S.sel&&S.sel.type==='row'?S.sel.i:S.hover);
     hair(60); s.line(oxE, Y(-2), oxE, Y(D.length+4));
@@ -316,6 +322,16 @@ new p5(s=>{
     s.stroke(246,112,79); s.strokeWeight(1); s.fill(sOn?s.color(246,112,79):0); s.circle(bx,by,sOn?9:6); HP.push({kind:'eye',k:'stalk',sx:bx,sy:by,ex:ex,ey:ey,er:er});
     s.fill(hOn?s.color(246,112,79):0); s.circle(htx,hty,hOn?9:6); HP.push({kind:'eye',k:'height',sx:htx,sy:hty,bx:bx,by:by,dx:dx,dy:dy,er:er});
     s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.CENTER); s.text('stalk '+eyeStalk.toFixed(1)+' - lean '+Math.round(eyeLean)+'°', ex+er+14, ey-6); s.text('height '+eyeHeight.toFixed(2), htx+12, hty); }
+  function drawProng(which,rx,ry,dir,Lref){ const P=S.P; const d=Math.round(P[which+'Prongs']||0); if(d<=0) return;   // the d-tine fan, reused from the generator's prong math
+    const Lp=Math.max((P[which+'ProngLen']||0.5)*Lref,14), st=(P[which+'ProngStem']||0)*Lp, sp=(P[which+'ProngSplay']||30), n=Math.max(d,1);
+    const sy=ry+dir*st; hair(255,1.3); if(st>1) s.line(rx,ry,rx,sy);                                        // the shared stem
+    for(let k=0;k<n;k++){ const off=(n===1?0:sp*(k/(n-1)-0.5))*Math.PI/180;
+      const len=(Lp-st)*((d%2===1&&k===(d-1)/2)?(P[which+'ProngCenter']||1):1);
+      s.line(rx,sy, rx+Math.sin(off)*len, sy+dir*Math.cos(off)*len); } }
+  function drawProngs(){ const P=S.P, D=S.BD, HS=S.HD&&S.HD.diagram; if(!P||!D||!HS) return; const hsc=headScale();
+    const minB=HS.outline.reduce((m,p)=>Math.min(m,p[1]),0);
+    drawProng('head', X(0), Y(minB*hsc+HEADDY), -1, headLen()*px);                            // at the head front, fanning forward (up)
+    drawProng('tail', X(0), Y((D.length||0)+(D.term_spine||0)), 1, (D.length||1)*px*0.28); }  // at the tail tip, fanning back (down)
   function nearest(mx,my){ let best=null,bd=12; for(const h of HP){ const d=Math.hypot(h.sx-mx,h.sy-my); if(d<bd){ bd=d; best=h; } } return best; }
   s.mouseMoved=()=>{ const h=nearest(s.mouseX,s.mouseY); const hi=h&&h.kind==='row'?h.i:null; if(hi!==S.hover){ S.hover=hi; } stage.style.cursor=h?'grab':'default'; };
   s.mousePressed=()=>{ if(s.mouseX<0||s.mouseY<0||s.mouseX>W||s.mouseY>H) return; const h=nearest(s.mouseX,s.mouseY);
