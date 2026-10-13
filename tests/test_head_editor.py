@@ -103,6 +103,31 @@ def test_thorax_model_is_the_generators_own_build():
     with pytest.raises(ValueError): RW.plans(P, {"model": "bogus"})
     with pytest.raises(ValueError): RW.plans(P, {"list": [dict(RW.boring(P)[-1])]})           # a pygidium with no thorax
 
+def test_fidelity_and_macro_hold_for_every_preset():
+    """The rows model, over EVERY order preset (not just the default, review G61): an unedited body is the generator's
+    own thorax and tail to machine precision, and the macro projects the width back within the projection's tolerance."""
+    import glob, json, numpy as np
+    sys.path.insert(0, os.path.join(ROOT, "isopod_model")); import rows as RW
+    from anatomy import thorax as THORAX, tail as TAIL
+    xs = np.linspace(-30, 30, 31); ys = np.linspace(0, 12, 13); X, Y = np.meshgrid(xs, ys)
+    files = [f for f in sorted(glob.glob(os.path.join(ROOT, "presets", "*.json"))) if not os.path.basename(f).startswith("_")]
+    assert len(files) >= 8
+    for f in files:
+        name = os.path.basename(f)[:-5]; P = schema.coerce(json.load(open(f))["params"], base=schema.table_defaults()); R = RW.plans(P, {})
+        for i in range(int(P["segCount"])):
+            d = np.abs(THORAX.plan(P, i)["zfun"](np.abs(X), Y) - R["parts"][i][2]["zfun"](np.abs(X), Y)).max()
+            assert d < 1e-6, f"{name} thorax row {i}: {d:.2e}"
+        T0, T1 = TAIL.plan(P), R["parts"][-1][2]
+        assert np.abs(T0["zfun"](np.abs(X), Y) - T1["zfun"](np.abs(X), Y)).max() < 1e-6, f"{name} tail fidelity"
+        mw = RW.macro(P, {})["width"]
+        assert abs(mw - P["width"]) < 0.12 * P["width"], f"{name} macro width {mw:.2f} vs {P['width']:.2f}"   # macro is a lossy projection (agnostida ~5.6%)
+
+def test_mixed_kinds_refused():
+    """A thoracic row after a pygidial one is refused, not silently folded into the tail (review B14)."""
+    sys.path.insert(0, os.path.join(ROOT, "isopod_model")); import rows as RW
+    b = RW.boring(schema.defaults())
+    with pytest.raises(ValueError): RW.validate_list([dict(b[0]), dict(b[-1]), dict(b[0])])
+
 def test_rows_model_defaults_and_fusion():
     sys.path.insert(0, os.path.join(ROOT, "isopod_model")); import rows as RW
     P = schema.defaults(); rs = RW.rows_from_P(P, model="slab"); sc = RW.default_scale(rs)

@@ -166,6 +166,10 @@ def validate_list(lst):
         prev = out[-1] if out else base
         row = dict(prev); row.update({k: (str(v) if k == "kind" else v) for k, v in r.items()})
         out.append(check_row(row, f"row {i}"))
+    seen_pyg = False                                               # kinds must be contiguous: all thorax, then all pyg
+    for i, r in enumerate(out):
+        if r["kind"] == "pyg": seen_pyg = True
+        elif seen_pyg: raise ValueError(f"row {i}: a thoracic row cannot come after a pygidial row (order the rows thorax..., then pyg...)")
     return out
 
 
