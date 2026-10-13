@@ -69,6 +69,9 @@
   <div class="ctrl"><div class="lab"><span>head type</span></div><select id="headstyle"></select></div>
   <div class="ctrl"><div class="lab"><span>surface</span></div><select id="model"><option value="thorax">generator segments</option><option value="slab">tergite slab</option></select></div>
 
+  <div class="sect"><span>Prongs</span><span id="prongtoggle">show</span></div>
+  <div id="prongctl" style="display:none"></div>
+
   <div class="sect"><span id="ctxname">Nothing selected</span><span id="ctxtools"></span></div>
   <div id="context"><div class="hint">Click the head or a row on the drawing to edit it.</div></div>
 
@@ -93,7 +96,7 @@ const $=id=>document.getElementById(id);
 const S={ preset:'textured', head:'crescent', savedBody:null, savedHead:null,
           spec:{list:null, model:'thorax'}, headOutline:{}, headFace:{}, headBaseOutline:{}, headBaseFace:{}, headMeta:null,
           BD:null, HD:null, presets:[], savedBodies:[], savedHeads:[],
-          sel:null, pinned:null, hover:null, drag:null, pendingB:false, pendingH:false, edited:false, P:null, eyeParams:[] };
+          sel:null, pinned:null, hover:null, drag:null, pendingB:false, pendingH:false, edited:false, P:null, eyeParams:[], prongParams:[] };
 const fmt=v=>Number.isInteger(v)?String(v):(+v).toFixed(Math.abs(v)<1?3:(Math.abs(v)<10?2:1));
 function status(t,bad){ $('status').textContent=t||''; $('status').classList.toggle('busy',!!bad); }
 // when embedded in the generator, stream the live head + body so the host's Build/sheet/3D use them (12 Oct 2026)
@@ -123,7 +126,11 @@ const headCur=k=>S.HD?(isOut(k)?S.HD.outline[k]:S.HD.face[k]):undefined;
 function clampR(k,v,T){ const r=(T||R)[k]||[-1e9,1e9]; v=Math.min(r[1],Math.max(r[0],v)); if(r[2]) v=Math.round(v); return v; }
 function clampH(k,v){ const r=RH[k]||[-1e9,1e9]; v=Math.min(r[1],Math.max(r[0],v)); if(r[2]) v=Math.round(v); return v; }
 function setHeadKey(k,v,quiet){ v=clampH(k,v); const edits=isOut(k)?S.headOutline:S.headFace; if(Math.abs(v-headBaseOf(k))<1e-9) delete edits[k]; else edits[k]=+v.toFixed(4); if(!quiet) sendHead(); }
-function setEyeParam(k,v){ if(!S.P) return; S.P[k]=+v; S.edited=true; status('eye edited - Build to see it',false); }   // schema eye params; the shaped-head 2D drawing can't show them, so feedback is on Build / 3D
+function setEyeParam(k,v){ if(!S.P) return; S.P[k]=+v; S.edited=true; status('edited - Build to see it',false); }   // a schema param on P (eye / prong); the 2D drawing can't show it, so feedback is on Build / 3D
+function renderProngs(){ const box=$('prongctl'); if(!box) return; if(!S.P||!S.prongParams.length){ box.innerHTML=''; return; } box.innerHTML='';
+  for(const p of S.prongParams){ const v=(S.P[p.key]!=null?S.P[p.key]:p.default); slider(box,p.key,v,p.lo,p.hi,p.step||((p.hi-p.lo)/200),val=>setEyeParam(p.key,val),p.unit||''); } }
+let showProngs=false;
+$('prongtoggle').onclick=()=>{ showProngs=!showProngs; $('prongtoggle').textContent=showProngs?'hide':'show'; $('prongctl').style.display=showProngs?'':'none'; if(showProngs) renderProngs(); };
 
 // ---------- row helpers ----------
 const rowOf=i=>S.spec.list[i];
@@ -150,7 +157,7 @@ async function loadAll(preset, bodyName, start){
   try{ S.P=await (await fetch('/api/preset/'+encodeURIComponent(preset))).json(); }catch(_){ S.P=S.P||{}; }   // the schema params (incl. the eye): editable here, built as-is by the generator pipeline
   $('savebody').value=S.savedBody||''; $('savehead').value=S.savedHead||'';
   $('del').style.display=S.savedBody?'':'none';
-  fillPickers(); renderContext(); renderTable(); kv(); postState();
+  fillPickers(); renderContext(); renderTable(); kv(); postState(); if(showProngs) renderProngs();
 }
 let inflightB=null, inflightH=null;
 async function sendBody(){ S.edited=true; postState(); renderTable();
@@ -355,7 +362,7 @@ function headKeysFor(h){ const ks=((S.headMeta&&S.headMeta.handles[h])||[]).map(
 // ---------- start ----------
 (async()=>{ const u=new URLSearchParams(location.search); S.head=u.get('head')||'crescent';
   try{ const sc=await (await fetch('/api/schema')).json(); const EK=new Set(['eyeSize','eyeArc','eyePos','eyeLat','eyeHeight','eyeProfile','eyeStalk','eyeStalkR','eyeStalkBend','eyeLean','eyeSphere','lensD','lensGap']);
-       S.eyeParams=(sc.params||[]).filter(p=>EK.has(p.key)); }catch(_){ S.eyeParams=[]; }   // the eye's fold / stalk / shape params -> the Eye sliders
+       S.eyeParams=(sc.params||[]).filter(p=>EK.has(p.key)); S.prongParams=(sc.params||[]).filter(p=>p.group==='Prongs'); }catch(_){ S.eyeParams=[]; S.prongParams=[]; }   // the eye and prong params -> their panel sliders
   const body=u.get('body'); if(body){ const b=(await (await fetch('/api/bodies')).json()).find(x=>x.name===body); if(b){ if(b.head) S.head=b.head; await loadAll(b.preset, body); return; } }
   if(u.get('preset')) await loadAll(u.get('preset')); else await loadAll('textured', null, 'plain'); })();
 </script>
