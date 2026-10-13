@@ -202,7 +202,7 @@ const _u=new URLSearchParams(location.search); const _q=_u.get('order')||_u.get(
 let P = await (await fetch('/api/preset/'+START)).json(); let sel='frame', showMore=false, kin=null, partMeshes={}, buildKey=null, mode='sheet', lastMeas=null, threeReady=false;   // default view is the blueprint sheet, same as the other trilobites
 const _eye=_u.get('eye'); if(_eye){ const _t=(S.eye_types||[]).find(x=>x.key===_eye); if(_t) Object.assign(P,_t.set); }   // tree ?eye= deep link: apply the eye bundle
 const _ch=_u.get('chars'); if(_ch){ _ch.split(',').forEach(k=>{ const c=(S.characters||[]).find(x=>x.key===k); if(c) Object.assign(P,c.set); }); }   // tree ?chars= deep link: apply the character bundles, in order
-const _pp=_u.get('p'); if(_pp){ try{ const d=JSON.parse(decodeURIComponent(escape(atob(_pp)))); if(d&&typeof d==='object') P=Object.assign({...DFLT},d); }catch(_){} }   // ?p= shared permalink: defaults + the encoded changes
+const _pp=_u.get('p'); if(_pp){ try{ const d=JSON.parse(decodeURIComponent(escape(atob(_pp)))); if(d&&typeof d==='object'){ P={...DFLT}; for(const k in d){ if(k in DFLT && typeof d[k]==='number' && isFinite(d[k])) P[k]=d[k]; } } }catch(_){} }   // ?p= permalink: only finite numeric known params (never a string that could reach innerHTML)
 const $=id=>document.getElementById(id); const INK='#ffffff', MID='#9a9a9a', LINE='#262626', SOFT='#141414';
 const ROWOF={b1:'head',a1:'head',b2:'seg',a2:'seg',b3:'tail',a3:'tail'};
 const C=$('C');

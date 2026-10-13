@@ -389,7 +389,10 @@ def coerce(P, base=None, quiet=False):
             p = BY_KEY[k]
             if p.kind == "expr":
                 Q[k] = str(v)[:120]; continue
-            v = float(v)
+            if isinstance(v, bool): v = p.default                      # bools are not numbers; don't let True become 1.0
+            try: v = float(v)
+            except (TypeError, ValueError): v = float(p.default)       # "abc"/None -> the default, never a crash or a 500
+            if v != v or v == float("inf") or v == -float("inf"): v = float(p.default)   # NaN/inf -> default, never into a hash or the geometry
             v = min(max(v, p.lo), p.hi)
             if p.kind in ("int", "odd_int"):
                 v = int(round(v))

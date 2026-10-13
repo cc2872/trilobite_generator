@@ -28,6 +28,8 @@ if _MANIFOLD_V != "3.0.1":
     sys.stderr.flush()
 
 app = Flask(__name__, static_folder=None)
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024                          # 2 MB: a spec/params POST is tiny; refuse oversized bodies
+_KEY_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9_\-]{0,120}\Z")               # cache keys are hex hashes + tags, no dots/slashes -> blocks path traversal under web/cache
 threading.Thread(target=RECORDER.flush, daemon=True).start()   # send on any measurements stored while the receiver was unreachable
 CACHE = os.path.join(ROOT, "web", "cache"); os.makedirs(CACHE, exist_ok=True)
 
@@ -70,7 +72,8 @@ def _head_style(name):
 # name goes (the head picker, ?head=, /api/build, /api/sheet, the editor's ?style=), and is re-read at every use, so
 # re-saving a name re-keys every build made with it (the cache key hashes the resolved numbers).
 HEADS = os.path.join(ROOT, "web", "heads")
-_HEAD_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_\-]{0,39}$")
+_HEAD_NAME = re.compile(r"\A[A-Za-z][A-Za-z0-9_\-]{0,39}\Z")   # \Z not $: $ matches before a trailing newline, writing an unaddressable file
+_MAX_SAVED = 500                                               # cap saved bodies/heads so a flood can't fill the disk
 
 def _saved_heads():
     out = {}
@@ -323,6 +326,7 @@ def api_bodies_save():
     except (KeyError, ValueError) as ex: return jsonify(error=str(ex)[:200]), 400
     head = str(q.get("head") or "crescent")                                                # the head it was drawn with (a style or a saved head)
     if head != "crescent" and _head_style(head) is None: return jsonify(error=f"no such head '{head}'"), 404
+    if name not in _saved_bodies() and len(_saved_bodies()) >= _MAX_SAVED: return jsonify(error="too many saved bodies on this server"), 400
     rec = dict(name=name, preset=preset, head=head, spec=spec, doc=str(q.get("doc", ""))[:200], saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
     os.makedirs(BODIES, exist_ok=True); tmp = os.path.join(BODIES, name + ".json.part")
     json.dump(rec, open(tmp, "w"), indent=1); os.replace(tmp, os.path.join(BODIES, name + ".json"))
@@ -422,6 +426,7 @@ def api_heads_save():
     base_face = _head_custom({"style": h["base"]})["face"]
     f_edits = {k: v for k, v in h["face"].items() if v != base_face.get(k)}
     f_edits.update({k: HC.FACE[k] for k in base_face if k not in h["face"]})   # an edit back to the crescent's own value is an edit too
+    if name not in _saved_heads() and len(_saved_heads()) >= _MAX_SAVED: return jsonify(error="too many saved heads on this server"), 400
     rec = dict(name=name, style=h["base"], outline=o_edits, face=f_edits, doc=str(spec.get("doc", ""))[:200], saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
     os.makedirs(HEADS, exist_ok=True); tmp = os.path.join(HEADS, name + ".json.part")
     json.dump(rec, open(tmp, "w"), indent=1); os.replace(tmp, os.path.join(HEADS, name + ".json"))
@@ -640,7 +645,10 @@ def api_sheet():
 def api_stl(key):
     """One combined flat STL of the cached build — the download."""
     import trimesh
-    folder = os.path.join(CACHE, key); man = json.load(open(os.path.join(folder, "manifest.json")))
+    if not _KEY_RE.match(key): return jsonify(error="bad key"), 404
+    folder = os.path.join(CACHE, key)
+    if not os.path.exists(os.path.join(folder, "manifest.json")): return jsonify(error="no such build"), 404
+    man = json.load(open(os.path.join(folder, "manifest.json")))
     out = os.path.join(folder, "flat.stl")
     if not os.path.exists(out):
         P = schema.coerce(json.load(open(os.path.join(folder, "params.json")))) if os.path.exists(os.path.join(folder, "params.json")) else None
@@ -661,7 +669,9 @@ def api_stl(key):
     return send_file(out, as_attachment=True, download_name=f"trilobite_{key}.stl")
 
 @app.get("/files/<key>/<path:name>")
-def files(key, name): return send_from_directory(os.path.join(CACHE, key), name)
+def files(key, name):
+    if not _KEY_RE.match(key): return jsonify(error="bad key"), 404     # key is validated; send_from_directory guards name traversal
+    return send_from_directory(os.path.join(CACHE, key), name)
 
 def _evict(max_dirs=60):
     dirs = sorted(glob.glob(os.path.join(CACHE, "*")), key=os.path.getmtime)

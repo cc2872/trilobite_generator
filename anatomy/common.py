@@ -92,7 +92,9 @@ def _eval_node(node, names):
             return names[node.id]
         raise ValueError(f"unknown name {node.id!r}")
     if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_BINOPS:
-        return _SAFE_BINOPS[type(node.op)](_eval_node(node.left, names), _eval_node(node.right, names))
+        lhs = _eval_node(node.left, names); rhs = _eval_node(node.right, names)
+        if isinstance(node.op, ast.Pow) and abs(rhs) > 64: raise ValueError("exponent too large")   # 9**9**9 would hang inside the build lock
+        return _SAFE_BINOPS[type(node.op)](lhs, rhs)
     if isinstance(node, ast.UnaryOp) and type(node.op) in _SAFE_UNARYOPS:
         return _SAFE_UNARYOPS[type(node.op)](_eval_node(node.operand, names))
     if isinstance(node, ast.Compare):

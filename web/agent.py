@@ -16,7 +16,7 @@ otherwise answers {"status": "running"}; ask again with the same URL (it is the 
 TRILO_AGENT=0 removes these routes. A token, if set (TRILO_AGENT_TOKEN, else web/agent_token.txt), must be given to
 `make` (?token= or Authorization: Bearer).
 """
-import os, json, time, base64, threading, urllib.parse
+import os, json, time, base64, threading, urllib.parse, hmac
 from html import escape as _esc
 from flask import Blueprint, request, jsonify, Response
 import recorder as RECORDER
@@ -145,7 +145,10 @@ def make_blueprint(app, schema, I, presets, measure, lock):
 
     def _tok_ok():
         tok = _token()
-        return not tok or request.args.get("token") == tok or request.headers.get("Authorization") == "Bearer " + tok
+        if not tok: return True
+        auth = request.headers.get("Authorization") or ""
+        bearer = auth[7:] if auth.startswith("Bearer ") else ""
+        return hmac.compare_digest(request.args.get("token") or "", tok) or hmac.compare_digest(bearer, tok)   # constant-time
     def _rec(outcome, code, spec=None, **extra):
         # one raw line for this agent request, whatever its outcome (web/recorder.py -> agent_log.jsonl + the live page)
         try:
@@ -200,6 +203,7 @@ def make_blueprint(app, schema, I, presets, measure, lock):
     def agent_log():
         """The raw list: every make request this server has seen, newest first. Token-gated (operator view).
         JSON by default; a browser (or ?format=html) gets a small table that refreshes itself."""
+        if not _token(): return jsonify(error="the request log is unavailable unless TRILO_AGENT_TOKEN is set"), 404   # don't expose the raw log on an unconfigured server
         if not _tok_ok():
             return jsonify(error="this endpoint needs the agent token (?token=... or Authorization: Bearer ...)"), 401
         try: limit = max(1, min(2000, int(request.args.get("limit", 200))))

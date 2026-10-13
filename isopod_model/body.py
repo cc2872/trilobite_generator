@@ -742,9 +742,10 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
     todo = [k for k in range(1, n) if k not in rep]
     _POOL_CTX.update(plans=plans, J=J, PV=PV, K=K, U=U); pool = _pool(len(todo))
     try:
-        cutters = dict(zip(todo, pool.map(_cutter_job, todo) if pool else map(_cutter_job, todo)))
+        results = pool.map_async(_cutter_job, todo).get(240) if pool else list(map(_cutter_job, todo))   # timeout: an OOM-killed worker can't hold the build lock forever
+        cutters = dict(zip(todo, results))
     finally:
-        if pool: pool.close(); pool.join()
+        if pool: pool.terminate(); pool.join()   # terminate (not close) so a timed-out/stuck worker is killed, not awaited
     for k in range(1, n):
         if k in rep: copy(k)
         else:

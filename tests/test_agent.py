@@ -67,10 +67,12 @@ def test_token_and_off_switch(client, monkeypatch):
 
 def test_log_keeps_every_request(client, tmp_path, monkeypatch):
     monkeypatch.setenv("TRILO_RECORD", "1"); monkeypatch.setenv("TRILO_RECORD_DIR", str(tmp_path)); monkeypatch.delenv("TRILO_RECORD_URL", raising=False)
-    client.get("/api/agent/make?preset=proetida&segCount=10")                                     # done
-    client.get("/api/agent/make?preset=nope")                                                     # rejected (400)
-    client.get("/api/agent/make?preset=proetida&segCount=10")                                     # same animal again: still logged (no dedup)
-    log = client.get("/api/agent/log").get_json(); outs = [e["outcome"] for e in log["events"]]
+    assert client.get("/api/agent/log").status_code == 404                                         # with no token configured, the log is not exposed at all
+    monkeypatch.setenv("TRILO_AGENT_TOKEN", "t0k")                                                 # the log is gated: it needs a configured token
+    client.get("/api/agent/make?preset=proetida&segCount=10&token=t0k")                            # done
+    client.get("/api/agent/make?preset=nope&token=t0k")                                            # rejected (400)
+    client.get("/api/agent/make?preset=proetida&segCount=10&token=t0k")                            # same animal again: still logged (no dedup)
+    log = client.get("/api/agent/log?token=t0k").get_json(); outs = [e["outcome"] for e in log["events"]]
     assert log["count"] >= 3 and outs.count("unknown_preset") == 1 and outs.count("done") >= 2     # repeats and rejections both kept
     assert log["events"][0]["time"] >= log["events"][-1]["time"]                                   # newest first in the JSON
-    assert "<table" in client.get("/api/agent/log?format=html").get_data(as_text=True)
+    assert "<table" in client.get("/api/agent/log?format=html&token=t0k").get_data(as_text=True)
