@@ -73,7 +73,7 @@ CHANGES_*.md        every finding in order, with what was and was not run
 |---|---|
 | `/` | **studio**: head + body on one drawing (p5). Click a handle, drag, build. Rows + / −; short rows fuse (orange); save a head or a body by name; BUILD swaps the drawing for the sheet, with VIEW 3D |
 | `/head`, `/body` | the head editor and the body editor on their own (the studio is the two combined) |
-| `/generator` | the parametric page: the 3×3 sketch control, presets, characters, the sheet as the stage with VIEW 3D, MEASURE (the instrument), download STL, share link |
+| `/generator` | the advanced / instrument page (retired as the home, 13 Oct 2026; the studio is the front page): the 3×3 sketch control and the full parameter set, MEASURE (the instrument / ruler), the share link and TPS landmarks. The studio's VIEW 3D embeds this page's viewer (`?only3d=1`), so the route is kept as a backend even though it is no longer presented as a co-equal editor |
 | `/tree` | the family tree |
 
 API, all JSON: `POST /api/build {P, joint, head, body, fill}` (joint = `isopod` default | `pin` | `flexi` | `ball`;
