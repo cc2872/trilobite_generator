@@ -1,5 +1,5 @@
 # trilobite generator, schema 6.2, instrument 2.1, by Claire Choi the trilobiter
-<img width="1815" height="1287" alt="the isopod-model sheet for the default animal" src="https://github.com/user-attachments/assets/20b9d050-8d7a-4a14-af05-db476dc755d4" />
+<img width="1815" height="1287" alt="sheet_isopod_none (4)" src="https://github.com/user-attachments/assets/b1ca3f45-d5f6-4a96-b0c5-54285340ca22" />
 
 A parametric generator for articulated dorsal plate chains, trilobites first, with three outputs from one parameter
 table: a **printable animal** (print-in-place, ball joints), a **fixed-ruler enrolment instrument** (pin joints,
