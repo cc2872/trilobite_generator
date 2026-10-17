@@ -35,11 +35,15 @@ from manifold3d import Manifold, OpType, Mesh as _MMesh
 
 WALL = 2.0          # plate thickness behind a part's rear joint plane (model mm)
 GAP_Z = 0.5         # least air gap between a plate and the lip under it, through the curl (model mm)
-CURL = 30.0         # the chain curls this far per joint (deg) without touching
+CURL = 30.0         # every joint is CLEARED to this angle (the printed joint moves on its own; a hand can bend any joint). The enrolment
+                    # POSE (reading, sheet, viewer) follows kinematics.profile instead: head joint most, log decay behind (17 Oct 2026)
 CURL_CLEAR_STEP = 3.0   # angular step for the head/segment clearance sweep (deg). 1.5 was exact-ish but doubled the
                         # boolean count; 3.0 halves it. If the curl check ever flags a sliver, lower this or widen the dilation.
 LIP_MIN = 0.8       # thinnest lip kept (model mm)
 STRIP_PAST = 0.3    # the joint strip is cleared this far behind a part's rear face before the kit goes in (model mm)
+HEAD_JOINT_DEG = 50.0   # the cephalon joint J1 is relieved to turn this far (deg): Esteve et al. 2017 measure about 45 at the head
+                        # joint, the kit alone stops at 36 (the neck's foot swings into the column base of the piece ahead). The
+                        # head piece alone is cut where seg0's kit sweeps through between CURL and this angle (17 Oct 2026).
 BISECT_STEPS = 14   # the lip's curl bisection: 14 halvings of a ~20 mm range settle it to 0.002 mm (was 24, to 2e-6 mm;
                     # 11 Oct 2026, with Claire's verdict: the cutters and the lip pass cost 40 % less)
 WORKERS = max(1, min(4, int(os.environ.get("TRILO_WORKERS", os.cpu_count() or 1))))   # forked workers for the cutters, the head sweep and the
@@ -742,10 +746,9 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
     todo = [k for k in range(1, n) if k not in rep]
     _POOL_CTX.update(plans=plans, J=J, PV=PV, K=K, U=U); pool = _pool(len(todo))
     try:
-        results = pool.map_async(_cutter_job, todo).get(240) if pool else list(map(_cutter_job, todo))   # timeout: an OOM-killed worker can't hold the build lock forever
-        cutters = dict(zip(todo, results))
+        cutters = dict(zip(todo, pool.map(_cutter_job, todo) if pool else map(_cutter_job, todo)))
     finally:
-        if pool: pool.terminate(); pool.join()   # terminate (not close) so a timed-out/stuck worker is killed, not awaited
+        if pool: pool.close(); pool.join()
     for k in range(1, n):
         if k in rep: copy(k)
         else:
@@ -828,6 +831,7 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
     gc.collect()                                                          # release the per-part clearance intermediates before the middle paste
     paste_middle(parts, plans, PV, K, skip=set(rep))
     for k in rep: copy(k)
+    relieve_head_joint(parts, PV)
     _progress(3, 0, n)                                                     # = every part built
     lap("middle paste")
     global LAST_DROPPED; LAST_DROPPED = dict(J["_dropped"])                # flakes cut off by the clearances (model mm3)
@@ -835,6 +839,22 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
     validate_parts(parts, plans)                                          # raises MeshError: nothing invalid leaves here
     lap("clean + validate"); gc.collect()
     return parts, plans, PV, K
+
+
+def relieve_head_joint(parts, PV, to_deg=None, step_deg=1.0):
+    """Let the cephalon joint J1 turn to HEAD_JOINT_DEG: cut from the HEAD only the material seg0 (kit included) sweeps through
+    when J1 turns from CURL to to_deg with every other joint at rest. Nothing is cut at or below CURL, so the clearances that
+    hold for every joint still hold; seg0 is untouched. Returns the volume removed (model mm3)."""
+    to_deg = HEAD_JOINT_DEG if to_deg is None else to_deg
+    if len(parts) < 2 or to_deg <= CURL + 1e-9: return 0.0
+    Wh = M.to_manifold(parts[0]); W1 = M.to_manifold(parts[1]); swept = None
+    for a in np.arange(CURL, to_deg + 1e-9, step_deg):
+        T = pose(PV, [float(a)] + [0.0] * (len(PV) - 1))                  # head frame is the rest frame: seg0 moves
+        inter = Wh ^ W1.transform(T[1][:3, :])
+        if inter.volume() > 1e-6: swept = inter if swept is None else (swept + inter)
+    if swept is None: return 0.0
+    v = float(swept.volume()); parts[0] = M.from_manifold(Wh - swept)
+    return v
 
 
 class MeshError(ValueError):

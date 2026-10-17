@@ -193,7 +193,7 @@
   </div>
 </div>
 <div id="dragtip"></div>
-<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<script type="importmap">{"imports":{"three":"/static/three/build/three.module.js","three/addons/":"/static/three/examples/jsm/"}}</script>
 <script type="module">
 import * as THREE from 'three'; import {OrbitControls} from 'three/addons/controls/OrbitControls.js'; import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 const S = await (await fetch('/api/schema')).json(); const META = Object.fromEntries(S.params.map(p=>[p.key,p]));
@@ -202,7 +202,7 @@ const _u=new URLSearchParams(location.search); const _q=_u.get('order')||_u.get(
 let P = await (await fetch('/api/preset/'+START)).json(); let sel='frame', showMore=false, kin=null, partMeshes={}, buildKey=null, mode='sheet', lastMeas=null, threeReady=false;   // default view is the blueprint sheet, same as the other trilobites
 const _eye=_u.get('eye'); if(_eye){ const _t=(S.eye_types||[]).find(x=>x.key===_eye); if(_t) Object.assign(P,_t.set); }   // tree ?eye= deep link: apply the eye bundle
 const _ch=_u.get('chars'); if(_ch){ _ch.split(',').forEach(k=>{ const c=(S.characters||[]).find(x=>x.key===k); if(c) Object.assign(P,c.set); }); }   // tree ?chars= deep link: apply the character bundles, in order
-const _pp=_u.get('p'); if(_pp){ try{ const d=JSON.parse(decodeURIComponent(escape(atob(_pp)))); if(d&&typeof d==='object'){ P={...DFLT}; for(const k in d){ if(k in DFLT && typeof d[k]==='number' && isFinite(d[k])) P[k]=d[k]; } } }catch(_){} }   // ?p= permalink: only finite numeric known params (never a string that could reach innerHTML)
+const _pp=_u.get('p'); if(_pp){ try{ const d=JSON.parse(decodeURIComponent(escape(atob(_pp)))); if(d&&typeof d==='object') P=Object.assign({...DFLT},d); }catch(_){} }   // ?p= shared permalink: defaults + the encoded changes
 const $=id=>document.getElementById(id); const INK='#ffffff', MID='#9a9a9a', LINE='#262626', SOFT='#141414';
 const ROWOF={b1:'head',a1:'head',b2:'seg',a2:'seg',b3:'tail',a3:'tail'};
 const C=$('C');
@@ -849,9 +849,9 @@ function fit(){ const box=new THREE.Box3().setFromObject(root); if(box.isEmpty()
   ctl.target.copy(c); cam.position.copy(c).add(new THREE.Vector3(0.6,0.55,0.95).multiplyScalar(s*0.9)); cam.near=s/100; cam.far=s*10; cam.updateProjectionMatrix(); }
 function pose(th){ if(!kin||!threeReady) return; rbU.uRoll.value=((+$('roll').max>0)?th/(+$('roll').max):0);   // enrollment-hue mode reads the roll fraction
   const rot=new THREE.Matrix4().makeRotationX(-th*Math.PI/180);
-  if(kin.pivots){ // isopod model: parts are in one frame; each joint curls about its own pivot (y,z) in print mm
+  if(kin.pivots){ // isopod model: parts are in one frame; each joint curls about its own pivot (y,z) in print mm, by its share of the head angle (kin.profile, Esteve et al. 2017)
     let M=new THREE.Matrix4();
-    kin.names.forEach((n,i)=>{ if(i>0){ const p=kin.pivots[i-1]; M=M.clone().multiply(new THREE.Matrix4().makeTranslation(0,p[0],p[1])).multiply(rot).multiply(new THREE.Matrix4().makeTranslation(0,-p[0],-p[1])); } const g=partMeshes[n]; if(g){g.matrixAutoUpdate=false; g.matrix.copy(M);} });
+    kin.names.forEach((n,i)=>{ if(i>0){ const p=kin.pivots[i-1]; const sh=(kin.profile&&kin.profile[i-1]!=null)?kin.profile[i-1]:1; const rj=new THREE.Matrix4().makeRotationX(-th*sh*Math.PI/180); M=M.clone().multiply(new THREE.Matrix4().makeTranslation(0,p[0],p[1])).multiply(rj).multiply(new THREE.Matrix4().makeTranslation(0,-p[0],-p[1])); } const g=partMeshes[n]; if(g){g.matrixAutoUpdate=false; g.matrix.copy(M);} });
     return; }
   const pz=(posePivotZ!=null?posePivotZ:kin.hinge_z), py=posePivotY, offs=kin.offsets; let M=new THREE.Matrix4();
   kin.names.forEach((n,i)=>{ if(i>0){ M=M.clone().multiply(new THREE.Matrix4().makeTranslation(0,offs[i-1],0)).multiply(new THREE.Matrix4().makeTranslation(0,py,pz)).multiply(rot).multiply(new THREE.Matrix4().makeTranslation(0,-py,-pz)); } const g=partMeshes[n]; if(g){g.matrixAutoUpdate=false; g.matrix.copy(M);} }); }
@@ -867,7 +867,7 @@ function toEdit(){ mode='edit'; $('sheet').style.display='none'; $('stage3d').st
 $('editor').onclick=()=>{ if(mode==='edit') toSheet(); else toEdit(); };
 $('view3d').onclick=async()=>{ if(mode==='sheet') await to3D(true);
   else await toSheet(); };
-function rollLabel(v){ const mx=+$('roll').max||1; return Math.round(100*v/mx)+'% - '+(+v).toFixed(1)+'° / joint'; }
+function rollLabel(v){ const mx=+$('roll').max||1; const tot=(kin&&kin.profile)?kin.profile.reduce((s,x)=>s+x,0)*(+v):null; return Math.round(100*v/mx)+'% - '+(+v).toFixed(1)+'° at the head'+(tot!=null?' - '+tot.toFixed(0)+'° total':' / joint'); }
 $('roll').oninput=e=>{ $('rollval').textContent=rollLabel(+e.target.value); pose(+e.target.value); };
 // ---- measure
 $('go').onclick=async()=>{ status('measuring',true); $('go').disabled=true;

@@ -28,8 +28,6 @@ if _MANIFOLD_V != "3.0.1":
     sys.stderr.flush()
 
 app = Flask(__name__, static_folder=None)
-app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024                          # 2 MB: a spec/params POST is tiny; refuse oversized bodies
-_KEY_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9_\-]{0,120}\Z")               # cache keys are hex hashes + tags, no dots/slashes -> blocks path traversal under web/cache
 threading.Thread(target=RECORDER.flush, daemon=True).start()   # send on any measurements stored while the receiver was unreachable
 CACHE = os.path.join(ROOT, "web", "cache"); os.makedirs(CACHE, exist_ok=True)
 
@@ -72,8 +70,7 @@ def _head_style(name):
 # name goes (the head picker, ?head=, /api/build, /api/sheet, the editor's ?style=), and is re-read at every use, so
 # re-saving a name re-keys every build made with it (the cache key hashes the resolved numbers).
 HEADS = os.path.join(ROOT, "web", "heads")
-_HEAD_NAME = re.compile(r"\A[A-Za-z][A-Za-z0-9_\-]{0,39}\Z")   # \Z not $: $ matches before a trailing newline, writing an unaddressable file
-_MAX_SAVED = 500                                               # cap saved bodies/heads so a flood can't fill the disk
+_HEAD_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_\-]{0,39}$")
 
 def _saved_heads():
     out = {}
@@ -138,7 +135,10 @@ def _build_isopod(P, folder, head=None, body_spec=None):
         m.export(os.path.join(folder, f"{name}.glb")); m.export(os.path.join(folder, f"{name}.stl"))
         out.append(dict(name=name, url=f"/files/{os.path.basename(folder)}/{name}.glb", stl=f"/files/{os.path.basename(folder)}/{name}.stl",
                         bodies=len(__import__("mesh").bodies(m)), watertight=bool(m.is_watertight), volume=round(float(m.volume), 1)))
-    kin = dict(names=names, pivots=pivots)                      # pivots present => the viewer poses about per-joint pivots (ball joints)
+    import kinematics as KIN
+    kin = dict(names=names, pivots=pivots,                      # pivots present => the viewer poses about per-joint pivots (ball joints)
+               profile=[round(a / KIN.HEAD_DEG, 4) for a in KIN.profile(len(pivots))],   # each joint's share of the head angle (Esteve profile)
+               profile_source=KIN.SOURCE)
     # the checks (11 Oct 2026): the build has already refused invalid parts (body.MeshError); here what a slicer and the
     # chain would still notice -- parts touching at rest, and the debris the clean-up removed
     import check as CHECK
@@ -170,6 +170,69 @@ h1{font-size:1.6rem;letter-spacing:.18em;text-transform:uppercase;font-weight:no
 def _maintenance_gate():
     if MAINTENANCE:
         return MAINTENANCE_HTML, 503
+
+# ---------------------------------------------------------------- the site password (17 Oct 2026)
+# TRILO_SITE_PASSWORD set => every request needs the signed cookie /login issues (or, on /api/agent/* and /llms.txt, the
+# agent token). Unset => open, with a warning in the log. The cookie is signed with TRILO_SECRET_KEY (set it in .env so
+# logins survive a restart; otherwise a key is drawn per process and everyone logs in again after a deploy).
+import hmac, secrets
+SITE_PASSWORD = os.environ.get("TRILO_SITE_PASSWORD", "").strip()
+app.secret_key = os.environ.get("TRILO_SECRET_KEY") or secrets.token_hex(32)
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30)
+if not SITE_PASSWORD:
+    sys.stderr.write("[trilobite] WARNING: TRILO_SITE_PASSWORD is not set: the site is open to anyone.\n"); sys.stderr.flush()
+LOGIN_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>trilobite morphospace</title>
+<style>:root{--bg:#000;--ink:#fff;--dim:#9a9a9a;--line:#333}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Helvetica,Arial,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center}
+form{width:min(360px,calc(100vw - 32px));display:grid;gap:18px}
+h1{font-size:.8rem;letter-spacing:.22em;text-transform:uppercase;font-weight:normal;margin:0;color:var(--dim)}
+input{background:transparent;border:0;border-bottom:1px solid var(--ink);color:var(--ink);font:inherit;font-size:1rem;padding:8px 0;outline:none;width:100%}
+button{background:var(--ink);color:var(--bg);border:0;font:inherit;font-size:.8rem;letter-spacing:.18em;text-transform:uppercase;padding:12px;cursor:pointer}
+p{margin:0;font-size:.75rem;color:var(--dim);letter-spacing:.04em}</style></head>
+<body><form method="post" action="/login"><h1>Trilobite morphospace</h1>
+<input type="password" name="password" placeholder="password" autofocus autocomplete="current-password">
+<input type="hidden" name="next" value="%NEXT%"><button type="submit">Enter</button>%MSG%</form></body></html>"""
+
+def _logged_in():
+    from flask import session
+    return bool(SITE_PASSWORD) and session.get("site") == hashlib.sha256(SITE_PASSWORD.encode()).hexdigest()[:16]
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    from flask import session, redirect
+    nxt = request.values.get("next") or "/"
+    if not re.fullmatch(r"/[A-Za-z0-9_\-/.?=&%]*", nxt): nxt = "/"                      # same-site paths only
+    if not SITE_PASSWORD: return redirect(nxt)
+    if request.method == "POST":
+        given = (request.form.get("password") or "").strip()
+        if hmac.compare_digest(given.encode(), SITE_PASSWORD.encode()):
+            session.permanent = True; session["site"] = hashlib.sha256(SITE_PASSWORD.encode()).hexdigest()[:16]
+            return redirect(nxt)
+        time.sleep(0.5)                                                                   # slow a guesser down
+        return LOGIN_HTML.replace("%NEXT%", nxt).replace("%MSG%", "<p>wrong password</p>"), 401
+    return LOGIN_HTML.replace("%NEXT%", nxt).replace("%MSG%", "")
+
+@app.get("/logout")
+def logout():
+    from flask import session, redirect
+    session.pop("site", None); return redirect("/login")
+
+@app.before_request
+def _password_gate():
+    if not SITE_PASSWORD or _logged_in(): return None
+    p = request.path
+    if p in ("/login", "/logout", "/loading.gif") or p.startswith("/static/"): return None
+    if p.startswith("/api/agent/") or p == "/llms.txt":                                   # programs: the agent token stands in for the cookie
+        tok = os.environ.get("TRILO_AGENT_TOKEN", "").strip()
+        if not tok:
+            try: tok = open(os.environ.get("TRILO_AGENT_TOKEN_FILE") or os.path.join(ROOT, "web", "agent_token.txt"), encoding="utf-8").read().strip()
+            except OSError: tok = ""
+        if tok and (request.args.get("token") == tok or request.headers.get("Authorization") == "Bearer " + tok): return None
+    if p.startswith("/api/") or p.startswith("/files/"):
+        return jsonify(error="this site needs a password: open / in a browser and log in"), 401
+    from flask import redirect
+    return redirect("/login?next=" + __import__("urllib.parse").parse.quote(request.full_path.rstrip("?"), safe="/?=&"))
 
 def _params_meta():
     return [dict(key=p.key, label=p.label, default=p.default, lo=p.lo, hi=p.hi, step=p.step, kind=p.kind, doc=p.doc, unit=p.unit, group=p.group)
@@ -326,7 +389,6 @@ def api_bodies_save():
     except (KeyError, ValueError) as ex: return jsonify(error=str(ex)[:200]), 400
     head = str(q.get("head") or "crescent")                                                # the head it was drawn with (a style or a saved head)
     if head != "crescent" and _head_style(head) is None: return jsonify(error=f"no such head '{head}'"), 404
-    if name not in _saved_bodies() and len(_saved_bodies()) >= _MAX_SAVED: return jsonify(error="too many saved bodies on this server"), 400
     rec = dict(name=name, preset=preset, head=head, spec=spec, doc=str(q.get("doc", ""))[:200], saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
     os.makedirs(BODIES, exist_ok=True); tmp = os.path.join(BODIES, name + ".json.part")
     json.dump(rec, open(tmp, "w"), indent=1); os.replace(tmp, os.path.join(BODIES, name + ".json"))
@@ -426,7 +488,6 @@ def api_heads_save():
     base_face = _head_custom({"style": h["base"]})["face"]
     f_edits = {k: v for k, v in h["face"].items() if v != base_face.get(k)}
     f_edits.update({k: HC.FACE[k] for k in base_face if k not in h["face"]})   # an edit back to the crescent's own value is an edit too
-    if name not in _saved_heads() and len(_saved_heads()) >= _MAX_SAVED: return jsonify(error="too many saved heads on this server"), 400
     rec = dict(name=name, style=h["base"], outline=o_edits, face=f_edits, doc=str(spec.get("doc", ""))[:200], saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
     os.makedirs(HEADS, exist_ok=True); tmp = os.path.join(HEADS, name + ".json.part")
     json.dump(rec, open(tmp, "w"), indent=1); os.replace(tmp, os.path.join(HEADS, name + ".json"))
@@ -645,10 +706,8 @@ def api_sheet():
 def api_stl(key):
     """One combined flat STL of the cached build — the download."""
     import trimesh
-    if not _KEY_RE.match(key): return jsonify(error="bad key"), 404
-    folder = os.path.join(CACHE, key)
-    if not os.path.exists(os.path.join(folder, "manifest.json")): return jsonify(error="no such build"), 404
-    man = json.load(open(os.path.join(folder, "manifest.json")))
+    if not _CACHE_KEY.fullmatch(key) or not os.path.exists(os.path.join(CACHE, key, "manifest.json")): return jsonify(error="no such build"), 404
+    folder = os.path.join(CACHE, key); man = json.load(open(os.path.join(folder, "manifest.json")))
     out = os.path.join(folder, "flat.stl")
     if not os.path.exists(out):
         P = schema.coerce(json.load(open(os.path.join(folder, "params.json")))) if os.path.exists(os.path.join(folder, "params.json")) else None
@@ -668,9 +727,10 @@ def api_stl(key):
         tmp = out + ".part"; whole.export(tmp, file_type="stl"); os.replace(tmp, out)   # never serve a half-written file
     return send_file(out, as_attachment=True, download_name=f"trilobite_{key}.stl")
 
+_CACHE_KEY = re.compile(r"[0-9a-f]{10}(-[A-Za-z0-9.]+)*")
 @app.get("/files/<key>/<path:name>")
 def files(key, name):
-    if not _KEY_RE.match(key): return jsonify(error="bad key"), 404     # key is validated; send_from_directory guards name traversal
+    if not _CACHE_KEY.fullmatch(key) or not re.fullmatch(r"[A-Za-z0-9_.-]+", name): return jsonify(error="no such file"), 404
     return send_from_directory(os.path.join(CACHE, key), name)
 
 def _evict(max_dirs=60):

@@ -10,7 +10,8 @@ reading here runs instrument 2.1's own procedure and constants, unchanged,
   * closure: head-tail gap < CLOSED_GAP_MM at the stopping angle,
   * classification: classify() verbatim (PREREG §3),
 with the isopod model's kinematics in place of the pin's: each joint turns about its ball centre (pieces in their
-rest placement, a uniform curl at every joint). And two geometric inputs the pin build takes from the schema are
+rest placement; the head joint turns the swept angle and the joints behind follow kinematics.profile, Esteve et al.
+2017's shape, so theta_joint_deg in this reading is the HEAD joint's angle and total_deg the profile's sum). And two geometric inputs the pin build takes from the schema are
 taken from the model instead: the head's length (the crescent head is not the schema's head) and the tail margin
 point (the tail's rear margin on the midline, in its rest placement).
 
@@ -26,14 +27,18 @@ import numpy as np, trimesh
 import schema, mesh as M
 import instrument as INS
 import check as CHECK
+import kinematics as KIN
 
-KINEMATICS = "isopod ball (isopod_model)"
+KINEMATICS = f"isopod ball (isopod_model); head joint swept, thoracic joints on {KIN.SOURCE}, scaled by head/{KIN.HEAD_DEG:g}"
 
 
-def reading(P, parts, PV, name="", budget_s=INS.MEASURE_BUDGET_S):
-    """parts: the model's pieces in model mm (rest placement); PV: [(y, z)] pivots in model mm."""
+def reading(P, parts, PV, name="", budget_s=INS.MEASURE_BUDGET_S, pivot="ball"):
+    """parts: the model's pieces in model mm (rest placement); PV: [(y, z)] pivots in model mm.
+    pivot: "ball" = the kit's own axis (the printed object); "dorsal" = Esteve et al. 2017's axis at the plate overlap
+    (kinematics.dorsal_pivots), a pose the fossils take and the printed kit cannot: a comparison, not a print reading."""
     P = schema.coerce(P); n = len(parts)
-    pose = lambda P_, th: CHECK.pose(PV, [th] * (n - 1))
+    if pivot == "dorsal": PV = KIN.dorsal_pivots(parts)
+    pose = lambda P_, th: CHECK.pose(PV, KIN.angles(n - 1, th))     # th = the head joint's angle; the chain follows the profile
     # the tail margin (midline, rear edge of the tail's own plan) and the head length, from the model
     tail = parts[-1]; yt = float(tail.bounds[1][1])
     loc, _, _ = tail.ray.intersects_location([(0.0, yt - 0.05, 200.0)], [(0, 0, -1.0)])
@@ -55,7 +60,9 @@ def reading(P, parts, PV, name="", budget_s=INS.MEASURE_BUDGET_S):
         INS.transforms_deg, INS.closure_geometry, INS.print_validity, INS.part_names = saved
     names = INS.part_names(P) if len(INS.part_names(P)) == n else [f"p{k}" for k in range(n)]
     r["stopped_by"] = [(names[a] if isinstance(a, int) else a, names[b] if isinstance(b, int) else b, v) for a, b, v in r.get("stopped_by", [])]
-    r.update(kinematics=KINEMATICS, preset=name, head_length_mm=round(Lc, 2), tail_margin_rest=[round(float(v), 2) for v in tip_rest[:3]],
+    th = r.get("theta_joint_deg")
+    if th is not None: r["angles_deg"] = [round(a, 2) for a in KIN.angles(n - 1, th)]; r["total_deg"] = round(KIN.total(n - 1, th), 1)
+    r.update(kinematics=KINEMATICS + (" ; DORSAL pivot (Esteve), not the kit" if pivot == "dorsal" else ""), pivot=pivot, preset=name, head_length_mm=round(Lc, 2), tail_margin_rest=[round(float(v), 2) for v in tip_rest[:3]],
              note="instrument 2.1 procedure and constants; isopod joints' kinematics; not a pre-registered reading")
     r.pop("printed_stop_deg", None); r.pop("v1_equivalent_e_max", None)
     return r

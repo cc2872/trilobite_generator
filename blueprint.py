@@ -439,12 +439,19 @@ if __name__ == "__main__" and len(__import__("sys").argv) > 1 and __import__("sy
 # print-in-place at the isopod's own size. The pin sheet above (hinge z, knuckles, the enrollment instrument, the eye
 # lattice) does not describe it, so it gets its own sheet: dorsal plan, lateral + midline section, the chain curled on
 # its ball joints, and a title block with the print size, the pieces, and the per-joint pivots.
-def _curl_mats(pivots, curl_deg):
-    """Rest -> posed transform per piece: each joint curled by curl_deg about its pivot (y, z), the chain behind down.
-    The isopod kinematics (isopod_model/body.pose), in the exported print-mm frame."""
+def _angles(pivots, head_deg):
+    """Per-joint angles for a head-joint angle: the enrolment bend profile (kinematics.py, Esteve et al. 2017)."""
+    import kinematics as KIN
+    return KIN.angles(len(pivots), head_deg)
+
+def _curl_mats(pivots, angles):
+    """Rest -> posed transform per piece: joint k curled by angles[k] about its pivot (y, z), the chain behind down.
+    The isopod kinematics (isopod_model/body.pose), in the exported print-mm frame. angles: a list per joint, or one
+    head-joint angle (the rest follow the profile)."""
+    if not isinstance(angles, (list, tuple, np.ndarray)): angles = _angles(pivots, float(angles))
     T = [np.eye(4)]
-    for (yc, zc) in pivots:
-        T.append(T[-1] @ trimesh.transformations.rotation_matrix(math.radians(-curl_deg), (1, 0, 0), (0, yc, zc)))
+    for (yc, zc), a in zip(pivots, angles):
+        T.append(T[-1] @ trimesh.transformations.rotation_matrix(math.radians(-a), (1, 0, 0), (0, yc, zc)))
     return T
 
 PLA_G_CM3 = 1.24       # PLA density, for the schedule's mass column
@@ -471,13 +478,14 @@ def _rot2(pts, yc, zc, deg):
     d = pts - [yc, zc]
     return np.c_[d[:, 0] * c - d[:, 1] * s, d[:, 0] * s + d[:, 1] * c] + [yc, zc]
 
-def _posed_sections(secs, pivots, curl_deg):
-    """Every part's midline polylines carried through the chain curled curl_deg per joint (2D kinematics)."""
+def _posed_sections(secs, pivots, angles):
+    """Every part's midline polylines carried through the chain, joint j curled by angles[j] (2D kinematics)."""
+    if not isinstance(angles, (list, tuple, np.ndarray)): angles = _angles(pivots, float(angles))
     out = [list(secs[0])]
     for k in range(1, len(secs)):
         polys = secs[k]
         for j in range(k - 1, -1, -1):                      # joints ahead of this part, innermost first (same as the matrix chain)
-            yc, zc = pivots[j]; polys = [_rot2(q, yc, zc, curl_deg) for q in polys]
+            yc, zc = pivots[j]; polys = [_rot2(q, yc, zc, angles[j]) for q in polys]
         out.append(polys)
     return out
 
@@ -534,16 +542,17 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
     n = len(parts)
     names = info.get("names") or [f"piece {i}" for i in range(n)]
     pivots = [tuple(map(float, pv)) for pv in (info.get("pivots") or [])]
-    curl = float(info.get("curl_deg", 30.0)); nj = len(pivots)
+    curl = float(info.get("curl_deg", 30.0)); nj = len(pivots)            # curl = the HEAD joint's angle; the joints behind follow the profile
+    ang = _angles(pivots, curl); tot = float(sum(ang)); prof = (f"head {ang[0]:.0f}°, {ang[1]:.0f}→{ang[-1]:.0f}° behind" if nj > 1 else (f"{curl:.0f}°" if nj else "no joints"))
     meta = info.get("meta") or [{} for _ in parts]
     checks = info.get("checks") or {}
     flat = trimesh.util.concatenate([p.copy() for p in parts]); cx = float(flat.centroid[0]); flat.apply_translation([-cx, 0, 0])
     parts = [p.copy().apply_translation([-cx, 0, 0]) for p in parts]
     (x0, y0, z0), (x1, y1, z1) = flat.bounds; W, L, H = x1 - x0, y1 - y0, z1 - z0
     secs = _sections_x0(parts)
-    T = _curl_mats(pivots, curl)
+    T = _curl_mats(pivots, ang)
     posed = trimesh.util.concatenate([parts[k].copy().apply_transform(T[k]) for k in range(n)])
-    psec = _posed_sections(secs, pivots, curl)
+    psec = _posed_sections(secs, pivots, ang)
     mono = dict(family="monospace", color=INK)
 
     fig = plt.figure(figsize=(16.5, 11.7), facecolor=BG)                       # A3 landscape
@@ -590,9 +599,14 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
     if GYs is not None: _strong_outline(ax3, GYs, GZs, Ms, draw=True, lw=0.5)
     for polys in psec:
         for q in polys: ax3.plot(q[:, 0], q[:, 1], color=INK, lw=0.9)
+    try:                                                                     # grey: the same angles about Esteve's dorsal axis (the plate overlap)
+        import kinematics as _KIN
+        for polys in _posed_sections(secs, _KIN.dorsal_pivots(parts), ang):
+            for q in polys: ax3.plot(q[:, 0], q[:, 1], color=DIM, lw=0.45, alpha=0.6)
+    except Exception: pass
     (py0, pz0), (py1, pz1) = posed.bounds[0][1:], posed.bounds[1][1:]
     coil = max(py1 - py0, pz1 - pz0)
-    ax3.set_title(f"ENROLLED · {curl:.0f}°/joint · {curl * nj:.0f}° over {nj} joints · Ø {coil:.0f} mm", fontsize=8, loc="left", **mono)
+    ax3.set_title(f"ENROLLED · {prof} · {tot:.0f}° over {nj} joints · Ø {coil:.0f} mm · grey: dorsal axis (Esteve)", fontsize=8, loc="left", **mono)
     _dim(ax3, py0, pz0 - 6, py1, pz0 - 6, f"{py1 - py0:.1f}", off=0)
     ax3.set_xlim(py0 - 12, py1 + 12); ax3.set_ylim(pz0 - 16, pz1 + 8)
 
@@ -602,7 +616,8 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
         j = nj // 2; yc, zc = pivots[j]; win = 30.0; ztop = min(z1, zc + 26)
         for q in secs[j]: axb.plot(q[:, 0], q[:, 1], color=INK, lw=1.0)                                   # the piece ahead (socket)
         for q in secs[j + 1]: axb.plot(q[:, 0], q[:, 1], color=INK, lw=1.0, ls=(0, (4, 2)))              # the piece behind (ball)
-        for q in secs[j + 1]: r = _rot2(q, yc, zc, curl); axb.plot(r[:, 0], r[:, 1], color=DIM, lw=0.45, alpha=0.55)   # ... curled
+        aj = ang[j]                                                                                         # this joint's own angle on the profile
+        for q in secs[j + 1]: r = _rot2(q, yc, zc, aj); axb.plot(r[:, 0], r[:, 1], color=DIM, lw=0.45, alpha=0.55)   # ... curled
         axb.plot([yc - 2.5, yc + 2.5], [zc, zc], color=INK, lw=0.5); axb.plot([yc, yc], [zc - 2.5, zc + 2.5], color=INK, lw=0.5)
         try:
             import joints.ball as _B; ballD = 2.0 * float(_B._ASSET_R)               # the kit is printed 1:1 (18 mm pitch)
@@ -610,7 +625,7 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
         lo_z = z0 - 1.0
         if ballD: _dim(axb, yc - ballD / 2, lo_z - 2.0, yc + ballD / 2, lo_z - 2.0, f"Ø {ballD:.1f} ball", off=0)
         _dim(axb, yc + win - 5, z0, yc + win - 5, zc, f"{zc - z0:.1f}", off=0)
-        for a, lab in ((0.0, "rest"), (curl, f"enrol {curl:.0f}°")):
+        for a, lab in ((0.0, "rest"), (aj, f"enrol {aj:.0f}°")):
             axb.plot([yc, yc + (win - 2) * math.cos(math.radians(-a))], [zc, zc + (win - 2) * math.sin(math.radians(-a))], color=DIM, lw=0.45, ls=(0, (5, 3)))
             axb.text(yc + (win - 1) * math.cos(math.radians(-a)), zc + (win - 1) * math.sin(math.radians(-a)), lab, fontsize=5.5, color=DIM, family="monospace", va="center")
         gv = lambda k, d=0.0: float(P.get(k, d))
@@ -624,7 +639,7 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
     axs = fig.add_subplot(gs[9:14, 12:24]); axs.set_facecolor(BG); axs.set_aspect("equal"); axs.axis("off")
     fr = [0.0, 0.25, 0.5, 0.75, 1.0]; xoff = 0.0; extents = []
     for f in fr:
-        ps = _posed_sections(secs, pivots, curl * f)
+        ps = _posed_sections(secs, pivots, [a * f for a in ang])
         allp = np.vstack([q for polys in ps for q in polys]) if any(ps) else np.zeros((1, 2))
         fy0, fy1, fz0, fz1 = allp[:, 0].min(), allp[:, 0].max(), allp[:, 1].min(), allp[:, 1].max()
         for polys in ps:
@@ -632,8 +647,8 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
         axs.plot([xoff, xoff + fy1 - fy0], [fz0 - 1, fz0 - 1], color=DIM, lw=0.3)
         extents.append((fz0, fz1, xoff + 0.5 * (fy1 - fy0), f)); xoff += (fy1 - fy0) + 16
     lo = min(e[0] for e in extents); hi = max(e[1] for e in extents)
-    for _, _, xm, f in extents: axs.text(xm, lo - 7, f"{curl * f * nj:.0f}°", fontsize=6.5, ha="center", va="top", **mono)
-    axs.set_title(f"ENROLMENT · 0 → {curl * nj:.0f}° · lateral midline", fontsize=8, loc="left", **mono)
+    for _, _, xm, f in extents: axs.text(xm, lo - 7, f"{tot * f:.0f}°", fontsize=6.5, ha="center", va="top", **mono)
+    axs.set_title(f"ENROLMENT · 0 → {tot:.0f}° · lateral midline" + (f" · head {ang[0]:.0f}°, log decay behind" if nj > 1 else ""), fontsize=8, loc="left", **mono)
     axs.set_xlim(-6, xoff - 8); axs.set_ylim(lo - 14, hi + 6)
 
     # ---- SECTION A–A · lateral
@@ -697,7 +712,7 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
     elif isinstance(body, dict): body_s = ["BODY     " + ", ".join(f"{k} {v}" for k, v in body.items() if k != "rows")[:46]]
     else: body_s = ["BODY     preset rows (segCount %d)" % int(gv("segCount", 0))]
     lines = [f"LENGTH {L:6.1f}  WIDTH {W:6.1f}  RELIEF {H:5.1f}", f"CLEAR  {gv('clearance'):5.2f}  PIECES {n:2d}  JOINTS {nj} ball",
-             f"CURL   {curl:.0f}°/joint · {curl * nj:.0f}°  BED {BED_MM} · {len(plates)} plate{'s' if len(plates) != 1 else ''}", "",
+             f"CURL   {prof} · {tot:.0f}°  BED {BED_MM} · {len(plates)} plate{'s' if len(plates) != 1 else ''}", "",
              "PRINT CHECKS",
              f" valid     {'✓' if valid else ('✗' if valid is not None else '— (not checked)')}",
              f" contacts  {('none at rest' if not touching else ', '.join('%s–%s %.2f mm3' % (t['a'], t['b'], t['mm3']) for t in touching))[:44]}",
