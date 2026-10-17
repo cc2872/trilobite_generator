@@ -96,9 +96,11 @@ const $=id=>document.getElementById(id);
 const S={ preset:'textured', head:'crescent', savedBody:null, savedHead:null,
           spec:{list:null, model:'thorax'}, headOutline:{}, headFace:{}, headBaseOutline:{}, headBaseFace:{}, headMeta:null,
           BD:null, HD:null, presets:[], savedBodies:[], savedHeads:[],
-          sel:null, pinned:null, hover:null, drag:null, pendingB:false, pendingH:false, edited:false, P:null, eyeParams:[], prongParams:[] };
+          sel:null, pinned:null, hover:null, drag:null, pendingB:false, pendingH:false, edited:false, built:null, P:null, eyeParams:[], prongParams:[] };
 const fmt=v=>Number.isInteger(v)?String(v):(+v).toFixed(Math.abs(v)<1?3:(Math.abs(v)<10?2:1));
 function status(t,bad){ $('status').textContent=t||''; $('status').classList.toggle('busy',!!bad); }
+// a build (STL download + the 3D embed) belongs to one exact animal; any edit after it makes both stale, so drop them (13 Oct 2026)
+function invalidateBuild(){ if(!S.built) return; S.built=null; $('links').innerHTML=''; status('edited - rebuild to download / view 3D',false); }
 // when embedded in the generator, stream the live head + body so the host's Build/sheet/3D use them (12 Oct 2026)
 function postState(){ try{ if(window.parent && window.parent!==window) window.parent.postMessage({type:'trilo-studio', preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec}, '*'); }catch(_){} }
 const EMBED=(()=>{ try{ return !!(window.parent && window.parent!==window); }catch(_){ return true; } })();   // inside the generator's iframe: show only the drawing, hand Build to the host
@@ -126,14 +128,14 @@ const headCur=k=>S.HD?(isOut(k)?S.HD.outline[k]:S.HD.face[k]):undefined;
 function clampR(k,v,T){ const r=(T||R)[k]||[-1e9,1e9]; v=Math.min(r[1],Math.max(r[0],v)); if(r[2]) v=Math.round(v); return v; }
 function clampH(k,v){ const r=RH[k]||[-1e9,1e9]; v=Math.min(r[1],Math.max(r[0],v)); if(r[2]) v=Math.round(v); return v; }
 function setHeadKey(k,v,quiet){ v=clampH(k,v); const edits=isOut(k)?S.headOutline:S.headFace; if(Math.abs(v-headBaseOf(k))<1e-9) delete edits[k]; else edits[k]=+v.toFixed(4); if(!quiet) sendHead(); }
-function setEyeParam(k,v){ if(!S.P) return; S.P[k]=+v; S.edited=true; status('edited - Build to see it',false); }   // a schema param on P (eye / prong); the 2D drawing can't show it, so feedback is on Build / 3D
+function setEyeParam(k,v){ if(!S.P) return; S.P[k]=+v; S.edited=true; invalidateBuild(); status('edited - Build to see it',false); }   // a schema param on P (eye / prong); the 2D drawing can't show it, so feedback is on Build / 3D
 function renderProngs(){ const box=$('prongctl'); if(!box) return; if(!S.P||!S.prongParams.length){ box.innerHTML=''; return; } box.innerHTML='';
   for(const p of S.prongParams){ const v=(S.P[p.key]!=null?S.P[p.key]:p.default);
     if(p.key==='headProngs'||p.key==='tailProngs') prongStepper(box,p);
     else slider(box,p.key,v,p.lo,p.hi,p.step||((p.hi-p.lo)/200),val=>setEyeParam(p.key,val),p.unit||''); } }
 function prongStepper(box,p){ const cur=()=>Math.round(S.P[p.key]!=null?S.P[p.key]:p.default); const d=document.createElement('div'); d.className='ctrl';
   d.innerHTML=`<div class="lab"><span>${p.label.toLowerCase()} (tines)</span><span class="val" id="v_${p.key}">${cur()}</span></div><div class="row" style="margin-top:4px"><button class="btn small" data-s="-1">- tine</button><button class="btn small" data-s="1">+ tine</button></div>`;
-  box.appendChild(d); d.querySelectorAll('button').forEach(b=>b.onclick=()=>{ const nv=Math.max(p.lo,Math.min(p.hi,cur()+(+b.dataset.s))); S.P[p.key]=nv; $('v_'+p.key).textContent=nv; S.edited=true; status('edited - Build to see it',false); }); }
+  box.appendChild(d); d.querySelectorAll('button').forEach(b=>b.onclick=()=>{ const nv=Math.max(p.lo,Math.min(p.hi,cur()+(+b.dataset.s))); S.P[p.key]=nv; $('v_'+p.key).textContent=nv; S.edited=true; invalidateBuild(); status('edited - Build to see it',false); }); }
 let showProngs=false;
 $('prongtoggle').onclick=()=>{ showProngs=!showProngs; $('prongtoggle').textContent=showProngs?'hide':'show'; $('prongctl').style.display=showProngs?'':'none'; if(showProngs) renderProngs(); };
 
@@ -146,7 +148,7 @@ function removeRow(i){ if(S.spec.list.length<=2){ status('keep at least two rows
 
 // ---------- server ----------
 async function loadAll(preset, bodyName, start){
-  S.edited=false;
+  S.edited=false; S.built=null; $('links').innerHTML='';
   const hu='/api/head_diagram?style='+encodeURIComponent(S.head);
   const bu=`/api/body_diagram?preset=${encodeURIComponent(preset)}&head=${encodeURIComponent(S.head)}`+(bodyName?`&body=${encodeURIComponent(bodyName)}`:(start==='plain'?'&start=boring':''));
   const [hd,bd]=await Promise.all([ (await fetch(hu)).json(), (await fetch(bu)).json() ]);
@@ -165,12 +167,12 @@ async function loadAll(preset, bodyName, start){
   fillPickers(); renderContext(); renderTable(); kv(); postState(); if(showProngs) renderProngs();
 }
 let inflightB=null, inflightH=null;
-async function sendBody(){ S.edited=true; postState(); renderTable();
+async function sendBody(){ S.edited=true; invalidateBuild(); postState(); renderTable();
   if(inflightB){ S.pendingB=true; return; }
   inflightB=fetch('/api/body_diagram',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({preset:S.preset, spec:S.spec, head:S.head})})
     .then(r=>r.json()).then(d=>{ if(d.error){ status(d.error,true); return; } S.BD=d.diagram; kv(); renderContext(false); renderTable(); })
     .catch(e=>status(String(e),true)).finally(()=>{ inflightB=null; if(S.pendingB){ S.pendingB=false; sendBody(); } }); }
-async function sendHead(){ S.edited=true; postState(); renderContext(false);
+async function sendHead(){ S.edited=true; invalidateBuild(); postState(); renderContext(false);
   if(inflightH){ S.pendingH=true; return; }
   inflightH=fetch('/api/head_diagram',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({style:S.head, outline:S.headOutline, face:S.headFace})})
     .then(r=>r.json()).then(d=>{ if(d.error){ status(d.error,true); return; } S.HD=d; kv(); renderContext(false); })
@@ -234,13 +236,14 @@ $('build').onclick=async()=>{ const b=$('build'); b.disabled=true; const t0=Date
     const r=await fetch('/api/build',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, joint:'isopod', head:headArg(), body:S.spec})}); const m=await r.json(); clearInterval(tick);
     if(!r.ok||!m.parts||!m.parts.length){ status('build failed - '+((m.build_notes||[]).map(n=>n[2]).join('; ')||m.error||r.status),true); }
     else{ const bad=m.parts.filter(p=>!p.watertight||p.bodies!==1).length; status(`built ${m.parts.length} pieces in ${m.build_seconds} s${bad?` - ${bad} not watertight`:''}`,!!bad);
+      S.built=m.key;                                                                     // this STL + the 3D embed now belong to this exact animal; an edit drops them (invalidateBuild)
       $('links').innerHTML=`<a href="/api/stl/${m.key}">download STL (all pieces, print mm)</a>`;
       try{ status('drawing blueprint…',true); const sr=await fetch('/api/sheet',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, joint:'isopod', cmap:'none', head:headArg(), body:S.spec})}); const sj=await sr.json(); if(sj.url){ showSheet(sj.url); status(`built - ${m.parts.length} pieces - blueprint ready`,false); } else status('built - blueprint failed',true); }catch(_){ status('built - blueprint failed',true); } }
   }catch(e){ clearInterval(tick); status('build failed - '+e,true); } b.disabled=false; };
 function showSheet(url){ $('sheetimg').src=url+(url.indexOf('?')>=0?'&':'?')+'t='+Date.now(); mode3d(false); $('sheetwrap').style.display='flex'; }   // Build shows the blueprint over the drawing; "← editor" returns to editing
 function mode3d(on){ $('sheetimg').style.display=on?'none':'block'; const f=$('view3dframe'); f.style.display=on?'block':'none';
   if(on){ try{ sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec, P:S.P})); }catch(_){}
-    const want='/generator?preset='+encodeURIComponent(S.preset)+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+'&bodydraft=1&only3d=1';   // the generator's proven 3D, panel hidden, on this animal
+    const want='/generator?preset='+encodeURIComponent(S.preset)+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+'&bodydraft=1&only3d=1'+(S.built?'&sig='+encodeURIComponent(S.built):'');   // the generator's proven 3D, panel hidden; sig=build key so a rebuilt animal reloads the iframe (reads the fresh draft) instead of showing the old mesh
     if(f.getAttribute('src')!==want) f.setAttribute('src',want); }
   $('toblue').classList.toggle('on',!on); $('to3d').classList.toggle('on',on); }
 $('sheetback').onclick=()=>{ $('sheetwrap').style.display='none'; };
