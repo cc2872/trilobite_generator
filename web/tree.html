@@ -139,6 +139,23 @@
     .key,.sig{display:none}
   }
   @media (prefers-reduced-motion:reduce){ .node{transition:none} }
+
+  /* Sources: a scrollable bibliography over the stage, reached from the top HUD (17 Oct 2026) */
+  #refs{position:fixed;inset:0;z-index:5;background:rgba(0,0,0,.94);display:none;overflow:auto;-webkit-overflow-scrolling:touch}
+  #refs.open{display:block}
+  #refs .wrap{max-width:820px;margin:0 auto;padding:calc(26px + env(safe-area-inset-top,0px)) 26px calc(60px + env(safe-area-inset-bottom,0px))}
+  #refs h1{font-weight:400;font-size:13px;letter-spacing:.2em;margin:0 0 6px}
+  #refs .lead{color:var(--ink-dim);text-transform:none;letter-spacing:.03em;font-size:11px;line-height:1.65;margin:0 0 20px}
+  #refs h2{font-weight:400;font-size:11px;letter-spacing:.22em;color:var(--ink);border-bottom:1px solid var(--ink-faint);padding-bottom:6px;margin:34px 0 4px}
+  #refs h2 .cap{display:block;color:var(--ink-dim);text-transform:none;letter-spacing:.03em;font-size:10px;margin-top:4px;padding-bottom:2px}
+  #refs h3{font-weight:400;font-size:10px;letter-spacing:.18em;color:var(--ink-dim);margin:22px 0 10px}
+  #refs .ref{text-transform:none;letter-spacing:.015em;font-size:12px;line-height:1.65;margin:0 0 14px;color:var(--ink)}
+  #refs .ref .in{display:block;color:var(--ink-dim);margin-top:3px}
+  #refs .ref .in b{color:var(--ink);font-weight:400}
+  #refs a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--ink-faint)}
+  #refs a:hover{border-bottom-color:var(--ink)}
+  #refs .close{position:fixed;right:22px;top:calc(16px + env(safe-area-inset-top,0px));z-index:6;background:var(--glass)}
+  #refs .close:hover{background:var(--ink);color:var(--bg)}
 </style>
 </head>
 <body>
@@ -148,6 +165,7 @@
   <a class="btn" id="gen" href="/">Universal Trilobite Generator</a>
   <div id="views" role="group" aria-label="Layout"><button class="btn on" type="button" aria-pressed="true">Spiral</button><button class="btn" type="button" aria-pressed="false">Timeline</button><button class="btn" type="button" aria-pressed="false">Tree</button><button class="btn" type="button" aria-pressed="false">Earth</button></div>
   <button class="btn" id="play" type="button" aria-pressed="false" title="Run through all the layouts (P)">Play</button>
+  <button class="btn" id="refsbtn" type="button" aria-expanded="false" aria-controls="refs" title="Literature and credits (S)">Sources</button>
   <div class="k">TREE <span>  542 Ma to 251 Ma  one drawing, four layouts</span></div>
 </div>
 
@@ -181,6 +199,69 @@
   <input type="range" id="time" min="251" max="542" step="0.5" value="542" aria-label="Time, millions of years ago">
   <div class="key">● preset  ○ none  - - ?  dotted = not modelled</div>
   <div class="sig">Claire Choi  Cornell</div>
+</div>
+
+<div id="refs" role="dialog" aria-modal="true" aria-label="Sources" hidden>
+  <button class="btn close" id="refsclose" type="button" title="Close (Esc)">Close</button>
+  <div class="wrap">
+    <h1>Sources</h1>
+    <p class="lead">What the generator is built from, and what it is read against. Page numbers refer to the edition cited.</p>
+
+    <h2>Applied<span class="cap">In the generator: used directly in the shapes, the ruler or the export.</span></h2>
+    <p class="ref">Gon, S. M. III. 2009. A Pictorial Guide to the Orders of Trilobites.
+      <span class="in"><b>In the generator:</b> the ten order presets and the 24 head styles (pp. 52-84, page per style); facial sutures, proparian / gonatoparian / opisthoparian (pp. 21, 26); eye ridges (p. 41); cyclopygid eyes (p. 44); the enrolment definitions and coaptation (pp. 31-32).</span></p>
+    <p class="ref">Esteve, J., Rubio, P., Zamora, S. &amp; Rahman, I. A. 2017. Modelling enrolment in Cambrian trilobites. Palaeontology 60: 423-432. <a href="https://doi.org/10.1111/pala.12294" target="_blank" rel="noopener">doi:10.1111/pala.12294</a>. Data: Dryad <a href="https://doi.org/10.5061/dryad.s29j7" target="_blank" rel="noopener">doi:10.5061/dryad.s29j7</a>.
+      <span class="in"><b>In the generator:</b> the 150° split between enrolment classes; the per-joint bend profile (45° at the head joint, logarithmic decay) in the exploratory instrument; the Bailiaspis and Parabailella models as comparison animals; the 14- vs 15-segment closure case.</span></p>
+    <p class="ref">Esteve, J. &amp; Hughes, N. C. 2023. Developmental and functional controls on enrolment in an ancient, extinct arthropod. Proc. R. Soc. B 290: 20230871.
+      <span class="in"><b>In the generator:</b> the segment-count sweep (the sphaeroidal to external-spiral switch near 18 segments in Aulacopleura) as a pre-registered test.</span></p>
+    <p class="ref">Bergström, J. 1973. Organization, life, and systematics of trilobites. Fossils and Strata 2: 1-69.
+      <span class="in"><b>In the generator:</b> the enrolment class names sphaeroidal, double (internal spiral) and spiral (external spiral), as relayed by Whittington 1996 and Esteve et al. 2017. Original not yet consulted.</span></p>
+    <p class="ref">Whittington, H. B. 1996. Olenellid trilobites: the thorax and enrolment. Palaeontology 39: 377-388.
+      <span class="in"><b>In the generator:</b> the articulation set (fulcrum, articulating half ring, facet) the thorax plan carries; the cylindrical type the instrument cannot yet score.</span></p>
+    <p class="ref">Whittington, H. B. et al. 1997. Treatise on Invertebrate Paleontology, Part O, Trilobita, revised, vol. 1. Clarkson, E. N. K. &amp; Whittington, H. B., Enrollment and coaptative structures, pp. 67-73.
+      <span class="in"><b>In the generator:</b> the segment vocabulary (axial ring, half ring, furrows, pleurae, facet, spine) used by the single-segment program and the sheet.</span></p>
+    <p class="ref">Bruton, D. L. &amp; Haas, W. 1997. Functional morphology of Phacopinae (Trilobita) and the mechanics of enrolment. Palaeontographica A 245: 1-43.
+      <span class="in"><b>In the generator:</b> the rotation-axis convention (anterior pleural edge under the preceding segment) the instrument's pin hinge is compared against.</span></p>
+    <p class="ref">Raup, D. M. 1966. Geometric analysis of shell coiling: general problems. J. Paleontology 40: 1178-1190.
+      <span class="in"><b>In the generator:</b> the morphospace framing; the few-axis dials and the sweep design.</span></p>
+    <p class="ref">Rohlf, F. J. tpsDig and the TPS file format; Adams, D. C., Collyer, M. L. &amp; Kaliontzopoulou, A. geomorph (R).
+      <span class="in"><b>In the generator:</b> the twelve homologous dorsal landmarks and the TPS export (landmarks.py), for Procrustes analysis in geomorph.</span></p>
+
+    <h2>Reference<span class="cap">Read against, not built in: the enrolment, anatomy and preservation literature the work sits within.</span></h2>
+    <h3>Enrolment</h3>
+    <p class="ref">Esteve, J., Gutiérrez-Marco, J. C., Rubio, P. &amp; Rábano, I. 2018. Evolution of trilobite enrolment during the Great Ordovician Biodiversification Event: insights from kinematic modelling. Lethaia 51: 207-217.</p>
+    <p class="ref">Esteve, J., Hughes, N. C. &amp; Zamora, S. 2013. Thoracic structure and enrolment style in middle Cambrian Eccaparadoxides pradoanus presages caudalization of the derived trilobite trunk. Palaeontology 56: 589-601.</p>
+    <p class="ref">Esteve, J., Hughes, N. C. &amp; Zamora, S. 2011. Purujosa trilobite assemblage and the evolution of trilobite enrollment. Geology 39: 575-578.</p>
+    <p class="ref">Esteve, J. 2013. Enrolment in Cambrian trilobites. Estudios Geológicos. <a href="https://doi.org/10.3989/egeol.41215.259" target="_blank" rel="noopener">doi:10.3989/egeol.41215.259</a>.</p>
+    <p class="ref">Esteve, J., Zamora, S., Gozalo, R. &amp; Liñán, E. 2010. Sphaeroidal enrolment in middle Cambrian solenopleuropsine trilobites. Lethaia 43: 478-493.</p>
+    <p class="ref">Chipman, A. D. &amp; Drage, H. B. 2023. Trilobites in rock enrol. Proc. R. Soc. B 290: 20231547. (Comment on Esteve &amp; Hughes 2023.)</p>
+    <p class="ref">Ortega-Hernández, J., Esteve, J. &amp; Butterfield, N. J. 2013. Humble origins for a successful strategy: complete enrolment in early Cambrian olenellid trilobites. Biology Letters 9: 20130679.</p>
+    <p class="ref">Losso, S. R., Affatato, P., Nanglu, K. &amp; Ortega-Hernández, J. 2023. Convergent evolution of ventral adaptations for enrolment in trilobites and extant euarthropods. Proc. R. Soc. B 290: 20232212.</p>
+    <p class="ref">Bruton, D. L. &amp; Nakrem, H. A. 2005. Enrollment in a Middle Ordovician agnostoid trilobite. Acta Palaeontologica Polonica 50: 441-448.</p>
+    <p class="ref">Budd, G. E. 1999. A nektaspid arthropod from the Early Cambrian Sirius Passet fauna, with a description of retrodeformation based on functional morphology. Palaeontology 42: 99-122.</p>
+    <p class="ref">Feist, R., Lerosey-Aubril, R. &amp; Johnson, R. 2010. Coaptative devices, enrollment, and life habits in Paralejurus. Palaeobiodiversity and Palaeoenvironments 90: 125-137.</p>
+    <p class="ref">Laibl, L., Esteve, J. &amp; Fatka, O. 2016. Enrolment in a Middle Cambrian agnostid. Fossil Imprint 72: 161-171.</p>
+    <p class="ref">Suárez, M. G. &amp; Esteve, J. 2021. Morphological diversity and disparity in trilobite cephala and the evolution of trilobite enrolment. Lethaia.</p>
+    <p class="ref">Babcock, L. E. &amp; Speyer, S. E. 1987. Enrolled trilobites from the Alden Pyrite Bed, Ledyard Shale (Middle Devonian) of western New York. J. Paleontology 61: 539-548.</p>
+    <h3>Anatomy, development and affinities</h3>
+    <p class="ref">Hughes, N. C. 2003. Trilobite tagmosis and body patterning from morphological and developmental perspectives. Integrative and Comparative Biology 43: 185-206.</p>
+    <p class="ref">Hopkins, M. J. 2017. Development, trait evolution, and the evolution of development in trilobites. Integrative and Comparative Biology 57: 488-498.</p>
+    <p class="ref">Paterson, J. R. 2020. The trouble with trilobites: classification, phylogeny and the cryptogenesis problem. Geological Magazine 157: 35-46.</p>
+    <p class="ref">Losso, S. R. &amp; Ortega-Hernández, J. 2022. Claspers in the mid-Cambrian Olenoides serratus indicate horseshoe crab-like mating in trilobites. Geology 50: 897-901.</p>
+    <p class="ref">Losso, S. R., Nanglu, K., Weyland, W. C. &amp; Ortega-Hernández, J. 2025. Quantification of leg mobility in the Burgess Shale Olenoides serratus. BMC Biology 23: 238.</p>
+    <p class="ref">Losso, S. R., Becker-Kerber, B., Weaver, J. C., Pérez-Peris, F. &amp; Ortega-Hernández, J. 2026. The trilobite nervous system and the early evolution of the mandibulate central complex. bioRxiv 2026.10.05.756825.</p>
+    <h3>Three-dimensional specimens</h3>
+    <p class="ref">El Albani, A. et al. 2024. Rapid volcanic ash entombment reveals the 3D anatomy of Cambrian trilobites. Science 384: 1429-1435.</p>
+    <p class="ref">Kraft, P. et al. 2023. Uniquely preserved gut contents illuminate trilobite palaeophysiology. Nature 622: 545-551.</p>
+    <p class="ref">Losso, S. R., Thines, J. E. &amp; Ortega-Hernández, J. 2023. Taphonomy of non-biomineralized trilobite tissues preserved as calcite casts from the Ordovician Walcott-Rust Quarry. Communications Earth &amp; Environment 4.</p>
+    <h3>Theoretical morphology</h3>
+    <p class="ref">McGhee, G. R. 1999. Theoretical Morphology: The Concept and Its Applications. Columbia University Press.</p>
+
+    <h2>Assets<span class="cap">Print models and software the build and the site are made with.</span></h2>
+    <p class="ref">Articulated Giant Isopod by itbefred, Thingiverse 4777921, CC BY-NC-SA. The print model's ball-and-socket joint and head base are derived from it, with the author's permission.</p>
+    <p class="ref">Flexi Trilobite, Thingiverse 3839472. The hook-chain print joint is a parametrised form of it. (Author and licence to be filled in.)</p>
+    <p class="ref">Exact mesh booleans: Manifold 3.0.1. Drawing: p5.js (LGPL 2.1). 3D view: three.js (MIT).</p>
+  </div>
 </div>
 
 <script>
@@ -684,6 +765,12 @@ function setPlay(on){
 }
 document.querySelectorAll('#views button').forEach((b,i)=> b.addEventListener('click', ()=>goMode(i)));
 document.getElementById('play').addEventListener('click', ()=>setPlay(!playing));
+// Sources: a bibliography overlay (17 Oct 2026). Toggle from the HUD button or S; Escape closes.
+const refsEl = document.getElementById('refs'), refsBtn = document.getElementById('refsbtn');
+function showRefs(on){ refsEl.hidden = !on; refsEl.classList.toggle('open', on); refsBtn.setAttribute('aria-expanded', on);
+  if(on){ refsEl.scrollTop = 0; document.getElementById('refsclose').focus(); } else { refsBtn.focus(); } }
+refsBtn.addEventListener('click', ()=> showRefs(refsEl.hidden));
+document.getElementById('refsclose').addEventListener('click', ()=> showRefs(false));
 function advance(dt){
   if(!step && at !== goal) step = {a:at, b:NEXT[at][goal], p:0};
   if(step){ step.p += dt/STEP_MS; if(step.p >= 1){ at = step.b; step = null; } pose(); }
@@ -724,11 +811,13 @@ stage.addEventListener('pointerup', endDrag); stage.addEventListener('pointercan
 stage.addEventListener('wheel', e=>{ e.preventDefault(); setTime(T - Math.sign(e.deltaY)*3); }, {passive:false});
 addEventListener('keydown', e=>{
   if(e.target.tagName==='INPUT') return;
+  if(!refsEl.hidden){ if(e.key==='Escape'||e.key==='s'||e.key==='S'){ e.preventDefault(); showRefs(false); } return; }   // Sources open: modal, swallow the layout keys
   if(e.key==='ArrowLeft'||e.key==='ArrowUp'){ e.preventDefault(); setTime(T+5); }
   if(e.key==='ArrowRight'||e.key==='ArrowDown'){ e.preventDefault(); setTime(T-5); }
   if(e.key==='Home'){ setTime(T0); } if(e.key==='End'){ setTime(T1); }
   if(e.key>='1' && e.key<='4') goMode(+e.key-1);
   if(e.key==='p'||e.key==='P') setPlay(!playing);
+  if(e.key==='s'||e.key==='S') showRefs(true);
 });
 document.getElementById('time').addEventListener('input', e=>setTime(+e.target.value));
 
