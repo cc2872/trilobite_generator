@@ -105,6 +105,8 @@ def plan(P, notes=None):
     _plan_fns = dict(y_front=y_front, cheek=cheek, xmax=xmax, wh=wh, a=a, Lc=Lc, glab_half=glab_half, eye=G)
     suture = suture_path(P, _plan_fns); s_depth = float(P.get("sutureDepth", 0.0))
     ridge = eye_ridge_path(P, _plan_fns); r_height = float(P.get("eyeRidge", 0.0))
+    dpf = 0.10 - float(P.get("preglabField", 0.10))               # 20 Oct 2026: preglabellar field. 0.10 = the 6.0 head, bit for bit (dpf = 0.0 exactly);
+                                                                   # a larger field ends the glabella's relief and the axial furrow earlier
     def zfun_base(x, y):
         ax = np.abs(x)
         xm = xmax(y)
@@ -118,9 +120,9 @@ def plan(P, notes=None):
         z_dome = rim + (h - rim) * np.clip(1 - rD, 0, 1) ** (1 / mD)
         z = (1 - P["tent"]) * z_v4 + P["tent"] * z_dome
         g = glab_half(y)
-        gl = plateau(x, g) * (1 - smoothstep(0.80 * Lc, 0.92 * Lc, -y))
+        gl = plateau(x, g) * (1 - smoothstep((0.80 + dpf) * Lc, (0.92 + dpf) * Lc, -y))   # the glabella fades out at its front: the preglabellar field lies beyond
         z += (rise + P["glabRise"] * h * np.clip(-y / Lc, 0, 1)) * gl
-        z -= F * trough(ax - (g + 0.7), 0.9) * (-y < 0.9 * Lc)
+        z -= F * trough(ax - (g + 0.7), 0.9) * (-y < (0.90 + dpf) * Lc)                 # the axial furrow ends with the glabella
         z -= 0.8 * F * trough(y + 0.13 * Lc, 0.8) * plateau(x, g + 1.5, 1.0)
         for k in range(int(P["glabLobes"])):
             yk = -Lc * (0.28 + 0.16 * k)

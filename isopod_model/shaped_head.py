@@ -20,21 +20,26 @@ from anatomy import head_crescent as HC
 from anatomy.common import smoothstep
 
 RO = HC.RO
+# 20 Oct 2026: the defaults are an ANATOMICAL head (a pointed shield, slim tapered genal spines leaving a near-straight rear
+# margin), not the print kit's. Until today OUTLINE held the crescent piece's own silhouette (head3d: a round dome widest at
+# the rear, two parallel round-ended bands 1/6 of the half-width wide, and a U notch as deep as the bands are long), which
+# is why the "plain" animal in the studio drew a bell with two sticks and the thorax rows inside the notch. Every named
+# style already overrode those keys; the kit silhouette is kept below as CRESCENT_OUTLINE (= the "crescent" style).
 OUTLINE = dict(
     width=1.15,        # head half-width / the first thorax segment's half-width
-    length=1.08,       # axial length / half-width (semicircle 1.0; long parabola 1.5; short and transverse 0.7)
-    front_exp=2.0,     # the front's curve: 2 round, 1.5 ogival / pointed, 3+ blunt and square-shouldered
+    length=1.05,       # axial length / half-width (semicircle 1.0; long parabola 1.5; short and transverse 0.7)
+    front_exp=1.6,     # the front's curve = POINTINESS: 1.2 sharp, 1.6 ogival / pointed, 2 round, 3+ blunt and square-shouldered
     front_point=0.0,   # an anterior median point, / length (Dalmanites, Huntonia)
-    widest=0.08,       # where the head is widest, from the rear margin, / length (agnostid: 0.45)
+    widest=0.03,       # where the head is widest, from the rear margin, / length (agnostid: 0.45)
     side=0.0,          # straight side behind the widest line, / length (subparallel-sided heads)
     rear_taper=0.0,    # the side narrows back to the genal angle by this fraction of the half-width
     corner=0.12,       # radius of a rounded genal angle, / half-width (when there is no genal spine)
-    genal=0.77,        # genal spine / prolongation length, / axial length (0 = none)
-    genal_w=0.167,     # its width at the root, / half-width (harpetid prolongation 0.3; trinucleid needle 0.07)
-    genal_tip=1.0,     # tip width / root width (1 = a parallel band with a round end; 0.1 = drawn to a point)
-    genal_spread=0.0,  # it leaves at this angle outward from straight back, deg
+    genal=0.6,         # genal spine / prolongation length, / axial length (0 = none; TriloMorph median 0.23, 95th pct 1.4)
+    genal_w=0.10,      # its width at the root, / half-width (harpetid prolongation 0.3; trinucleid needle 0.07)
+    genal_tip=0.12,    # tip width / root width (1 = a parallel band with a round end; 0.1 = drawn to a point)
+    genal_spread=4.0,  # it leaves at this angle outward from straight back, deg
     genal_curve=0.0,   # and turns by this much along its length, deg (+ outward, - back inward)
-    notch=0.9,         # the rear margin between the spines: 0 straight across, 1 a U as deep as the spine is long
+    notch=0.08,        # the rear margin between the spines: 0 straight across, 1 a U as deep as the spine is long
     notch_exp=2.0,     # 2 = an elliptical U; higher = straight across, then a late bend
     dome_fill=0.82,    # the vaulted part / the whole (0.6 leaves a broad flat brim: Harpetida)
     horn_h=0.32,       # the spine's ridge height / relief (a flat prolongation ~0.18)
@@ -52,17 +57,38 @@ OUTLINE = dict(
     brim_roll=0.0,     # a raised roll along the brim's inner edge, / relief (the harpetid genal roll)
     brim_pits=0,       # rows of pits on it
 )
+# the crescent print piece's own silhouette (head3d: R 20, arm 4 x 20, the U notch), as it was the default until 20 Oct 2026
+CRESCENT_OUTLINE = dict(OUTLINE, length=1.08, front_exp=2.0, widest=0.08, genal=0.77, genal_w=0.167, genal_tip=1.0, genal_spread=0.0, notch=0.9)
+TRACE_MAX = 400     # points a traced outline may carry
 
 OUTLINE_RANGE = dict(   # what the silhouette is drawn for (11 Oct 2026: a 0.2-long head crashed in interp, a 3 x 3 x genal-3 one printed 2.7 m)
     width=(0.5, 2.5), length=(0.4, 2.5), front_exp=(1.0, 8.0), front_point=(0.0, 1.5), widest=(0.0, 0.8), side=(0.0, 1.0), rear_taper=(0.0, 0.9),
-    corner=(0.0, 0.5), genal=(0.0, 2.5), genal_w=(0.02, 1.0), genal_tip=(0.02, 1.5), genal_spread=(-60.0, 80.0), genal_curve=(-90.0, 90.0),
+    corner=(0.0, 0.5), genal=(0.0, 3.5), genal_w=(0.02, 1.0), genal_tip=(0.02, 1.5), genal_spread=(-60.0, 80.0), genal_curve=(-90.0, 90.0),
     notch=(0.0, 1.0), notch_exp=(1.0, 8.0), dome_fill=(0.3, 1.0), horn_h=(0.0, 1.0), height=(0.2, 3.0), genal_at=(-1.0, 1.0),
     front_flat=(0.0, 0.9), front_dent=(0.0, 0.5), point_w=(0.02, 1.0), point_fork=(0.0, 0.9), brim_w=(0.0, 1.0), brim_rise=(-0.5, 1.0),
     brim_curve=(-1.0, 1.0), brim_roll=(0.0, 0.5), brim_pits=(0, 10))
 
+def trace_of(t):
+    """A traced head margin (20 Oct 2026): the RIGHT half, from the front on the axis back to the genal angle, as [[x, y], ...]
+    in half-widths (x >= 0 across, y along: 0 = the rear margin on the axis, the head toward -y). Validated and folded
+    (|x|), ends snapped: the first point to the axis. None or [] = no trace. Raises ValueError on anything else."""
+    if t is None or (isinstance(t, (list, tuple)) and len(t) == 0): return None
+    if not isinstance(t, (list, tuple)) or not 3 <= len(t) <= TRACE_MAX: raise ValueError(f"trace: 3 to {TRACE_MAX} points")
+    out = []
+    for p in t:
+        try: x, y = float(p[0]), float(p[1])
+        except (TypeError, ValueError, IndexError): raise ValueError("trace: each point is [x, y]")
+        if not (math.isfinite(x) and math.isfinite(y)) or abs(x) > 1.5 or not -4.0 <= y <= 1.0: raise ValueError("trace: points lie within |x| <= 1.5 half-widths, -4 <= y <= 1")
+        out.append([abs(x), y])
+    out[0][0] = 0.0; ymin = min(p[1] for p in out)
+    if max(p[0] for p in out) < 0.2: raise ValueError("trace: no width")
+    if out[0][1] > ymin + 0.08: raise ValueError("trace: the first point is the front of the head on the axis")
+    out[0][1] = ymin                                               # the front, exactly (a hand's or a resampler's jitter snapped)
+    return out
+
 def outline_of(o=None):
-    f = dict(OUTLINE, **(o or {})); bad = set(f) - set(OUTLINE)
-    if bad: raise KeyError(f"unknown outline keys {sorted(bad)} (have {sorted(OUTLINE)})")
+    f = dict(OUTLINE, **(o or {})); tr = f.pop("trace", None); bad = set(f) - set(OUTLINE)
+    if bad: raise KeyError(f"unknown outline keys {sorted(bad)} (have {sorted(OUTLINE)} and 'trace')")
     for k, v in f.items():
         try: v = float(v)
         except (TypeError, ValueError): raise ValueError(f"outline {k} is not a number")
@@ -70,6 +96,8 @@ def outline_of(o=None):
         lo, hi = OUTLINE_RANGE.get(k, (-10.0 * max(1.0, abs(OUTLINE[k])), 10.0 * max(1.0, abs(OUTLINE[k]))))
         if not lo <= v <= hi: raise ValueError(f"outline {k} = {v:g} is outside {lo:g}..{hi:g}")
         f[k] = v
+    tr = trace_of(tr)
+    if tr is not None: f["trace"] = tr
     return f
 
 def _dense(pts, step=0.15):
@@ -81,9 +109,15 @@ def _dense(pts, step=0.15):
 
 class Shape:
     def __init__(self, outline=None, n=1601):
-        o = self.o = outline_of(outline)
-        L1 = self.L1 = o["length"] * RO; yw = -o["widest"] * L1; Lf = L1 + yw; yg = yw + o["side"] * L1
-        xg = RO * (1 - o["rear_taper"]); nF = o["front_exp"]
+        o = self.o = outline_of(outline); tr = o.get("trace")
+        if tr is not None:                                         # a traced margin: its own length, widest line and genal angle
+            T = np.array(tr, float) * RO; L1 = self.L1 = float(-T[:, 1].min())
+            iw = int(np.argmax(T[:, 0])); yw = float(T[iw, 1])
+            rearish = T[T[:, 0] > 0.5 * RO]; ig = int(np.argmax(rearish[:, 1])); xg, yg = float(rearish[ig, 0]), float(rearish[ig, 1])
+            Lf = L1 + yw; nF = o["front_exp"]
+        else:
+            L1 = self.L1 = o["length"] * RO; yw = -o["widest"] * L1; Lf = L1 + yw; yg = yw + o["side"] * L1
+            xg = RO * (1 - o["rear_taper"]); nF = o["front_exp"]
         Lh = o["genal"] * L1; w0 = o["genal_w"] * RO; horn = Lh > 0.5
         at = float(np.clip(o["genal_at"], -1, 1)); moved = horn and abs(at) > 0.01
         corner_horn = horn and not moved                           # the spine IS the genal angle (the crescent's case)
@@ -91,13 +125,27 @@ class Shape:
         # ---- the head proper, column by column (0 .. RO)
         nb = 1201; axb = np.linspace(0, RO, nb)
         fl = float(np.clip(o["front_flat"], 0, 0.85)); a2 = np.clip((axb - fl * RO) / (RO * (1 - fl)), 0, 1)
-        yfb = yw - Lf * np.clip(1 - a2 ** nF, 0, 1) ** (1 / nF)
-        y_n = yg + (o["notch"] * Lh if corner_horn else 0.0); q = o["notch_exp"]
-        yrb = np.full(nb, yg); inb = axb <= x_in
-        yrb[inb] = y_n * (1 - np.clip(1 - (axb[inb] / max(x_in, 1e-6)) ** q, 0, 1) ** (1 / q))
-        sidec = axb > xg                                           # a side that tapers back from the widest line
-        if sidec.any(): yrb[sidec] = yw + (yg - yw) * np.sqrt(np.clip((RO - axb[sidec]) / max(RO - xg, 1e-6), 0, 1))
-        if not corner_horn and o["corner"] > 0.01:                 # round the genal angle: open the silhouette with a disc
+        if tr is not None:                                         # columns of the traced polygon: front edge = its min y, rear edge = its max y
+            poly = np.vstack([T, [[0.0, max(0.0, yg)]]]) if T[-1, 0] > 1e-6 else T   # close along the rear margin to the axis
+            poly = np.vstack([poly, poly[:1]]); yfb = np.full(nb, np.nan); yrb = np.full(nb, np.nan)
+            for (x0_, y0_), (x1_, y1_) in zip(poly[:-1], poly[1:]):
+                lo_, hi_ = min(x0_, x1_), max(x0_, x1_); m = (axb >= lo_) & (axb <= hi_)
+                if hi_ - lo_ < 1e-9: continue
+                yy = y0_ + (axb[m] - x0_) * (y1_ - y0_) / (x1_ - x0_)
+                yfb[m] = np.fmin(yfb[m], yy); yrb[m] = np.fmax(yrb[m], yy)
+            okc = np.isfinite(yfb) & np.isfinite(yrb)
+            yfb = np.interp(axb, axb[okc], yfb[okc]); yrb = np.interp(axb, axb[okc], yrb[okc])
+            from scipy.ndimage import gaussian_filter1d
+            yfb = gaussian_filter1d(yfb, 3, mode="nearest"); yrb = gaussian_filter1d(yrb, 3, mode="nearest")   # the hand's jitter
+            yrb = np.maximum(yrb, yfb + 0.5)
+        else:
+            yfb = yw - Lf * np.clip(1 - a2 ** nF, 0, 1) ** (1 / nF)
+            y_n = yg + (o["notch"] * Lh if corner_horn else 0.0); q = o["notch_exp"]
+            yrb = np.full(nb, yg); inb = axb <= x_in
+            yrb[inb] = y_n * (1 - np.clip(1 - (axb[inb] / max(x_in, 1e-6)) ** q, 0, 1) ** (1 / q))
+            sidec = axb > xg                                       # a side that tapers back from the widest line
+            if sidec.any(): yrb[sidec] = yw + (yg - yw) * np.sqrt(np.clip((RO - axb[sidec]) / max(RO - xg, 1e-6), 0, 1))
+        if tr is None and not corner_horn and o["corner"] > 0.01:  # round the genal angle: open the silhouette with a disc
             from scipy.ndimage import distance_transform_edt as edt, gaussian_filter1d
             rc = o["corner"] * RO; st = 0.1; pad = int(rc / st) + 4
             gy = np.arange(yfb.min() - 1, yrb.max() + 1, st); gx = np.arange(-RO - 1, RO + 1 + st / 2, st)
@@ -112,7 +160,7 @@ class Shape:
             yfb[good] = gaussian_filter1d(yfb[good], 4, mode="nearest"); yrb[good] = gaussian_filter1d(yrb[good], 4, mode="nearest")
             mid_b = np.interp(axb, axb[good], 0.5 * (yfb + yrb)[good]); yfb = np.where(good, yfb, mid_b); yrb = np.where(good, yrb, mid_b)
         # the front's median features go on after the rounding (it would erase anything this narrow)
-        if o["front_dent"] > 0: yfb = yfb + o["front_dent"] * L1 * np.exp(-(axb / (0.30 * RO)) ** 2)
+        if tr is None and o["front_dent"] > 0: yfb = yfb + o["front_dent"] * L1 * np.exp(-(axb / (0.30 * RO)) ** 2)
         if o["front_point"] > 0:
             pw = max(o["point_w"], 0.03) * RO
             yfb = yfb - o["front_point"] * L1 * np.exp(-((axb - o["point_fork"] * RO) / pw) ** 2)
@@ -287,10 +335,13 @@ def diagram(outline=None, face=None, n=260):
     H = dict(front=(0.0, float(sh.yf[0]) * u), widest=(1.0, sh.yw * u), angle=(sh.xg * u, sh.yg * u),
              notch=(0.5 * sh.x_in * u, float(np.interp(0.5 * sh.x_in, ax, sh.yr)) * u),
              glabella=(0.0, -min(0.92 * gl, 1.0) * sh.L1 * u))
+    if o.get("trace") is not None:                                 # a traced margin: the front, side and rear handles have nothing to drag
+        for k in ("front", "widest", "angle", "notch"): H.pop(k, None)
     if sh.horn:
         H["spine"] = (float(sh.xc[-1]) * u, float(sh.yc[-1]) * u); H["root"] = (float(sh.xc[0]) * u, float(sh.yc[0]) * u)
     if o["front_point"] > 0: H["process"] = (o["point_fork"], float(sh.yf[int(np.argmin(sh.yf))]) * u)
     if b > 0.02: H["brim"] = (0.7 * (1 - b), float(np.interp(0.7 * RO, ax, sh.yf)) * (1 - b) * u + sh.yw * b * u)
     if eye is not None: H["eye"] = (E["xe"] * u, float(eye[:, 1].mean()))
     return dict(outline=plan_, glabella=glab, eye=eye, brim=brim, boss=boss, section=np.c_[ys * u, sec * kz], profile=np.c_[ys * u, prof * kz],
-                handles=H, size=dict(length=sh.L1 * u, halfwidth=sh.Xmax * u, width_vs_thorax=o["width"]))
+                handles=H, size=dict(length=sh.L1 * u, halfwidth=sh.Xmax * u, width_vs_thorax=o["width"]),
+                trace=(np.array(o["trace"], float) if o.get("trace") is not None else None))

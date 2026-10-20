@@ -87,16 +87,18 @@ def _head_custom(spec):
     for the cache key; `saved` the saved head's record when `style` named one."""
     HS = _head_styles(); import shaped_head as SH; from anatomy import head_crescent as HC
     style = spec.get("style") or "crescent"; saved = None
-    o_edits = {k: float(v) for k, v in (spec.get("outline") or {}).items()}
+    o_edits = {k: (v if k == "trace" else float(v)) for k, v in (spec.get("outline") or {}).items()}   # 20 Oct 2026: "trace" is a point list
+    if spec.get("trace") is not None: o_edits["trace"] = spec.get("trace")                               # (also accepted at the top level)
     f_edits = {k: float(v) for k, v in (spec.get("face") or {}).items()}
     if style in _saved_heads():
         saved = _saved_heads()[style]; style = saved.get("style") or "crescent"
         o_edits = dict(saved.get("outline") or {}, **o_edits); f_edits = dict(saved.get("face") or {}, **f_edits)
+    if o_edits.get("trace") in ([], None) and "trace" in o_edits: o_edits.pop("trace")                  # [] = "drop the trace"
     # the base face is what the BUILD would use: the default preset with the style's schema values (eyeSize, glabInflate ...)
     # mapped through body.face_of, then the style's own face keys on top -- so the drawing matches the solid
     IBODY = _isopod_body(); P0 = schema.coerce(dict(schema.preset(schema.DEFAULT_PRESET), **(HS.style(style)[1] if style in HS.STYLES else {})), base=schema.table_defaults())
     base_face = IBODY.face_of(P0, HS.style(style)[0] if style in HS.STYLES else None)
-    base_out = HS.outline(style) if style in HS.STYLES else {}
+    base_out = HS.outline(style)                                  # "crescent" = the kit's silhouette (head_styles.OUTLINES); unknown = {}
     outline = SH.outline_of(dict(base_out, **o_edits))
     face = HC.face_of(dict(base_face, **f_edits))
     face_edits = {k: v for k, v in face.items() if v != HC.FACE.get(k)}        # only what differs from the crescent's own face
@@ -460,8 +462,9 @@ def api_head_styles():
     HS = _head_styles()
     saved = [dict(name=n, doc=f"saved head, from {d.get('style') or 'crescent'}" + (f": {d['doc']}" if d.get("doc") else ""), p=0,
                   params=HS.STYLES.get(d.get("style") or "", {}).get("params", {}), saved=True, style=d.get("style") or "crescent") for n, d in _saved_heads().items()]
-    return jsonify([dict(name="crescent", doc="the approved crescent, on the isopod head piece", p=0, params={})] +
-                   [dict(name=n, doc=s.get("doc", ""), p=s.get("p", 0), params=s.get("params", {})) for n, s in HS.STYLES.items()] + saved)
+    return jsonify([dict(name=n, doc=s.get("doc", ""), p=s.get("p", 0), params=s.get("params", {})) for n, s in HS.STYLES.items() if n == "plain"] +
+                   [dict(name="crescent", doc="the print kit's crescent, on the isopod head piece (the default until 20 Oct 2026)", p=0, params={})] +
+                   [dict(name=n, doc=s.get("doc", ""), p=s.get("p", 0), params=s.get("params", {})) for n, s in HS.STYLES.items() if n != "plain"] + saved)
 
 @app.get("/api/heads")
 def api_heads():
@@ -482,9 +485,9 @@ def api_heads_save():
     except (KeyError, ValueError) as ex: return jsonify(error=str(ex)[:200]), 400
     # store the edits against the guide style, flattened (a head saved from a saved head rests on the same guide style)
     HS = _head_styles(); from anatomy import head_crescent as HC
-    base_out = HS.outline(h["base"]) if h["base"] in HS.STYLES else {}
+    base_out = HS.outline(h["base"])
     import shaped_head as SH
-    o_edits = {k: v for k, v in h["outline"].items() if v != dict(SH.OUTLINE, **base_out).get(k)}
+    o_edits = {k: v for k, v in h["outline"].items() if v != dict(SH.OUTLINE, **base_out).get(k)}   # a trace survives: no base has one
     base_face = _head_custom({"style": h["base"]})["face"]
     f_edits = {k: v for k, v in h["face"].items() if v != base_face.get(k)}
     f_edits.update({k: HC.FACE[k] for k in base_face if k not in h["face"]})   # an edit back to the crescent's own value is an edit too
@@ -492,6 +495,34 @@ def api_heads_save():
     os.makedirs(HEADS, exist_ok=True); tmp = os.path.join(HEADS, name + ".json.part")
     json.dump(rec, open(tmp, "w"), indent=1); os.replace(tmp, os.path.join(HEADS, name + ".json"))
     return jsonify(saved=rec, id=h["id"])
+
+@app.post("/api/heads/import")
+def api_heads_import():
+    """20 Oct 2026: a TriloMorph-protocol landmark file (tpsDig .tps or StereoMorph .txt, Serra et al. 2023: 16 cephalic landmarks
+    and the anterior / posterior margin curves) -> a head spec for the editor {style, outline (with trace + spine), face, doc}.
+    The file comes as the request body (text) or as the form field "file"; ?name= gives the head a name without saving it.
+    Nothing is stored: the page loads the spec and the user saves it like any other head."""
+    import importlib.util
+    spec_ = importlib.util.spec_from_file_location("trilomorph_import", os.path.join(ROOT, "scripts", "trilomorph_import.py"))
+    TI = importlib.util.module_from_spec(spec_); spec_.loader.exec_module(TI)
+    f = request.files.get("file"); raw = f.read() if f else request.get_data()
+    if not raw or len(raw) > 4_000_000: return jsonify(error="a .tps or StereoMorph .txt file, under 4 MB"), 400
+    import tempfile
+    text = raw.decode("utf-8", errors="ignore"); kind = "tps" if text.lstrip().upper().startswith("LM=") else "txt"
+    with tempfile.NamedTemporaryFile("w", suffix="." + kind, delete=False, encoding="utf-8") as t: t.write(text); path = t.name
+    try:
+        rec = TI.read_tps(path) if kind == "tps" else TI.read_txt(path)
+        if not rec or not rec.get("lm"): return jsonify(error="no landmarks found: the file must follow the TriloMorph protocol (LM1-LM16 and the margin curves)"), 400
+        h = TI.head_from(rec)
+        import shaped_head as SH; SH.outline_of(h["outline"])
+    except (ValueError, KeyError) as ex:
+        return jsonify(error=f"could not read a head from this file: {str(ex)[:160]}"), 400
+    finally:
+        try: os.remove(path)
+        except OSError: pass
+    src = (f.filename if f else request.args.get("name") or "landmarks")
+    return jsonify(style="plain", outline=h["outline"], face=h["face"], blind=h["blind"], landmarks=len(rec["lm"]), curves=sorted(rec["curves"]),
+                   doc=f"landmarked in tpsDig / StereoMorph with the TriloMorph protocol (Serra et al. 2023); file {os.path.basename(src)[:60]}")
 
 @app.delete("/api/heads/<name>")
 def api_heads_delete(name):
@@ -508,12 +539,14 @@ def api_schema():
 
 @app.post("/api/tps")
 def api_tps():
-    """Dorsal homologous landmarks for the current specimen as a TPS file (geomorph / tpsDig readable). No build needed."""
+    """The TriloMorph landmark protocol (Serra et al. 2023) for the current specimen as a TPS file, read off the head and
+    tail plans (landmarks.py). ?part=C (cephalon, default) or P (pygidium); their shapRead() wants one part per file."""
     import landmarks as LM
-    P, _ = schema.coerce_report(request.get_json(force=True).get("P", {}), base=schema.table_defaults())
+    body = request.get_json(force=True); part = "P" if str(body.get("part", request.args.get("part", "C"))).upper().startswith("P") else "C"
+    P, _ = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
     h = schema.param_hash(P)
-    return app.response_class(LM.tps_string([(h, P)]), mimetype="text/plain",
-                              headers={"Content-Disposition": f'attachment; filename="trilobite_{h}.tps"'})
+    return app.response_class(LM.tps_string([(h, P)], part), mimetype="text/plain",
+                              headers={"Content-Disposition": f'attachment; filename="trilobite_{h}_{part}.tps"'})
 
 _PRESET_CHARS = None
 @app.post("/api/classify")

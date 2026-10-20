@@ -1,10 +1,10 @@
-# trilobite generator, schema 6.2, instrument 2.1, by Claire Choi the trilobiter
+# trilobite generator, schema 6.3, instrument 2.1, by Claire Choi the trilobiter
 <img width="1815" height="1287" alt="sheet_isopod_none (4)" src="https://github.com/user-attachments/assets/b1ca3f45-d5f6-4a96-b0c5-54285340ca22" />
 
 A parametric generator for articulated dorsal plate chains, trilobites first, with three outputs from one parameter
 table: a **printable animal** (print-in-place, ball joints), a **fixed-ruler enrolment instrument** (pin joints,
 pre-registered), and a **blueprint sheet** for either. No OpenCascade: numpy height fields triangulated directly,
-Manifold booleans, mirror-symmetric by construction. Site: trilomorph.org (unpublished research: do not share).
+Manifold booleans, mirror-symmetric by construction. Site: volvation.org (unpublished research: do not share).
 
     pip install -r requirements.txt flask
     python build.py                        # the printable animal -> isopod_model/stl/trilobite_isopod.stl, checks, photos
@@ -25,7 +25,7 @@ Python 3.12, `manifold3d==3.0.1` pinned (PREREG §9: other versions' booleans sh
 | what it is for | printing. Every part is cleaned and validated (watertight, one body, no rest contacts); a failed part refuses the build | the reading. Changing anything here is a new instrument version |
 | on the site | the default; the studio, head editor and body editor all build it | `joint = pin` on `/generator`; the MEASURE mode runs the instrument |
 
-The two share `schema.py` (the 108 parameters, presets, `coerce()`, `migrate()`, CELLS, the 3×3 contract),
+The two share `schema.py` (the 109 parameters, presets, `coerce()`, `migrate()`, CELLS, the 3×3 contract),
 `fields.py` and `mesh.py`. Nothing in `isopod_model/` is imported by the instrument.
 
 ## Layout
@@ -73,7 +73,7 @@ CHANGES_*.md        every finding in order, with what was and was not run
 |---|---|
 | `/` | **studio**: head + body on one drawing (p5). Click a handle, drag, build. Rows + / −; short rows fuse (orange); save a head or a body by name; BUILD swaps the drawing for the sheet, with VIEW 3D |
 | `/head`, `/body` | the head editor and the body editor on their own (the studio is the two combined) |
-| `/generator` | the advanced / instrument page (retired as the home, 13 Oct 2026; the studio is the front page): the 3×3 sketch control and the full parameter set, MEASURE (the instrument / ruler), the share link and TPS landmarks. The studio's VIEW 3D embeds this page's viewer (`?only3d=1`), so the route is kept as a backend even though it is no longer presented as a co-equal editor |
+| `/generator` | the advanced / instrument page (retired as the home, 13 Oct 2026; the studio is the front page): the 3×3 sketch control and the full parameter set, MEASURE (the instrument / ruler), the share link and TPS landmarks (TriloMorph protocol, `landmarks.py`). The studio's VIEW 3D embeds this page's viewer (`?only3d=1`), so the route is kept as a backend even though it is no longer presented as a co-equal editor |
 | `/tree` | the family tree |
 
 API, all JSON: `POST /api/build {P, joint, head, body, fill}` (joint = `isopod` default | `pin` | `flexi` | `ball`;
@@ -129,3 +129,17 @@ Block 1 (freeze the ruler) is closed in the tree; `prereg-v1` is not yet tagged;
 presets must be re-reconciled first (see `claude/software-review-2026-10-13.md` in the project, §B). The printable
 animal, the editors and the sheet are current. The site has no access gate yet: saved heads and bodies are
 server-wide and unauthenticated.
+
+## Reference data: TriloMorph
+
+`landmarks.py` reads the TriloMorph landmark protocol (Serra et al. 2023: 16 cephalic + 7 pygidial landmarks, 4 + 3
+semilandmark curves) off the head and tail plans, so a generated animal can be superimposed with the photographed ones
+in geomorph (`/api/tps`, `python landmarks.py`). Their 5-95 % ranges set `axisFrac`, `genalSpine`, `preglabField` and
+the `eyeLat` default (schema 6.3, 20 Oct 2026). The instrument is untouched by this: TriloMorph enters the generator's
+anatomy and the parameter box only.
+
+Cite: Serra F., Balseiro D., Monnet C., Randolfe E., Bignon A., Rustán J.J., Bault V., Muñoz D.F., Vaccari N.E.,
+Martinetto M., Crônier C. & Waisfeld B.G. (2023). A dynamic and collaborative database for morphogeometric information of
+trilobites. *Scientific Data* 10: 841. doi:10.1038/s41597-023-02724-9 — and the TriloMorph stable release used
+(doi:10.5281/zenodo.8033445, CC BY 4.0; contributors in its `contributors.csv`). Their images are third-party figures
+and are not redistributed here.

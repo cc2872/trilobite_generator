@@ -22,6 +22,11 @@ SCHIZO = dict(eyeSolid=1, lensD=0.16, lensGap=0.3, eyeProfile=6.0)
 BLIND = dict(eyeSize=0.0, eyeSolid=0)
 
 STYLES = {
+    # ---- 20 Oct 2026: the generator's own default head (shaped_head.OUTLINE as it now is): a pointed shield, slim tapered genal
+    # spines on a near-straight rear margin, the crescent's face. The studio starts here. "crescent" (below, OUTLINES) is the print
+    # kit's own silhouette, kept for the heads saved on it.
+    "plain":       dict(p=0, doc="the generator's default head: a pointed shield with slim genal spines; drag the front handle sideways for pointiness",
+                        face=dict(), params=dict()),
     # ---- after the guide's orders
     "olenellus":   dict(p=54, doc="Redlichiida: round frontal boss, long crescent eyes joined to it by eye ridges, furrows crossing the glabella",
                         face=dict(glab_boss=0.20, boss_rise=0.22, glab_round=0.7, furrow_cross=0.7, eye_len=2.3, glab_len=1.05, eye_ridge=1.0, border_w=0.05),
@@ -129,7 +134,16 @@ OUTLINES = {
     "dikelocephalus": dict(SP, length=0.8, front_flat=0.4, genal=0.45, width=1.2),                    # truncate front
     "bristolia":    dict(SP, length=0.9, genal=0.9, genal_at=-0.5, genal_spread=28, genal_curve=-22, corner=0.15, width=1.15),   # genal spines advanced up the side
     "all_on":       dict(),                                                                          # the crescent's own silhouette
+    "plain":        dict(),                                                                          # = shaped_head.OUTLINE, the new default
 }
+# 20 Oct 2026: shaped_head.OUTLINE's defaults changed (anatomical, pointed). Every style keeps the silhouette it was drawn with:
+# the keys a style did not set take the OLD defaults, written out here once; "crescent" is the print kit's silhouette itself.
+import shaped_head as _SH
+_OLD = dict(length=1.08, front_exp=2.0, widest=0.08, genal=0.77, genal_w=0.167, genal_tip=1.0, genal_spread=0.0, notch=0.9)
+for _n, _o in OUTLINES.items():
+    if _n != "plain":
+        for _k, _v in _OLD.items(): _o.setdefault(_k, _v)
+OUTLINES["crescent"] = dict(_SH.CRESCENT_OUTLINE)
 
 def names(): return list(STYLES)
 

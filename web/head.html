@@ -73,6 +73,11 @@
   <select id="style"></select>
   <div class="hint" id="doc"></div>
 
+  <div class="sect"><span>Trace a photo</span><span id="tracehelp" title="1. choose a dorsal photo or drawing. 2. turn tracing on. 3. click the FRONT of the head on the axis, then the REAR margin on the axis. 4. click points along the RIGHT margin from the front back to the genal angle (10-30 points; the spine stays a parameter). 5. use trace. The photo never leaves your browser.">how</span></div>
+  <div class="row" style="gap:6px;align-items:center"><input type="file" id="traceimg" accept="image/*" style="flex:1;font:inherit;font-size:.75rem;color:var(--mid)"><input type="range" id="traceopacity" min="0" max="1" step="0.05" value="0.55" title="photo opacity" style="width:70px"></div>
+  <div class="row" style="gap:6px;margin-top:6px"><button class="btn" id="tracemode">trace: off</button><button class="btn" id="traceundo" title="remove the last point">undo</button><button class="btn" id="traceclear" title="remove every point">clear</button><button class="btn primary" id="traceapply" title="draw the head on these points">use trace</button></div>
+  <div class="hint" id="tracehint">no photo</div>
+  <div class="row" style="gap:6px;align-items:center;margin-top:8px"><span style="font-size:.72rem;color:var(--mid);white-space:nowrap" title="landmark the photo in tpsDig2 or StereoMorph with the TriloMorph protocol (Serra et al. 2023: LM1-LM16 + the margin curves) and load the file: the margin, genal spine, eye and glabella become this head">or a .tps / .txt</span><input type="file" id="lmfile" accept=".tps,.txt,.TPS,.TXT" style="flex:1;font:inherit;font-size:.75rem;color:var(--mid)"></div>
   <div class="sect"><span id="hname">Handle</span><span id="allkeys">all keys</span></div>
   <div id="sliders"></div>
 
@@ -94,7 +99,11 @@
 <script>
 // ---------- state ----------
 const $=id=>document.getElementById(id);
-const S={style:'crescent', outline:{}, face:{}, D:null, meta:null, pinned:null, hover:null, drag:null, busy:0, pendingSend:false, P:null, savedName:null};
+const S={style:'plain', outline:{}, face:{}, D:null, meta:null, pinned:null, hover:null, drag:null, busy:0, pendingSend:false, P:null, savedName:null,
+  trace:{img:null, w:0, h:0, pts:[], on:false, frame:null, opacity:0.55}};   // 20 Oct 2026: a photo under the plan, clicked points, the frame once applied
+// labels for the keys whose names do not say what they do (20 Oct 2026)
+const LABEL={front_exp:'front_exp - pointiness (1.2 sharp, 1.6 ogival, 2 round, 4 blunt)', front_point:'front_point - median spine / length', widest:'widest - from the rear / length',
+  genal:'genal - spine length / head length', genal_tip:'genal_tip - tip width / root width (0.1 = a point)', notch:'notch - rear margin U depth', width:'width - head / thorax half-width'};
 // schema-named keys in shaped_head.HANDLES -> the face keys the diagram actually takes
 const ALIAS={glabInflate:'glab_inflate', eyePos:'eye_pos', eyeLat:'eye_lat', eyeSize:'eye_size', glabRise:'glab_rise'};
 // slider ranges (the page's, not the schema's: shaped_head.OUTLINE / head_crescent.FACE carry defaults and comments, no ranges)
@@ -123,9 +132,10 @@ async function load(style){
     S.style=d.saved.style; S.savedName=d.saved.name; S.outline=Object.assign({},d.saved.outline); S.face=Object.assign({},d.saved.face);
     const b=await (await fetch('/api/head_diagram?style='+encodeURIComponent(S.style))).json(); S.baseOutline=b.outline; S.baseFace=b.face;
   } else { S.style=style; S.savedName=null; S.outline={}; S.face={}; S.baseOutline=d.outline; S.baseFace=d.face; }
+  S.trace.frame=null;
   $('savename').value=S.savedName||''; $('del').style.display=S.savedName?'':'none'; $('openlink').innerHTML=S.savedName?`<a href="/?head=${encodeURIComponent(S.savedName)}">open ${S.savedName} in the generator →</a>`:'';
   if(!S.P){ const sc=await (await fetch('/api/schema')).json(); S.P=await (await fetch('/api/preset/'+sc.default)).json(); }
-  const st=d.styles.find(x=>x.name===S.style); $('doc').textContent=(S.savedName?`saved head on ${S.style}${d.saved.doc?': '+d.saved.doc:''}. `:'')+(st?st.doc:'the approved crescent silhouette, drawn whole (shaped_head.OUTLINE defaults)'); $('pg').textContent=st&&st.p?'Gon p. '+st.p:'';
+  const st=d.styles.find(x=>x.name===S.style); $('doc').textContent=(S.savedName?`saved head on ${S.style}${d.saved.doc?': '+d.saved.doc:''}. `:'')+(st?st.doc:"the print kit's crescent silhouette (the default until 20 Oct 2026), drawn whole"); $('pg').textContent=st&&st.p?'Gon p. '+st.p:'';
   $('style').value=S.savedName||S.style;
   renderSliders(); renderEdits(); kv();
 }
@@ -151,16 +161,16 @@ function renderSliders(rebuild=true){
   else { if(rebuild){ box.innerHTML=''; $('hname').textContent='Handle'; } return; }
   if(rebuild||box.dataset.keys!==keys.join()){ box.innerHTML=''; box.dataset.keys=keys.join();
     for(const k of keys){ const r=R[k]||[0,1]; const d=document.createElement('div'); d.className='ctrl';
-      d.innerHTML=`<div class="lab"><span>${k}${isOut(k)?'':' <span style="color:var(--mid)">- face</span>'}</span><span class="val" id="v_${k}"></span></div><input type="range" min="${r[0]}" max="${r[1]}" step="${r[2]||((r[1]-r[0])/200)}" id="s_${k}">`;
+      d.innerHTML=`<div class="lab"><span>${LABEL[k]||k}${isOut(k)?'':' <span style="color:var(--mid)">- face</span>'}</span><span class="val" id="v_${k}"></span></div><input type="range" min="${r[0]}" max="${r[1]}" step="${r[2]||((r[1]-r[0])/200)}" id="s_${k}">`;
       box.appendChild(d); const inp=d.querySelector('input'); inp.oninput=()=>{ setKey(k,+inp.value); }; } }
   for(const k of keys){ const v=cur(k); const s=$('s_'+k), vv=$('v_'+k); if(!s) continue; if(document.activeElement!==s) s.value=v; vv.textContent=fmt(v); vv.classList.toggle('on',Math.abs(v-baseOf(k))>1e-9); }
 }
 const fmt=v=>Number.isInteger(v)?String(v):(+v).toFixed(Math.abs(v)<1?3:2);
 function renderEdits(){ const e=$('edits'); $('edhead').textContent=S.savedName?`Edits - ${S.savedName}`:'Edits'; const all=[...Object.entries(S.outline).map(([k,v])=>[k,v,'o']),...Object.entries(S.face).map(([k,v])=>[k,v,'f'])];
-  e.innerHTML=all.length?all.map(([k,v,t])=>`<div><b>${k}</b> ${fmt(v)} <span style="color:var(--line)">←</span> ${fmt(baseOf(k))}<i data-k="${k}" title="undo">×</i></div>`).join(''):'none';
-  e.querySelectorAll('i').forEach(i=>i.onclick=()=>{ const k=i.dataset.k; delete S.outline[k]; delete S.face[k]; send(); renderSliders(); }); }
+  e.innerHTML=all.length?all.map(([k,v,t])=>Array.isArray(v)?`<div><b>trace</b> ${v.length} points<i data-k="${k}" title="drop the trace">×</i></div>`:`<div><b>${k}</b> ${fmt(v)} <span style="color:var(--line)">←</span> ${fmt(baseOf(k))}<i data-k="${k}" title="undo">×</i></div>`).join(''):'none';
+  e.querySelectorAll('i').forEach(i=>i.onclick=()=>{ const k=i.dataset.k; delete S.outline[k]; delete S.face[k]; if(k==='trace') S.trace.frame=null; send(); renderSliders(); }); }
 $('allkeys').onclick=()=>{ showAll=!showAll; $('allkeys').textContent=showAll?'handle keys':'all keys'; renderSliders(); };
-$('reset').onclick=()=>{ S.outline={}; S.face={}; send(); renderSliders(); };
+$('reset').onclick=()=>{ S.outline={}; S.face={}; S.trace.frame=null; send(); renderSliders(); };
 $('style').onchange=e=>load(e.target.value);
 $('copy').onclick=()=>{ const spec={style:S.style, outline:S.outline, face:S.face};
   const txt=JSON.stringify(spec)+'\n\n# python\nfrom isopod_model import body  # (isopod_model on sys.path)\n# parts, plans, PV, K = body.build(P, "shaped", face=' + JSON.stringify({...S.baseFaceEdits(), ...S.face}) + ', outline=' + JSON.stringify({...S.baseOutline, ...S.outline}) + ')';
@@ -194,12 +204,25 @@ new p5(s=>{
   function handlePositions(){ const D=S.D.diagram; const out={}; for(const [k,v] of Object.entries(D.handles)) out[k]={sx:X(v[1]), sy:YP(v[0]), x:v[0], y:v[1]};
     let mi=0; D.profile.forEach((p,i)=>{ if(p[1]>D.profile[mi][1]) mi=i; }); crown={y:D.profile[mi][0], z:D.profile[mi][1]}; out.crown={sx:X(crown.y), sy:YE(crown.z), x:0, y:crown.y, z:crown.z, elev:true}; return out; }
   let HP={}; window.__handles=()=>HP;   // for tests
-  s.draw=()=>{ s.background(0); if(!S.D){ return; } fit(); const D=S.D.diagram;
+  // the traced photo (20 Oct 2026): before "use trace" it sits fitted to the stage with the clicked points on it; after, it is
+  // drawn through the frame those points define (axis onto the plan's axis, half-width onto the plan's), so photo and plan agree
+  function photoFit(){ const t=S.trace; if(!t.img) return null; const sc=Math.min((W-80)/t.w, (H-80)/t.h); return {x:(W-t.w*sc)/2, y:(H-t.h*sc)/2, sc}; }
+  function drawPhoto(){ const t=S.trace; if(!t.img||!t.on&&!t.frame) return; const f=photoFit(); if(!f) return;
+    s.push(); if(t.frame){ const F=t.frame; s.translate(X(0), oyP); s.scale(px/F.maxA); s.rotate(-F.theta); s.translate(-F.rear.x, -F.rear.y); }
+    s.tint(255, 255*t.opacity); s.image(t.img, f.x, f.y, t.w*f.sc, t.h*f.sc); s.noTint();
+    if(t.pts.length){ s.stroke(246,112,79); s.strokeWeight(t.frame?1.5*F_scale():1.5); s.noFill();
+      if(t.pts.length>=2){ s.drawingContext.setLineDash([3,4]); s.line(t.pts[0].x,t.pts[0].y,t.pts[1].x,t.pts[1].y); s.drawingContext.setLineDash([]); }
+      s.beginShape(); for(const p of t.pts.slice(2)) s.vertex(p.x,p.y); s.endShape();
+      t.pts.forEach((p,i)=>{ s.fill(i<2?0:s.color(246,112,79)); s.circle(p.x,p.y,(i<2?8:5)*F_scale()); }); }
+    s.pop();
+    function F_scale(){ return t.frame?t.frame.maxA/px:1; } }
+  s.draw=()=>{ s.background(0); if(!S.D){ return; } fit(); const D=S.D.diagram; drawPhoto();
     // axis + thorax half-width references
     hair(60); s.line(40, oyP, W-40, oyP);
     const tw=1/Math.max(D.size.width_vs_thorax,1e-6); s.drawingContext.setLineDash([2,5]); hair(70); s.line(X(ymin)-10, YP(tw), X(ymax)+10, YP(tw)); s.line(X(ymin)-10, oyP+tw*px, X(ymax)+10, oyP+tw*px); s.drawingContext.setLineDash([]);
     // plan: outline both halves, glabella, eye, brim, boss
     hair(255); s.strokeWeight(1.2); poly(D.outline,false); poly(D.outline,true);
+    if(D.trace){ s.stroke(246,112,79,160); s.strokeWeight(1); poly(D.trace,false); poly(D.trace,true); }   // the traced margin the outline was read from
     hair(230); poly(D.glabella,false); poly(D.glabella,true);
     if(D.eye){ poly(D.eye,false); poly(D.eye,true); }
     if(D.brim){ hair(140); poly(D.brim,false); poly(D.brim,true); }
@@ -219,8 +242,10 @@ new p5(s=>{
     s.noStroke(); s.fill(255,90); s.textAlign(s.RIGHT,s.BOTTOM); s.text((inflight?'drawing…':'')+' ', W-12, H-10);
   };
   function nearest(mx,my){ let best=null,bd=14; for(const [k,h] of Object.entries(HP)){ const d=Math.hypot(h.sx-mx,h.sy-my); if(d<bd){ bd=d; best=k; } } return best; }
-  s.mouseMoved=()=>{ const h=nearest(s.mouseX,s.mouseY); if(h!==S.hover){ S.hover=h; if(!S.pinned) renderSliders(); } stage.style.cursor=h?'grab':'default'; };
-  s.mousePressed=()=>{ if(s.mouseX<0||s.mouseY<0||s.mouseX>W||s.mouseY>H) return; const h=nearest(s.mouseX,s.mouseY);
+  s.mouseMoved=()=>{ if(S.trace.on&&S.trace.img&&!S.trace.frame){ stage.style.cursor='crosshair'; return; } const h=nearest(s.mouseX,s.mouseY); if(h!==S.hover){ S.hover=h; if(!S.pinned) renderSliders(); } stage.style.cursor=h?'grab':'default'; };
+  s.mousePressed=()=>{ if(s.mouseX<0||s.mouseY<0||s.mouseX>W||s.mouseY>H) return;
+    if(S.trace.on&&S.trace.img&&!S.trace.frame){ S.trace.pts.push({x:s.mouseX,y:s.mouseY}); traceHint(); return; }
+    const h=nearest(s.mouseX,s.mouseY);
     if(h){ S.drag={h, x0:s.mouseX, y0:s.mouseY, start:snapshot(h)}; S.pinned=h; renderSliders(); stage.style.cursor='grabbing'; }
     else if(S.pinned){ S.pinned=null; renderSliders(); } };
   s.mouseReleased=()=>{ if(S.drag){ S.drag=null; stage.style.cursor='grab'; } };
@@ -244,18 +269,45 @@ new p5(s=>{
     send(); };
   function snapshot(h){ const o={}; for(const k of Object.keys(R)) if(isOut(k)||isFace(k)) o[k]=cur(k); return o; }
   function setKeyQuiet(k,v){ v=clamp(k,v); const edits=isOut(k)?S.outline:S.face; if(Math.abs(v-baseOf(k))<1e-9) delete edits[k]; else edits[k]=+v.toFixed(4); }
+  window.__p5=s; window.__traceState=()=>S.trace;   // for the trace controls and tests
 }, $('stage'));
 
+// ---------- tracing a photo (20 Oct 2026) ----------
+function traceHint(){ const t=S.trace; const n=t.pts.length;
+  $('tracehint').textContent=!t.img?'no photo':t.frame?`traced: ${t.pts.length-2} margin points - drop the trace in Edits to redraw`:!t.on?'photo loaded - turn tracing on':
+    n===0?'click the FRONT of the head on the axis':n===1?'click the REAR margin on the axis':`${n-2} margin points - click along the right margin, front to genal angle, then use trace`; }
+$('traceimg').onchange=e=>{ const f=e.target.files[0]; if(!f) return; const url=URL.createObjectURL(f);
+  window.__p5.loadImage(url,img=>{ S.trace.img=img; S.trace.w=img.width; S.trace.h=img.height; S.trace.pts=[]; S.trace.frame=null; S.trace.on=true; $('tracemode').textContent='trace: on'; traceHint(); URL.revokeObjectURL(url); },()=>status('could not read the image',true)); };
+$('traceopacity').oninput=e=>{ S.trace.opacity=+e.target.value; };
+// a tpsDig / StereoMorph landmark file (TriloMorph protocol) -> this head (20 Oct 2026). Their tool does the clicking; the server reads the file.
+$('lmfile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; const fd=new FormData(); fd.append('file',f);
+  try{ const r=await fetch('/api/heads/import',{method:'POST',body:fd}); const j=await r.json(); if(!r.ok){ status(j.error||'import failed',true); return; }
+    if(S.style!=='plain'||S.savedName) await load('plain');
+    S.outline=Object.assign({},j.outline); S.face=Object.assign({},j.face); S.trace.frame=null; S.importDoc=j.doc;
+    $('savename').value=($('savename').value||f.name.replace(/\.(tps|txt)$/i,'').replace(/[^A-Za-z0-9_-]/g,'-').replace(/^[^A-Za-z]+/,'')).slice(0,40);
+    renderEdits(); send(); renderSliders(); status(`landmark file read: ${j.landmarks} landmarks, curves ${j.curves.join(', ')}${j.blind?' (blind)':''}`); }
+  catch(ex){ status('import failed - '+ex,true); } e.target.value=''; };
+$('tracemode').onclick=()=>{ S.trace.on=!S.trace.on; $('tracemode').textContent='trace: '+(S.trace.on?'on':'off'); traceHint(); };
+$('traceundo').onclick=()=>{ if(S.trace.frame) return; S.trace.pts.pop(); traceHint(); };
+$('traceclear').onclick=()=>{ S.trace.pts=[]; S.trace.frame=null; traceHint(); };
+$('traceapply').onclick=()=>{ const t=S.trace; if(!t.img||t.pts.length<5){ status('trace needs the two axis points and at least three margin points',true); return; }
+  const F=t.pts[0], Rr=t.pts[1]; const ax={x:Rr.x-F.x,y:Rr.y-F.y}; const L=Math.hypot(ax.x,ax.y); if(L<10){ status('the axis points are too close',true); return; }
+  const u={x:ax.x/L,y:ax.y/L}, nrm={x:-u.y,y:u.x};
+  const rel=t.pts.slice(2).map(p=>({along:(p.x-Rr.x)*u.x+(p.y-Rr.y)*u.y, across:(p.x-Rr.x)*nrm.x+(p.y-Rr.y)*nrm.y}));
+  const maxA=Math.max(...rel.map(r=>Math.abs(r.across))); if(maxA<5){ status('the margin points have no width',true); return; }
+  const pts=[[0,-L/maxA], ...rel.map(r=>[+(Math.abs(r.across)/maxA).toFixed(4), +Math.min(0.99, r.along/maxA).toFixed(4)])];
+  t.frame={rear:Rr, theta:Math.atan2(u.y,u.x), maxA}; S.outline.trace=pts; renderEdits(); send(); traceHint(); status(`traced ${pts.length-1} margin points`); };
+
 // ---------- start ----------
-(async()=>{ const first=new URLSearchParams(location.search).get('style')||'harpes';
+(async()=>{ const first=new URLSearchParams(location.search).get('style')||'plain';
   const r=await fetch('/api/head_diagram?style='+first); const d=await r.json();
   fillPicker(d, first); await load(first); })();
 function fillPicker(d, selected){ const sel=$('style');
-  sel.innerHTML=`<optgroup label="guide">${['crescent',...d.styles.map(x=>x.name)].map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+
+  const names=d.styles.map(x=>x.name); sel.innerHTML=`<optgroup label="guide">${['plain','crescent',...names.filter(n=>n!=='plain')].map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+
     (d.saved_heads&&d.saved_heads.length?`<optgroup label="saved">${d.saved_heads.map(h=>`<option value="${h.name}">${h.name} - ${h.style}</option>`).join('')}</optgroup>`:'');
   if(selected) sel.value=selected; }
 $('save').onclick=async()=>{ const name=$('savename').value.trim(); if(!name){ status('give the head a name',true); $('savename').focus(); return; }
-  const r=await fetch('/api/heads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name, style:S.style, outline:S.outline, face:S.face})}); const j=await r.json();
+  const r=await fetch('/api/heads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name, style:S.style, outline:S.outline, face:S.face, doc:S.importDoc||''})}); const j=await r.json();
   if(!r.ok){ status(j.error||'save failed',true); return; }
   status(`saved as ${name}`); const d=await (await fetch('/api/head_diagram?style='+encodeURIComponent(name))).json(); fillPicker(d, name); await load(name); };
 $('del').onclick=async()=>{ if(!S.savedName) return; const n=S.savedName; const r=await fetch('/api/heads/'+encodeURIComponent(n),{method:'DELETE'}); if(!r.ok){ status('delete failed',true); return; }

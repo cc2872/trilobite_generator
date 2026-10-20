@@ -8,7 +8,8 @@ artifact — derives from this table. Add a parameter here and it exists everywh
 from dataclasses import dataclass, asdict
 import json, hashlib, warnings
 
-SCHEMA_VERSION = "6.2"      # 27 Sep 2026: sutureEnd / sutureDepth (the facial suture, a groove) and eyeRidge; all default 0 = head unchanged.
+SCHEMA_VERSION = "6.3"      # 20 Oct 2026: preglabField (default 0.10 = the head as built since 6.0); axisFrac to 0.70 and genalSpine to 2.5 (TriloMorph
+                            # 5-95 %); eyeLat default 0.5 (TriloMorph median; presets set their own). 6.2 (27 Sep): sutureEnd / sutureDepth, eyeRidge.
                             # 6.1: eyeStalk / eyeStalkR (pedunculate eyes). 6.0: ornament, skins, seed
                             # and eyeElong removed; prongs added; CELLS is the UI contract
 
@@ -44,7 +45,7 @@ PARAMS = [
     Param("widthThoraxRear", "Thorax rear width", 0.62, 0.3, 1.0, 0.01, "Outline", "Width at the last segment / max width"),
     Param("widthTail", "Tail tip width", 0.25, 0.0, 0.8, 0.01, "Outline", "Width near the tail tip / max width"),
     # ---- axis and furrows
-    Param("axisFrac", "Axial ring width", 0.33, 0.20, 0.50, 0.01, "Axis & furrows", "Axial lobe width / local body width"),
+    Param("axisFrac", "Axial ring width", 0.33, 0.20, 0.70, 0.01, "Axis & furrows", "Axial lobe width / local body width (TriloMorph glabella: median 0.41, 5-95 % 0.21-0.66)"),
     Param("axisRise", "Axial ring rise", 0.15, 0.0, 0.40, 0.01, "Axis & furrows", "Ring stands this fraction of relief above the vault"),
     Param("furrowDepth", "Furrow depth", 1.2, 0.0, 3.0, 0.1, "Axis & furrows", "Depth of the furrows at full expression", unit="mm"),
     Param("effacement", "Effacement", 0.0, 0.0, 1.0, 0.01, "Axis & furrows", "0 = fully sculpted, 1 = smooth (Nileus)"),
@@ -70,11 +71,12 @@ PARAMS = [
     Param("glabRise", "Glabella rise", 0.18, 0.0, 0.6, 0.01, "Head", "Glabella height above the cheeks / relief"),
     Param("glabLobes", "Glabellar furrow pairs", 3, 0, 4, 1, "Head", "Pairs of lateral glabellar furrows", kind="int"),
     Param("glabFront", "Glabella front", 2.5, 1.5, 8.0, 0.1, "Head", "How the glabella closes at the front: 2.5 ovoid nose, 6+ blunt"),
+    Param("preglabField", "Preglabellar field", 0.10, 0.02, 0.35, 0.01, "Head", "Flat field between the glabella's front and the anterior margin / head length (TriloMorph median 0.06, 5-95 % 0-0.30). 0.10 = the head as built since 6.0"),
     Param("eyeSize", "Eye size", 0.14, 0.0, 0.55, 0.005, "Head", "Eye radius / head half-width (0 = blind; a pelagic cyclopygid eye is ~0.45)"),
     Param("eyePos", "Eye position", 0.45, 0.10, 0.90, 0.01, "Head", "Along the head, 0 rear → 1 front"),
     Param("eyeArc", "Eye arc", 150, 60, 300, 5, "Head", "Angular extent of the visual surface", unit="deg"),
     Param("eyeHeight", "Eye height", 0.8, 0.2, 1.6, 0.05, "Head", "Dome height of the eye / eye radius"),
-    Param("eyeLat", "Eye lateral position", 0.0, 0.0, 0.9, 0.01, "Head", "Eye centre / head half-width (0 = hug the glabella, the v4 rule). Phacops scan: 0.55"),
+    Param("eyeLat", "Eye lateral position", 0.5, 0.0, 0.9, 0.01, "Head", "Eye centre / head half-width (0 = hug the glabella, the v4 rule). TriloMorph median 0.5; Phacops scan 0.55"),
     Param("eyeProfile", "Eye profile", 4.0, 2.0, 8.0, 0.1, "Head", "Super-Gaussian exponent of the eye dome: 2 = round, 8 = flat-topped drum (schizochroal)"),
     Param("eyeSolid", "Eye as solid", 0, 0, 1, 1, "Head", "1 = revolved eye primitive with lens lattice (eye_solid.py); 0 = the v4 heightfield bump", kind="int"),
     Param("eyeSlope", "Eye band lean", 15.0, 0.0, 50.0, 1.0, "Head", "Visual band from vertical: Erbenochile 0, Phacops 15, Isotelus ~45", unit="deg"),
@@ -93,7 +95,7 @@ PARAMS = [
     Param("eyeSink", "Eye sink", 0.55, 0.2, 2.2, 0.05, "Head", "How deep a spherical eye sits: 0.55 half sunk in the cheek, 1.0 centre at cheek level, 1.85 hanging below the cheek with its top at the palpebral shelf (Carolinites)"),
     Param("genalSweep", "Cheek sweep", 0.8, 0.0, 2.5, 0.05, "Head", "How far the cheeks sweep back along the shoulder / segment pitch"),
     Param("borderWidth", "Border width", 0.10, 0.0, 0.30, 0.01, "Head", "Raised border / head half-width (0 = none)"),
-    Param("genalSpine", "Genal spine length", 0.35, 0.0, 1.5, 0.01, "Head", "Genal spine length / head length (0 = none)"),
+    Param("genalSpine", "Genal spine length", 0.35, 0.0, 2.5, 0.01, "Head", "Genal spine length / head length (0 = none; TriloMorph 95th pct 1.4, max 3.4)"),
     Param("headRearArc", "Head rear arc", 0.0, 0.0, 0.7, 0.01, "Head", "Crescent: the rear edge bows back from the axis to the genal angles by this fraction of head length (0 = straight rear, v4)"),
     Param("headRearExp", "Head rear arc shape", 2.2, 1.0, 5.0, 0.05, "Head", "1 = the rear edge leaves the axis at once (thin band); higher = it stays straight and bows late (thick band, short horns)"),
     Param("genalWidth", "Genal arm thickness", 0.12, 0.03, 0.5, 0.01, "Head", "Thickness of the crescent's arm across, / head half-width (harpetid 0.3)"),
@@ -212,7 +214,7 @@ CELLS = {
     "frame": dict(label="Body", doc="whole-animal size", primary=["length", "width", "relief"],
                   more=["segCount", "cephFrac", "pygFrac", "wall", "widthMaxPos", "widthHeadFront", "widthThoraxFront", "widthThoraxRear", "widthTail"]),
     "b1": dict(label="Glabella + occipital ring", doc="the raised axial part of the head", primary=["glabInflate", "glabRise", "glabLobes"],
-               more=["glabFront", "headDomeExp", "headDomeFill", "headOutlineExp", "cephParallel", "headRelief", "headWall", "occipitalSpine"]),
+               more=["glabFront", "preglabField", "headDomeExp", "headDomeFill", "headOutlineExp", "cephParallel", "headRelief", "headWall", "occipitalSpine"]),
     "a1": dict(label="Cheek + genal angle", doc="the side of the head: eye, border, genal spine or prolongation", primary=["eyeSize", "genalSpine", "headRearArc"],
                more=["eyePos", "eyeArc", "eyeHeight", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade", "lensD", "lensGap", "lensRise",
                      "eyeStalk", "eyeStalkR", "eyeLean", "eyeStalkBend", "eyeSphere", "eyeAxial", "eyeTall", "eyeSink", "eyeCollar",

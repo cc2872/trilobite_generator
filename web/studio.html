@@ -93,7 +93,7 @@
 
 <script>
 const $=id=>document.getElementById(id);
-const S={ preset:'textured', head:'crescent', savedBody:null, savedHead:null,
+const S={ preset:'textured', head:'plain', savedBody:null, savedHead:null,
           spec:{list:null, model:'thorax'}, headOutline:{}, headFace:{}, headBaseOutline:{}, headBaseFace:{}, headMeta:null,
           BD:null, HD:null, presets:[], savedBodies:[], savedHeads:[],
           sel:null, pinned:null, hover:null, drag:null, pendingB:false, pendingH:false, edited:false, built:null, P:null, eyeParams:[], prongParams:[] };
@@ -181,7 +181,7 @@ function kv(){ const D=S.BD; if(!D) return; $('kv').innerHTML=`<b>${S.savedBody?
 
 // ---------- panel ----------
 function fillPickers(){ const ps=$('preset'); ps.innerHTML=`<option value="plain">plain trilobite</option><optgroup label="presets">${S.presets.map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+(S.savedBodies.length?`<optgroup label="saved bodies">${S.savedBodies.map(b=>`<option value="saved:${b.name}">${b.name} - ${b.preset}</option>`).join('')}</optgroup>`:''); ps.value=S.savedBody?'saved:'+S.savedBody:(S.start==='plain'?'plain':S.preset);
-  const hsOpts=['crescent',...(S.headMeta.styles||[]).map(x=>x.name)]; const hs=$('headstyle');
+  const hsOpts=['plain','crescent',...(S.headMeta.styles||[]).map(x=>x.name).filter(n=>n!=='plain')]; const hs=$('headstyle');
   hs.innerHTML=`<optgroup label="guide">${hsOpts.map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+((S.headMeta.saved_heads||[]).length?`<optgroup label="saved">${S.headMeta.saved_heads.map(h=>`<option value="${h.name}">${h.name} - ${h.style}</option>`).join('')}</optgroup>`:'');
   hs.value=S.savedHead||S.head;
 }
@@ -193,7 +193,7 @@ $('plus').onclick=()=>{ const at=(S.sel&&S.sel.type==='row')?S.sel.i+1:S.spec.li
 $('minus').onclick=()=>{ const i=(S.sel&&S.sel.type==='row')?S.sel.i:S.spec.list.length-1; removeRow(i); status(`row ${i} removed`); };
 
 function slider(box,k,val,lo,hi,step,onin,tag,faint){ const d=document.createElement('div'); d.className='ctrl';
-  d.innerHTML=`<div class="lab"><span>${k}${tag?' <span style="color:var(--mid)">- '+tag+'</span>':''}</span><span class="val" id="v_${k}"></span></div><input type="range" min="${lo}" max="${hi}" step="${step}" id="s_${k}">`;
+  d.innerHTML=`<div class="lab"><span>${({front_exp:'front_exp - pointiness (1.2 sharp, 2 round, 4 blunt)',genal_tip:'genal_tip - tip / root width',notch:'notch - rear margin U depth'})[k]||k}${tag?' <span style="color:var(--mid)">- '+tag+'</span>':''}</span><span class="val" id="v_${k}"></span></div><input type="range" min="${lo}" max="${hi}" step="${step}" id="s_${k}">`;
   if(faint) d.style.opacity=0.4; box.appendChild(d); const inp=d.querySelector('input'); inp.value=val; d.querySelector('.val').textContent=fmt(val);
   inp.oninput=()=>{ onin(+inp.value); d.querySelector('.val').textContent=fmt(+inp.value); d.querySelector('.val').classList.add('on'); }; return d; }
 
@@ -379,7 +379,7 @@ new p5(s=>{
 function headKeysFor(h){ const ks=((S.headMeta&&S.headMeta.handles[h])||[]).map(k=>ALIAS[k]||k); return ks.filter(k=>isOut(k)||isFace(k)); }
 
 // ---------- start ----------
-(async()=>{ const u=new URLSearchParams(location.search); S.head=u.get('head')||'crescent';
+(async()=>{ const u=new URLSearchParams(location.search); S.head=u.get('head')||'plain';
   try{ const sc=await (await fetch('/api/schema')).json(); const EK=new Set(['eyeSize','eyeArc','eyePos','eyeLat','eyeHeight','eyeProfile','eyeStalk','eyeStalkR','eyeStalkBend','eyeLean','eyeSphere','lensD','lensGap']);
        S.eyeParams=(sc.params||[]).filter(p=>EK.has(p.key)); S.prongParams=(sc.params||[]).filter(p=>p.group==='Prongs'); }catch(_){ S.eyeParams=[]; S.prongParams=[]; }   // the eye and prong params -> their panel sliders
   const body=u.get('body'); if(body){ const b=(await (await fetch('/api/bodies')).json()).find(x=>x.name===body); if(b){ if(b.head) S.head=b.head; await loadAll(b.preset, body); return; } }
