@@ -3,7 +3,7 @@
 
 A parametric generator for articulated dorsal plate chains, trilobites first, with three outputs from one parameter
 table: a **printable animal** (print-in-place, ball joints), a **fixed-ruler enrolment instrument** (pin joints,
-pre-registered), and a **blueprint sheet** for either. No OpenCascade: numpy height fields triangulated directly,
+pre-registered), and a **blueprint sheet** for either. No OpenCascade, numpy height fields triangulated directly,
 Manifold booleans, mirror-symmetric by construction. Site: volvation.org (unpublished research: do not share).
 
     pip install -r requirements.txt flask
@@ -41,7 +41,7 @@ anatomy/            the parts, with NO joints                    swap a head her
   thorax.py         segment i;  tail.py  the pygidium;  port.py  what a part tells a joint;  common.py  pitch, primitives, safe_expr
 joints/             every way two parts connect, one file each   swap a joint here
   base.py           the template (cut / overhang / pose / pivot / stop / fits)
-  pin.py            the MEASURED joint.  flexi.py  Thingiverse #3839472 form.  ball.py  flexi with spheres. Both print-only, never measured.
+  pin.py            the MEASURED joint.  flexi.py  Thingiverse #3839472 form.  ball.py  flexi with spheres.
 assemble.py         the only file that imports both anatomy and joints: plate -> joint at each port -> ornaments
 instrument.py       the ruler: build with joints/pin at a fixed bevel, probe, sweep to first interference or closure, classify, row
 isopod_model/       the printable animal (its own README)
