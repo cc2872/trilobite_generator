@@ -40,7 +40,7 @@ def test_head_styles_endpoint_and_keys(c):
     """3 Oct 2026: the head-type picker. The list leads with the crescent; a style has its own cache key; an unknown
     name falls back to the crescent's key (never a failed build)."""
     L = c.get("/api/head_styles").get_json(); names = [h["name"] for h in L]
-    assert names[0] == "crescent" and {"harpes", "phacops", "agnostus", "cryptolithus"} <= set(names)
+    assert names[:2] == ["plain", "crescent"] and {"harpes", "phacops", "agnostus", "cryptolithus"} <= set(names)
     for h in L:
         for k in h["params"]: assert k in schema.BY_KEY, (h["name"], k)       # a style only sets real parameters
     P = schema.coerce(c.get("/api/preset/proetida").get_json())
