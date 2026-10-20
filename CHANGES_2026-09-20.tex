@@ -1,0 +1,84 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs,longtable,array,xcolor,hyperref,listings}
+\hypersetup{colorlinks,linkcolor=black,urlcolor=blue!50!black}
+\lstset{basicstyle=\ttfamily\small,breaklines=true,columns=fullflexible,frame=single,framerule=0.2pt}
+\newcommand{\code}[1]{\texttt{#1}}
+\title{Trilobite generator --- changes of 20 September 2026\\\large print joint, print fill, reconciliation with the 16:50 tree}
+\author{prepared with Claude for Claire Choi}
+\date{20 September 2026}
+\begin{document}\maketitle
+
+\section*{Summary}
+This delta sits on top of the tree zipped at 16:50 on 20 September (\code{trilobite\_generator\_code\_2026-09-20\_1650.zip}: schema 6.1, AST \code{safe\_expr}, \code{manifold3d==3.0.1}, references re-frozen, PREREG resolved). It adds nothing to the measured geometry or the instrument's ruler except one pre-registered rule that had been dropped from the code. Everything else is \emph{print-only} and lives behind two optional request fields on \code{/api/build}.
+
+\begin{center}\begin{tabular}{@{}lll@{}}\toprule
+file & status & what \\\midrule
+\code{instrument.py} & modified & PREREG \S3 overlap term restored in \code{classify()} \\
+\code{web/app.py} & modified & \code{"joint": "flexi"} and \code{"fill": <mm>} on \code{/api/build}; STL posing \\
+\code{printjoint2.py} & new & the print joint (parametrized Flexi \#3839472), whole-animal builders \\
+\code{printfill.py} & new & print-only shell thickening for the pin build \\
+\code{tests/test\_printjoint2.py} & new & 2 tests, \(\sim\)4 s \\
+\code{scripts/printjoint2\_study.py}, \code{\_sliders.py} & new & joint study; one-slider-at-a-time study \\
+\code{docs/BLOCK1\_DECISIONS.md}, \code{block1\_*.json} & new & Block 1 gate and spine evidence (for the record) \\
+\code{CHANGES\_2026-09-13.md} & appended & the 20 Sep entries \\\bottomrule
+\end{tabular}\end{center}
+
+\section{The instrument: one change}
+\code{classify()} implemented ``closed with total \(<150^\circ\) \(\Rightarrow\) discoidal''. PREREG \S3 says discoidal requires \emph{both} the short curl \emph{and} pygidium--cephalon overlap \(s_{\mathrm{tail}}\ge\)~\code{DISC\_OVERLAP} (resolved: 0.5). Restored verbatim; short-curl closures without the overlap now fall through to the \(s_{\mathrm{tail}}\) rules. The constants (\code{DISC\_DEG}, \code{DISC\_OVERLAP}, \code{CLASS\_TOL}) are now written into every result. Agnostida stays discoidal (\(s_{\mathrm{tail}}=1.56\)); no frozen reference changes. This closes the last ``still open'' item in the changelog.
+
+\section{The print joint (\code{printjoint2.py})}
+Two Thingiverse print-in-place trilobites were taken apart in code (\#7112261: 31 bodies, T-tenons in loose pockets; \#3839472: 8 bodies, one knob-in-pocket joint per pair). The second is the one adopted, parametrized on our segment geometry:
+\begin{itemize}\itemsep2pt
+\item every segment is a \emph{solid wedge on a flat base} (no hollow shell, no nesting, no supports);
+\item one joint per pair at the midline: a short \emph{barrel} (axis across the body) on a neck, reaching back from segment \(k\) into a box pocket inside segment \(k{+}1\) through a slot in its front face. A barrel, not a disc or sphere, because its fore--aft extent does not change with flexion: pull play equals the axial gap (0.10--0.25\,mm) instead of the 0.6\,mm the Thingiverse disc needs;
+\item V-cut faces below the pivot set the stop at \code{maxAngle}; measured stop \(=\)\code{maxAngle}\(\pm2^\circ\) on every slider case and every preset;
+\item three clearances by print direction (axial 0.20, vertical 0.30, lateral 0.25\,mm), a 1.4\,mm lip, a 45\(^\circ\) bed chamfer;
+\item the pivot is an absolute height (6--10\,mm above the bed), not a fraction of relief; the joint scales itself down when the pitch is within 1\,mm of what it needs and refuses below 4.5\,mm pitch.
+\end{itemize}
+Whole animals: \code{print\_head}, \code{print\_segment}, \code{print\_tail}, \code{print\_animal}; posed with \code{printjoint2.transforms\_deg} (the print pivot sits \(\approx2.4\)\,mm behind the instrument's joint plane --- state it, do not pose print parts with the instrument's transforms). All ten presets: every part one watertight body, no contact at the stop, including head--tail. Retention: the barrel's 0.65\,mm side shoulders and 0.50\,mm top/bottom shoulders bear on the lip; overlap volume rises steadily past the 0.2\,mm play.
+
+\emph{Known limits.} A ventral curl on solid segments costs base width: at \code{maxAngle}\,36\(^\circ\) the V cut leaves 43\,\% of the pitch on the bed (72\,\% at 18\(^\circ\)). The presets carry \code{maxAngle}\,18, so printed presets make a C, not a ball; the export should take its stop from the instrument's reading for that animal.
+
+\section{Print fill (\code{printfill.py})}
+Printed pin-build animals are the 2\,mm measurement shell and are too thin to hold. \code{thicken()} adds the layer between the dorsal surface and the same surface shifted down \code{fill} mm. Hinge bands (barrels, bores, knuckles), the flap that rides over the next segment, and the pleural tips (depth \(\le\) \code{marginHeight}\(\cdot\)\code{relief}\(-1.5\), never below \(z=0.6\)) are kept clear. Default animal at 3\,mm: 26\,g \(\to\) 32\,g, single bodies, no rest contact, clean to its 18\(^\circ\) stop. Three mm is the ceiling for the pin build (the shells nest at 2.3\,mm). The measured geometry and the parameter hash are untouched: the sheet still describes the 2\,mm animal.
+
+\section{Web}
+\code{/api/build} body may carry \code{"joint": "pin"|"flexi"} (default pin) and \code{"fill": <mm>} (pin only). Cache keys get \code{-flexi} / \code{-fill3} suffixes so measured and print builds never collide; the manifest records \code{joint}, \code{fill\_mm} and, for flexi, a \code{print\_joint} block (pivot, offset, scale, gaps). \code{/api/stl} poses flexi builds with the print pivot. \code{index.html} is unchanged --- no toggle yet; one checkbox beside \emph{Download STL} is all it needs.
+
+\section{Evidence carried in \code{docs/}}
+\code{block1\_gate.json}: pleural facet + ventral doublure move e@stop by \(-0.08\), \(-0.16\), \(-1.09\), \(0.00\), \(0.00^\circ\) on the five anchors, no class flips --- the reason schema 6.2's keys were \emph{not} adopted. \code{block1\_spines.json}: the four pilot anatomy readings are identical with every spine family zeroed. \code{BLOCK1\_DECISIONS.md}: the reasoning.
+
+\section{Open items surfaced today (not fixed here)}
+\begin{enumerate}\itemsep2pt
+\item A stalked eye (\code{eyeStalk}\(>0\)) comes out as three bodies in the \emph{tracked} \code{parts.cephalon} (drum floating, stalk missing). Reproduced on asaphida with \code{eyeStalk}=2.0. Generator bug from 6.1; no preset uses a stalk, so references are unaffected. Block 2.
+\item Seven of ten presets have \code{eyeSolid}=0 and print blind; harpetida's eye is below the lens threshold.
+\item The 09-16 print fused because of the nested-shell design at 0.3\,mm, not the printer; \code{print\_validity} still checks feature size, not gap, and should gain a gap check.
+\item Renders made 13--20 Sep before the \code{manifold3d} pin ran on 3.5.3 and carry its cylinder-seam spike; the joint numbers were re-verified on 3.0.1 (unchanged).
+\end{enumerate}
+
+\section{How to commit}
+\begin{lstlisting}[language=bash]
+# from the repo root at the 16:50 tree (schema 6.1, manifold3d==3.0.1)
+git checkout -b print-joint-and-fill
+unzip -o trilobite_delta_2026-09-20.zip -d .        # 14 files: 2 modified, 12 new
+pip install -r requirements.txt                      # manifold3d==3.0.1 is required
+python -m pytest tests/test_printjoint2.py tests/test_schema.py -q   # ~2.5 min
+
+git add instrument.py web/app.py printjoint2.py printfill.py \
+        tests/test_printjoint2.py scripts/printjoint2_study.py scripts/printjoint2_sliders.py \
+        docs/ CHANGES_2026-09-13.md
+git commit -m "classify: restore PREREG s3 overlap term; print joint (flexi) + print fill behind /api/build fields
+
+- instrument.classify: discoidal needs total<150 AND s_tail>=DISC_OVERLAP (0.5); constants in results.
+  No reference changes.
+- printjoint2.py: parametrized Flexi #3839472 joint on our segments (solid wedges, barrel-in-pocket,
+  V stop at maxAngle, direction-split gaps, self-scaling below pitch 7.4, refuses <4.5). Whole-animal
+  builders and print-pivot transforms. All presets: single bodies, no contact at the stop.
+- printfill.py: print-only shell thickening for the pin build (hinge bands and nesting flap kept clear).
+- web/app.py: /api/build accepts joint=pin|flexi and fill=<mm>; cache keys suffixed; STL posing.
+- tests/test_printjoint2.py; docs/: Block 1 gate + spine evidence.
+Measured geometry, schema (6.1), hashes and frozen references unchanged."
+\end{lstlisting}
+Then, separately and only if you want it: the \code{index.html} checkbox (\code{joint} + \code{fill} in the build request) and the stalked-eye fix in \code{parts.cephalon}, each as its own commit so the print work stays reviewable on its own.
+\end{document}
