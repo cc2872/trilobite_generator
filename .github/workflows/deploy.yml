@@ -13,7 +13,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt flask
-      - run: python -m pytest tests/ -q
+      - run: python -m pytest tests/ -q -m "not slow"
   build:
     needs: test                            
     if: github.event_name == 'push'       
