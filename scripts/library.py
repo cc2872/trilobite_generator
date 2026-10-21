@@ -17,6 +17,14 @@ Steps:
     python scripts/library.py build lib --batch 0 --workers 8          # one batch; re-run the same line to resume
     python scripts/library.py build lib --all --workers 8              # every batch not yet finished
     python scripts/library.py status lib
+    python scripts/library.py build lib --all --workers 8 --retry-failed   # give failed/timed-out animals another try
+    python scripts/library.py landmarks lib --workers 14                  # landmarks only, no mesh (~0.1 s per animal)
+
+Landmarks only: `landmarks` computes the TriloMorph landmarks of every animal in the design straight from its parameters,
+without building the mesh, and writes lib/landmarks/batch_0000.csv (hash, index, preset, then x,y of cephalic LM1-16 and
+pygidial LM1-7). It is ~500x faster than a build and needs no STL disk, so a million animals is hours, not months. Use it
+for counts, accumulation curves and coverage; use `build` on a subset for anything that needs the solid (one-body rate,
+renders, prints). A batch file is written whole and renamed when complete, so re-running skips finished batches.
 
 Samplers:
     box      every parameter uniform over its schema range (the space the count was made on; most animals fail the build)
@@ -166,7 +174,7 @@ def one(lib, design_csv, row_i, out_json, measure):
 
 
 # ------------------------------------------------------------------------------------------------ a batch
-def build(lib, batch, workers, timeout, measure):
+def build(lib, batch, workers, timeout, measure, retry_failed=False):
     meta = json.load(open(os.path.join(lib, "LIBRARY.json")))
     import schema
     if meta["schema_version"] != schema.SCHEMA_VERSION:
@@ -174,6 +182,12 @@ def build(lib, batch, workers, timeout, measure):
     design_csv = os.path.abspath(os.path.join(lib, "design", f"batch_{batch:04d}.csv"))
     man = os.path.join(lib, "manifest", f"batch_{batch:04d}.csv"); os.makedirs(os.path.dirname(man), exist_ok=True)
     rows = list(csv.DictReader(open(design_csv)))
+    if retry_failed and os.path.exists(man):              # keep the built rows, drop the rest so they are tried again
+        M = list(csv.DictReader(open(man))); keep = [r for r in M if str(r.get("built")) == "1"]
+        if len(keep) < len(M):
+            with open(man, "w", newline="") as fh0:
+                w0 = csv.DictWriter(fh0, fieldnames=MANIFEST_COLS, extrasaction="ignore"); w0.writeheader(); w0.writerows(keep)
+            print(f"batch {batch:04d}: retrying {len(M) - len(keep)} failed animals", flush=True)
     done = {r["hash"] for r in csv.DictReader(open(man))} if os.path.exists(man) else set()
     todo = [i for i, r in enumerate(rows) if r["hash"] not in done]
     print(f"batch {batch:04d}: {len(todo)} to build, {len(done)} already in the manifest", flush=True)
@@ -214,6 +228,54 @@ def build(lib, batch, workers, timeout, measure):
     print(f"batch {batch:04d} done: {n_ok}/{len(todo)} built in {(time.time() - t_start) / 60:.1f} min", flush=True)
 
 
+# ------------------------------------------------------------------------------------------------ landmarks only
+LM_COLS = (["hash", "index", "batch", "preset", "head_length_mm", "error"]
+           + [f"c{k}_{a}" for k in range(1, 17) for a in "xy"] + [f"p{k}_{a}" for k in range(1, 8) for a in "xy"])
+
+
+def _landmark_batch(args):
+    """One whole design batch, in-process (a worker process of the pool). Returns (batch, n, n_errors, seconds)."""
+    lib, f = args
+    warnings.filterwarnings("ignore"); os.chdir(ROOT)
+    import schema, landmarks
+    b = int(os.path.basename(f)[6:10]); out = os.path.join(lib, "landmarks", os.path.basename(f)); tmp = out + ".part"
+    t0 = time.time(); n = bad = 0; base = schema.table_defaults()
+    with open(tmp, "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=LM_COLS, extrasaction="ignore"); w.writeheader()
+        for d in csv.DictReader(open(f)):
+            r = dict(hash=d["hash"], index=d["index"], batch=d["batch"], preset=d["preset"], error="")
+            try:
+                P = schema.coerce(json.loads(d["params"]), base=base, quiet=True)
+                c = landmarks.cephalon(P); t = landmarks.pygidium(P); r["head_length_mm"] = round(float(c["head_length"]), 4)
+                for k in range(1, 17):
+                    x, y = c["lm"][f"LM{k}"][:2]; r[f"c{k}_x"], r[f"c{k}_y"] = round(float(x), 4), round(float(y), 4)
+                for k in range(1, 8):
+                    x, y = t["lm"][f"LM{k}"][:2]; r[f"p{k}_x"], r[f"p{k}_y"] = round(float(x), 4), round(float(y), 4)
+            except Exception as ex:
+                r["error"] = str(ex)[:120]; bad += 1
+            w.writerow(r); n += 1
+    os.replace(tmp, out)
+    return b, n, bad, round(time.time() - t0, 1)
+
+
+def landmarks_only(lib, workers):
+    from concurrent.futures import ProcessPoolExecutor
+    meta = json.load(open(os.path.join(lib, "LIBRARY.json")))
+    import schema
+    if meta["schema_version"] != schema.SCHEMA_VERSION:
+        sys.exit(f"library designed at schema {meta['schema_version']}, code is {schema.SCHEMA_VERSION}: check out {meta['git_commit']}")
+    os.makedirs(os.path.join(lib, "landmarks"), exist_ok=True)
+    files = sorted(glob.glob(os.path.join(lib, "design", "batch_*.csv")))
+    todo = [f for f in files if not os.path.exists(os.path.join(lib, "landmarks", os.path.basename(f)))]
+    print(f"{len(todo)} of {len(files)} batches to do", flush=True)
+    t0 = time.time(); tot = bad = 0
+    with ProcessPoolExecutor(max_workers=workers) as ex:
+        for k, (b, n, e, sec) in enumerate(ex.map(_landmark_batch, [(lib, f) for f in todo]), 1):
+            tot += n; bad += e; el = time.time() - t0
+            print(f"[{k}/{len(todo)}] batch {b:04d}: {n} animals, {e} errors, {sec}s   eta {el / k * (len(todo) - k) / 60:.0f} min", flush=True)
+    print(f"done: {tot} animals, {bad} errors, {(time.time() - t0) / 60:.1f} min", flush=True)
+
+
 def status(lib):
     meta = json.load(open(os.path.join(lib, "LIBRARY.json")))
     print(f"{lib}: {meta['n']} animals, sampler {meta['sampler']}, seed {meta['seed']}, schema {meta['schema_version']}, commit {meta['git_commit']}")
@@ -238,7 +300,8 @@ if __name__ == "__main__":
     b = sub.add_parser("build"); b.add_argument("lib"); g = b.add_mutually_exclusive_group(required=True)
     g.add_argument("--batch", type=int); g.add_argument("--all", action="store_true")
     b.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) // 2)); b.add_argument("--timeout", type=int, default=900)
-    b.add_argument("--measure", action="store_true")
+    b.add_argument("--measure", action="store_true"); b.add_argument("--retry-failed", action="store_true")
+    m = sub.add_parser("landmarks"); m.add_argument("lib"); m.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 2))
     o = sub.add_parser("one"); o.add_argument("lib"); o.add_argument("design_csv"); o.add_argument("row", type=int); o.add_argument("out_json")
     o.add_argument("--measure", action="store_true")
     s = sub.add_parser("status"); s.add_argument("lib")
@@ -247,9 +310,10 @@ if __name__ == "__main__":
     if A.cmd == "design": design(A.lib, A.sampler, A.n, A.seed, A.batch_size, A.npz)
     elif A.cmd == "one": one(A.lib, A.design_csv, A.row, A.out_json, A.measure)
     elif A.cmd == "status": status(A.lib)
+    elif A.cmd == "landmarks": landmarks_only(A.lib, A.workers)
     else:
         if A.all:
             for f in sorted(glob.glob(os.path.join(A.lib, "design", "batch_*.csv"))):
-                build(A.lib, int(os.path.basename(f)[6:10]), A.workers, A.timeout, A.measure)
+                build(A.lib, int(os.path.basename(f)[6:10]), A.workers, A.timeout, A.measure, A.retry_failed)
         else:
-            build(A.lib, A.batch, A.workers, A.timeout, A.measure)
+            build(A.lib, A.batch, A.workers, A.timeout, A.measure, A.retry_failed)
