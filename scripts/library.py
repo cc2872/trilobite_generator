@@ -29,6 +29,8 @@ renders, prints). A batch file is written whole and renamed when complete, so re
 Samplers:
     box      every parameter uniform over its schema range (the space the count was made on; most animals fail the build)
     presets  Latin hypercube around each of the order presets on the sweep's axes (sweep.py AXES), equal per order
+             --presets NAME [NAME ...] limits it to named presets, including non-trilobites in presets_other/
+             (e.g. --presets pillbug: 10,000 variations of the pill bug on the same axes)
     npz      rows of an .npz with arrays X (n x k) and keys (k) over a table-defaults base (e.g. cell representatives
              from the count), --npz path
 
@@ -77,9 +79,24 @@ def sample_box(n, rng):
         yield "", schema.coerce(P, quiet=True)
 
 
-def sample_presets(n, rng):
+def load_named_presets(names):
+    """None -> the ten trilobite orders in presets/ (exactly what sweep.py uses). Otherwise the named presets, looked up in
+    presets/ and presets_other/ (non-trilobites such as pillbug live there so the sweep and the studio never see them)."""
+    import sweep
+    if not names: return sweep.load_presets()
+    out = {}
+    for nm in names:
+        for d in ("presets", "presets_other"):
+            f = os.path.join(ROOT, d, f"{nm}.json")
+            if os.path.exists(f): out[nm] = json.load(open(f))["params"]; break
+        else:
+            sys.exit(f"no preset named {nm!r} in presets/ or presets_other/")
+    return out
+
+
+def sample_presets(n, rng, names=None):
     import schema, sweep, numpy as np
-    presets = sweep.load_presets(); names = list(presets); keys = list(sweep.AXES)
+    presets = load_named_presets(names); names = list(presets); keys = list(sweep.AXES)
     per = -(-n // len(names))
     for name in names:
         base = schema.coerce(presets[name], base=schema.table_defaults(), quiet=True); u = sweep.lhs(per, len(keys), rng)
@@ -103,13 +120,13 @@ def sample_npz(path):
         yield "", schema.coerce(P, quiet=True)
 
 
-def design(lib, sampler, n, seed, batch_size, npz=None):
+def design(lib, sampler, n, seed, batch_size, npz=None, presets=None):
     import numpy as np, schema
     if os.path.exists(os.path.join(lib, "LIBRARY.json")):
         sys.exit(f"{lib} already has a design; use a new directory (a design is fixed before anything is built)")
     os.makedirs(os.path.join(lib, "design"), exist_ok=True)
     rng = np.random.default_rng(seed)
-    gen = {"box": lambda: sample_box(n, rng), "presets": lambda: sample_presets(n, rng), "npz": lambda: sample_npz(npz)}[sampler]()
+    gen = {"box": lambda: sample_box(n, rng), "presets": lambda: sample_presets(n, rng, presets), "npz": lambda: sample_npz(npz)}[sampler]()
     seen, rows, dup = set(), [], 0
     for preset, P in gen:
         if sampler != "npz" and len(rows) >= n: break
@@ -122,7 +139,7 @@ def design(lib, sampler, n, seed, batch_size, npz=None):
     for b in range(0, len(rows), batch_size):
         with open(os.path.join(lib, "design", f"batch_{b // batch_size:04d}.csv"), "w", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=DESIGN_COLS); w.writeheader(); w.writerows(rows[b:b + batch_size]); nb += 1
-    meta = dict(sampler=sampler, n=len(rows), seed=seed, batch_size=batch_size, n_batches=nb, duplicates_dropped=dup,
+    meta = dict(sampler=sampler, n=len(rows), seed=seed, batch_size=batch_size, n_batches=nb, duplicates_dropped=dup, presets=presets,
                 schema_version=schema.SCHEMA_VERSION, git_commit=git_commit(), npz=npz, created=time.strftime("%Y-%m-%d %H:%M:%S"),
                 hash="sha256(schema.to_json(params))[:16]")
     json.dump(meta, open(os.path.join(lib, "LIBRARY.json"), "w"), indent=1)
@@ -297,6 +314,7 @@ if __name__ == "__main__":
     a = sub.add_parser("design"); a.add_argument("lib"); a.add_argument("--sampler", choices=["box", "presets", "npz"], default="presets")
     a.add_argument("--n", type=int, default=10000); a.add_argument("--seed", type=int, default=7)
     a.add_argument("--batch-size", type=int, default=1000); a.add_argument("--npz")
+    a.add_argument("--presets", nargs="+", help="with --sampler presets: only these (e.g. pillbug, or phacopida lichida); default the ten orders")
     b = sub.add_parser("build"); b.add_argument("lib"); g = b.add_mutually_exclusive_group(required=True)
     g.add_argument("--batch", type=int); g.add_argument("--all", action="store_true")
     b.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) // 2)); b.add_argument("--timeout", type=int, default=900)
@@ -307,7 +325,7 @@ if __name__ == "__main__":
     s = sub.add_parser("status"); s.add_argument("lib")
     A = ap.parse_args()
     A.lib = os.path.abspath(A.lib); os.chdir(ROOT)               # presets/ and the builders are read relative to the repo
-    if A.cmd == "design": design(A.lib, A.sampler, A.n, A.seed, A.batch_size, A.npz)
+    if A.cmd == "design": design(A.lib, A.sampler, A.n, A.seed, A.batch_size, A.npz, A.presets)
     elif A.cmd == "one": one(A.lib, A.design_csv, A.row, A.out_json, A.measure)
     elif A.cmd == "status": status(A.lib)
     elif A.cmd == "landmarks": landmarks_only(A.lib, A.workers)
