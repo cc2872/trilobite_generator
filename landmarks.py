@@ -107,12 +107,13 @@ def pygidium(P):
     S = T.plan(P)
     Lp, wp, a = S["Lp"], S["wp"], S["a"]
     tip = Lp * (1.0 + (float(P["termSpine"]) if float(P["termSpine"]) > 0.05 else 0.0))   # LM4 at the spine tip if spiny
-    bw = float(P["borderWidth"]) * wp
-    lm = {"LM1": (0.0, 0.0), "LM2": (0.0, AXIS_END * Lp), "LM4": (0.0, tip), "LM5": (a, 0.0), "LM7": (wp, 0.0)}
+    bw = float(S.get("border_frac", P["borderWidth"])) * wp      # 6.4: the tail's own border (pygBorderWidth), else the head's
+    ax_end = float(S.get("axis_len", AXIS_END)); ka = ax_end / AXIS_END
+    lm = {"LM1": (0.0, 0.0), "LM2": (0.0, ax_end * Lp), "LM4": (0.0, tip), "LM5": (a, 0.0), "LM7": (wp, 0.0)}
     if bw > 0.05: lm.update(LM3=(0.0, Lp - bw), LM6=(wp - bw, 0.0))
     else: lm.update(LM3=lm["LM4"], LM6=lm["LM7"])
     # curves: axis = the axial furrow ay(y); margin = the ellipse (plus spines) from the tip round to the front; border = inset
-    yy = np.linspace(0.0, AXIS_END * Lp, 60); axis = np.c_[a * (1 - 0.85 * yy / Lp), yy]
+    yy = np.linspace(0.0, ax_end * Lp, 60); axis = np.c_[a * (1 - 0.85 * np.clip(yy / Lp / ka, 0, 1)), yy]
     phi = np.linspace(math.pi / 2, math.radians(1.5), 120)
     mx = np.array([S["outline"](float(1 - 2 * (p - math.radians(1.5)) / (math.pi - 2 * math.radians(1.5))), 1.0) for p in phi])
     margin = np.r_[mx, [[a, 0.0]]]                                # LM4 -> round the margin -> LM5 on the anterior edge

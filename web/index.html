@@ -548,8 +548,8 @@ const VISUAL={
  a1:()=>[featureSelect('a1'), packing(), slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('eyePos'), slider('eyeLat'), slider('eyeStalk'), slider('eyeStalkR'), slider('eyeLean'), slider('eyeSolid'), slider('eyeSlope'), slider('eyeShade'), slider('eyeProfile'), slider('lensD'), slider('lensGap'), slider('lensRise'), slider('genalSpine'), slider('genalCurve'), slider('genalPath'), slider('genalTaper'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
  b2:()=>[featureSelect('b2'), slider('axisFrac'), slider('axisRise'), slider('furrowDepth'), slider('ringArch'), slider('axialSpine')],
  a2:()=>[glyph('pleura','0 0 340 110'), featureSelect('a2'), slider('fulcrum'), slider('pleuralSlope'), slider('overlap'), slider('spineBase'), slider('spineSweep')],
- b3:()=>[slider('pygRings'), slider('tailRelief'), slider('tailDomeExp')],
- a3:()=>[featureSelect('a3'), slider('pygWidth'), slider('pygSpine'), slider('pygSplay'), slider('pygMarginal'), slider('tailProngs'), slider('tailProngLen'), slider('tailProngSplay'), slider('tailProngStem'), slider('tailProngCenter'), slider('tailProngCurl')],
+ b3:()=>[slider('pygRings'), slider('pygAxisLen'), slider('pygAxisFrac'), slider('tailRelief'), slider('tailDomeExp')],
+ a3:()=>[featureSelect('a3'), slider('pygWidth'), slider('tailOutlineExp'), slider('pygBorderWidth'), slider('pygSpine'), slider('pygSplay'), slider('pygMarginal'), slider('tailProngs'), slider('tailProngLen'), slider('tailProngSplay'), slider('tailProngStem'), slider('tailProngCenter'), slider('tailProngCurl')],
  ruler:()=>[slider('maxAngle'), slider('clearance'), slider('nKnuckles')],
 };
 function render(){ const c=S.cells[sel]; $('cellname').textContent=c.label;

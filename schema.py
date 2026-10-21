@@ -8,7 +8,9 @@ artifact — derives from this table. Add a parameter here and it exists everywh
 from dataclasses import dataclass, asdict
 import json, hashlib, warnings
 
-SCHEMA_VERSION = "6.3"      # 20 Oct 2026: preglabField (default 0.10 = the head as built since 6.0); axisFrac to 0.70 and genalSpine to 2.5 (TriloMorph
+SCHEMA_VERSION = "6.4"      # 21 Oct 2026: tailOutlineExp, pygAxisLen, pygAxisFrac, pygBorderWidth (TriloMorph pygidia; every default
+                            # reproduces the tail as built since v4, so presets and the frozen readings are unchanged).
+                            # 6.3 (20 Oct 2026): preglabField (default 0.10 = the head as built since 6.0); axisFrac to 0.70 and genalSpine to 2.5 (TriloMorph
                             # 5-95 %); eyeLat default 0.5 (TriloMorph median; presets set their own). 6.2 (27 Sep): sutureEnd / sutureDepth, eyeRidge.
                             # 6.1: eyeStalk / eyeStalkR (pedunculate eyes). 6.0: ornament, skins, seed
                             # and eyeElong removed; prongs added; CELLS is the UI contract
@@ -125,6 +127,10 @@ PARAMS = [
     Param("spineSweep", "Spine sweep", 50, 0, 80, 1, "Thorax", "Pleural spines sweep back by this angle", unit="deg"),
     # ---- tail
     Param("pygWidth", "Tail width", 0.90, 0.5, 1.1, 0.01, "Tail", "Tail shield width / last segment width"),
+    Param("tailOutlineExp", "Tail outline shape", 2.0, 0.8, 5.0, 0.05, "Tail", "Superellipse exponent of the tail margin: 2 = the half-ellipse built since v4, below 2 tapers to a pointed rear (1 = triangular), above 2 squarer"),
+    Param("pygAxisLen", "Tail axis length", 0.85, 0.25, 0.97, 0.01, "Tail", "Pygidial axis length / tail length (0.85 = as built since v4; TriloMorph median 0.82, 5-95 % 0.27-0.93)"),
+    Param("pygAxisFrac", "Tail axis width", 0.0, 0.0, 0.6, 0.01, "Tail", "Tail axis width / tail width; 0 = same as the thoracic axis (axisFrac), as built since v4 (TriloMorph axis/pygidial half-width median 0.32, 5-95 % 0.21-0.47)"),
+    Param("pygBorderWidth", "Tail border width", -0.01, -0.01, 0.35, 0.01, "Tail", "Raised tail border / tail half-width; negative = same as the head border (borderWidth), as built since v4 (TriloMorph border/pygidial length median 0.10, 5-95 % 0.02-0.33)"),
     Param("pygRings", "Tail axial rings", 4, 0, 12, 1, "Tail", "Axial rings on the pygidium", kind="int"),
     Param("pygSpine", "Tail spine length", 0.9, 0.0, 2.0, 0.05, "Tail", "Paired tail spines / shield length (0 = none)"),
     Param("pygSplay", "Tail spine splay", 20, 0, 45, 1, "Tail", "Outward angle of the tail spines", unit="deg"),
@@ -226,9 +232,9 @@ CELLS = {
     "a2": dict(label="Pleura", doc="inner run to the fulcrum, then the blade; its spine is the blade running on", primary=["overlap", "fulcrum", "pleuralSlope"],
                more=["marginHeight", "bladeCamber", "bladeChord", "tipSweep", "tipTaper", "spineBase", "spineGrad", "spineSweep", "macroIndex", "macroAmp"]),
     "b3": dict(label="Tail axis", doc="the pygidial axis and its rings", primary=["pygRings", "tailRelief", "tailDomeExp"],
-               more=["tailWall", "termSpine"]),
+               more=["pygAxisLen", "pygAxisFrac", "tailWall", "termSpine"]),
     "a3": dict(label="Tail field + margin", doc="the pleural field, border, forks and marginal spines", primary=["pygWidth", "pygSpine", "pygMarginal"],
-               more=["pygSplay", "pygMarginalLen", "tailProngs", "tailProngLen", "tailProngSplay", "tailProngStem", "tailProngCenter", "tailProngWidth", "tailProngCurl"]),
+               more=["tailOutlineExp", "pygBorderWidth", "pygSplay", "pygMarginalLen", "tailProngs", "tailProngLen", "tailProngSplay", "tailProngStem", "tailProngCenter", "tailProngWidth", "tailProngCurl"]),
     "ruler": dict(label="Print + hinge", doc="manufacturing, not morphology", primary=["maxAngle", "clearance", "nKnuckles"], more=["boreDia", "barrelR"]),
 }
 VERTICAL_SPINES = ["occipitalSpine", "axialSpine", "termSpine"]     # their own family (10 Sep verdict): dorsal, not a cell prong

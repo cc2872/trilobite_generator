@@ -14,14 +14,22 @@ def plan(P):
     Lp = P["pygFrac"] * P["length"]
     ovl = P["overlap"] * pitch(P)
     wp = tail_halfwidth(P)
-    a = P["axisFrac"] * wp
+    # 21 Oct 2026 (schema 6.4): four tail controls fitted to TriloMorph pygidia. Each default reproduces the tail built since v4.
+    nO = float(P.get("tailOutlineExp", 2.0))                    # margin superellipse: 2 = the half-ellipse, < 2 pointed, > 2 square
+    Lax = float(P.get("pygAxisLen", 0.85))                      # axis length / tail length (the v4 axis faded out at 0.85 Lp)
+    ka = Lax / 0.85                                             # stretch of every axis-relative position against v4
+    pa = float(P.get("pygAxisFrac", 0.0))
+    a = (pa if pa > 0 else P["axisFrac"]) * wp                  # 0 = the thoracic axis fraction, as before
+    pb = float(P.get("pygBorderWidth", -0.01))
+    bwf = P["borderWidth"] if pb < 0 else pb                    # negative = the head's border fraction, as before
+    se = lambda c: np.sign(c) * np.abs(c) ** (2.0 / nO)         # superellipse coordinate; se(c) = c when nO = 2
     margin = P["marginHeight"] * h
     rise = P["axisRise"] * h
     F = furrow_amp(P)
     n = int(P["pygRings"])
     def xmax(y):
         yy = np.clip(np.asarray(y, float) / Lp, 0, 1)
-        return np.maximum(wp * np.sqrt(np.clip(1 - yy ** 2, 0, 1)), 1.5)
+        return np.maximum(wp * np.clip(1 - yy ** nO, 0, 1) ** (1.0 / nO), 1.5)
     Lf = P["pygSpine"] * Lp
     n_m = int(P["pygMarginal"]); Lm = P["pygMarginalLen"] * Lp
     sp = math.radians(P["pygSplay"])
@@ -38,7 +46,7 @@ def plan(P):
             for pm in (pk, math.pi - pk): ex = np.maximum(ex, Lm * bump(phi, pm, hphi_m, 1.2))
         return ex
     def margin_pt(phi):
-        x0, y0 = wp * np.cos(phi), Lp * np.sin(phi)
+        x0, y0 = wp * se(np.cos(phi)), Lp * se(np.sin(phi))
         r0 = np.hypot(x0, y0); f = 1 + radial_extra(phi) / np.maximum(r0, 1e-6)
         return x0 * f, y0 * f
     PHI_MIN = math.radians(1.5)   # the margin never reaches the front line: at phi = 0 the outer grid column would lie
@@ -47,7 +55,7 @@ def plan(P):
         mx, my = margin_pt(np.array([phi])); fx = u * (wp - 1.0)
         return float((1 - v) * fx + v * mx[0]), float(v * my[0])
     def outside(x, y):
-        r = np.sqrt((x / wp) ** 2 + (y / Lp) ** 2)
+        r = (np.abs(x / wp) ** nO + np.abs(y / Lp) ** nO) ** (1.0 / nO)
         Lmax = max(Lf if Lf > 0.5 else 0.0, Lm if n_m else 0.0, 1e-6)
         return np.clip((r - 1) * np.hypot(x, y) / np.maximum(r, 1e-6) / Lmax, 0, 1)
     def zfun(x, y):
@@ -55,17 +63,17 @@ def plan(P):
         nT = P["tailDomeExp"]
         tz = np.clip(1 - yy ** nT, 0, 1) ** (1 / nT) * 0.9 + 0.1
         z = margin * 0.6 + (h - margin * 0.6) * vault(x / xm, P) * tz
-        ay = a * (1 - 0.85 * yy)
-        z += rise * plateau(x, ay) * (1 - smoothstep(0.75 * Lp, 0.95 * Lp, y))
-        z -= F * trough(ax - (ay + 0.6), 0.9) * (y < 0.9 * Lp)
+        ay = a * (1 - 0.85 * np.clip(yy / ka, 0, 1))
+        z += rise * plateau(x, ay) * (1 - smoothstep((Lax - 0.10) * Lp, (Lax + 0.10) * Lp, y))
+        z -= F * trough(ax - (ay + 0.6), 0.9) * (y < (Lax + 0.05) * Lp)
         for k in range(n):
-            yk = Lp * (k + 1) / (n + 1.5)
+            yk = Lp * ka * (k + 1) / (n + 1.5)
             fade = 1 - 0.6 * k / max(n, 1)
             z -= 0.7 * F * fade * trough(y - yk, 0.8) * plateau(x, ay + 1.5, 1.0)
-            px = np.clip((ax - ay) / np.maximum(xm - ay, 1), 0, 1); ly = yk + px * 0.5 * Lp / (n + 1.5)
+            px = np.clip((ax - ay) / np.maximum(xm - ay, 1), 0, 1); ly = yk + px * 0.5 * Lp * ka / (n + 1.5)
             z -= 0.6 * F * fade * trough(y - ly, 0.9) * (ax > ay + 1.0)
-        if P["borderWidth"] > 0.005:
-            bw = P["borderWidth"] * wp
+        if bwf > 0.005:
+            bw = bwf * wp
             dist = np.minimum(xm - ax, (1 - yy) * Lp)
             z -= 0.8 * F * trough(dist - bw, 0.8 + 0.2 * bw)
             z += 0.35 * F * plateau(dist, 0.45 * bw, 0.4 * bw)
@@ -76,7 +84,8 @@ def plan(P):
         drop = np.minimum(t + c + 0.7 * F + 0.3, np.maximum(z - 1.2, 0))
         z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y))
         return z
-    return dict(outline=outline, zfun=zfun, t=t, Lp=Lp, wp=wp, a=a, margin=margin, u_a=a / max(wp, 1e-6))
+    return dict(outline=outline, zfun=zfun, t=t, Lp=Lp, wp=wp, a=a, margin=margin, u_a=a / max(wp, 1e-6),
+                axis_len=Lax, border_frac=bwf, outline_exp=nO)
 
 def shell(P, S, grid=GRID_TAIL):
     tail = M.heightfield_shell(S["outline"], S["zfun"], S["t"], nu=grid[0], nv=grid[1])
