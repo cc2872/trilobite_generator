@@ -65,6 +65,56 @@ def spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg=0):
     s.apply_translation(at)
     return s
 
+# ---------------------------------------------------------------- CURVED SPINES (23 Oct 2026)
+# A spine as a curve, not a line. Every spine family (occipital, genal, pleural, pygidial, prongs' tines) is a straight
+# tapered frustum placed by yaw and pitch; a recurved horn (Dicranurus, Ceratarges), a hooked genal spine or a tine that
+# arches cannot be. curved_spine() lays the same taper along an arc that bends by `bend_deg` over its length, in a plane
+# turned `roll_deg` about the spine's own axis (0 = bends upward, 90 = bends toward +x, 180 = bends down). With
+# bend_deg = 0 it returns spine_solid() exactly, so every existing spine is unchanged. Two numbers per family (bend, roll)
+# cover a horn, a hook and an arch; the arc is a circle, which is what the limits of a spine curling under its own
+# growth look like in the fossils and is the smallest description that has a tip direction.
+SPINE_SEGMENTS = 10
+
+def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0, roll_deg=0.0, n=SPINE_SEGMENTS):
+    """A tapered spine along a circular arc: `bend_deg` is the total turn of the tangent from root to tip (0 = straight,
+    180 = a half circle, tip pointing back at the root), `roll_deg` the plane it bends in about the spine's own axis
+    (0 up, 90 toward +x, -90 toward -x, 180 down). Root at `at`, leaving along (yaw, pitch) as spine_solid does.
+    Built as n frustums joined by spheres, one closed solid. bend_deg = 0 returns spine_solid()."""
+    if abs(bend_deg) < 1e-9: return spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg)
+    import trimesh
+    R = trimesh.transformations.rotation_matrix
+    n = max(2, int(n)); phi = math.radians(bend_deg); rad = length / abs(phi)
+    # the arc in its own frame: along +y from the origin, bending toward +z (roll 0); then rolled about y, pitched, yawed
+    ts = np.linspace(0.0, 1.0, n + 1); ang = ts * phi
+    pts = np.c_[np.zeros(n + 1), rad * np.sin(np.abs(ang)), np.sign(phi) * rad * (1 - np.cos(ang))]
+    Mrot = R(math.radians(-yaw_deg), (0, 0, 1)) @ R(math.radians(pitch_deg), (1, 0, 0)) @ R(math.radians(roll_deg), (0, 1, 0))
+    W = (np.c_[pts, np.ones(n + 1)] @ Mrot.T)[:, :3] + np.asarray(at, float)
+    radii = base_r + (tip_r - base_r) * ts
+    solids = []
+    for k in range(n):
+        a, b = W[k], W[k + 1]; d = b - a; L = float(np.linalg.norm(d))
+        if L < 1e-6: continue
+        seg = M.frustum(radii[k], radii[k + 1], L)                       # along +z from the origin
+        z = d / L; x = np.cross([0, 0, 1.0], z)
+        if np.linalg.norm(x) < 1e-9: T = np.eye(4) if z[2] > 0 else R(math.pi, (1, 0, 0))
+        else:
+            x = x / np.linalg.norm(x); T = R(math.acos(float(np.clip(z[2], -1, 1))), x)
+        seg.apply_transform(T); seg.apply_translation(a); solids.append(seg)
+        if k < n - 1:
+            j = trimesh.creation.icosphere(subdivisions=1, radius=float(radii[k + 1])); j.apply_translation(b); solids.append(j)
+    return M.union(*solids) if len(solids) > 1 else solids[0]
+
+def spine_tip(length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0, roll_deg=0.0):
+    """Where curved_spine()'s tip lands (for clearances and the sheet)."""
+    import trimesh
+    R = trimesh.transformations.rotation_matrix
+    if abs(bend_deg) < 1e-9: p = np.array([0.0, length, 0.0, 1.0])
+    else:
+        phi = math.radians(bend_deg); rad = length / abs(phi)
+        p = np.array([0.0, rad * math.sin(abs(phi)), math.copysign(rad * (1 - math.cos(phi)), phi), 1.0])
+    Mrot = R(math.radians(-yaw_deg), (0, 0, 1)) @ R(math.radians(pitch_deg), (1, 0, 0)) @ R(math.radians(roll_deg), (0, 1, 0))
+    return (Mrot @ p)[:3] + np.asarray(at, float)
+
 # genalPath is a user-supplied formula from the website; it MUST NOT be eval()'d.
 # Even eval() with an empty __builtins__ is remote code execution (a whitelisted
 # ufunc's __globals__ reaches os/import). Instead we parse to an AST and walk it,
@@ -127,7 +177,8 @@ def safe_expr(expr, s, notes=None):
         return s ** 2
 
 # ---------------------------------------------------------------- PRONGS (the d-tine spine family from the sketch)
-def prong(d, length, splay_deg, base_r, tip_r, at, yaw_deg=0.0, pitch_deg=0.0, root_r=None, stem_frac=0.0, center_bias=1.0, curl_deg=0.0):
+def prong(d, length, splay_deg, base_r, tip_r, at, yaw_deg=0.0, pitch_deg=0.0, root_r=None, stem_frac=0.0, center_bias=1.0, curl_deg=0.0,
+          bend_deg=0.0, roll_deg=0.0):
     """A spine that splits into d tines: d = 1 a single spine, 2 a fork, 3 a trident, ... n.
       length      total reach from the root to the tip of an outer tine
       stem_frac   fraction of that length that is a shared shaft before the split (0 = tines from the root, Walliserops ~0.5)
@@ -135,6 +186,7 @@ def prong(d, length, splay_deg, base_r, tip_r, at, yaw_deg=0.0, pitch_deg=0.0, r
       center_bias length of the middle tine / outer tines (odd d only; 1.3 = a longer middle prong)
       base_r/tip_r  radius at the root and at each tip; the stem tapers from base_r to the tine base
       curl_deg    extra pitch applied at the split (tines lift or dip relative to the stem)
+      bend_deg, roll_deg (23 Oct 2026)  each tine arches along its length (curved_spine); 0 = straight, as before
     Pointing +y (rear) at yaw 0; yaw > 0 turns toward +x, pitch > 0 lifts. Returns one closed solid."""
     import trimesh
     d = max(1, int(d)); R = trimesh.transformations.rotation_matrix
@@ -150,7 +202,7 @@ def prong(d, length, splay_deg, base_r, tip_r, at, yaw_deg=0.0, pitch_deg=0.0, r
     for k in range(d):
         off = 0.0 if d == 1 else splay_deg * (k / (d - 1) - 0.5)
         L = tine_len * (center_bias if (d % 2 == 1 and k == d // 2) else 1.0)
-        solids.append(spine_solid(r_split, tip_r, L, split, yaw_deg + off, pitch_deg + curl_deg))
+        solids.append(curved_spine(r_split, tip_r, L, split, yaw_deg + off, pitch_deg + curl_deg, bend_deg, roll_deg))
     stub_r = root_r if root_r is not None else 1.15 * max(base_r, r_split)
     knot = trimesh.creation.icosphere(subdivisions=2, radius=1.15 * r_split); knot.apply_translation(split)
     root = trimesh.creation.icosphere(subdivisions=2, radius=stub_r); root.apply_translation(at)

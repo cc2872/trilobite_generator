@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import numpy as np, trimesh
 import schema, mesh as M
 from anatomy import head as HEAD, thorax as THORAX, tail as TAIL
-from anatomy.common import spine_solid, prong, pitch
+from anatomy.common import spine_solid, curved_spine, prong, pitch
 from joints import ball as BALL
 from manifold3d import Manifold, OpType, Mesh as _MMesh
 
@@ -418,16 +418,16 @@ def isopod_head(P, plans, J, PV, K, step=0.25, face=None, _grid=False):
             ring = [_surface_z(head, x + R * np.cos(a), y + R * np.sin(a)) for a in np.linspace(0, 2 * np.pi, 12, endpoint=False)]
             z = min([zc] + [r for r in ring if r is not None]) - 0.3
         e = eye.copy(); e.apply_translation((x, y, z)); extra += [e, M.mirror_x(e)]
-    if P["occipitalSpine"] > 0.02:
-        y = yr - 0.07 * Lc; z = _surface_z(head, 0.0, y, search=0.1 * Lc)
-        extra.append(spine_solid(0.6 * margin, 0.5, P["occipitalSpine"] * Lc, (0, y, z - 1.0), 0, pitch_deg=55))
-    if int(P.get("headProngs", 0)) > 0:
-        zp = 0.6 * margin + 0.5
-        loc, _, _ = head.ray.intersects_location([(0.0, head.bounds[0][1] - 5.0, zp)], [(0, 1.0, 0)])
-        yf = float(np.asarray(loc).reshape(-1, 3)[:, 1].min())
-        extra.append(prong(int(P["headProngs"]), P["headProngLen"] * Lc, P["headProngSplay"], P.get("headProngWidth", 0.45) * margin + 0.6,
-                           0.45, (0, yf + 1.5, zp), yaw_deg=180.0, pitch_deg=8.0, stem_frac=P.get("headProngStem", 0.0),
-                           center_bias=P.get("headProngCenter", 1.0), curl_deg=P.get("headProngCurl", 0.0)))
+    # the grafted spines, through the same function as the pin head (anatomy.head.spine_ornaments, 23 Oct 2026)
+    yo = yr - 0.07 * Lc; zo = _surface_z(head, 0.0, yo, search=0.1 * Lc)
+    zp = 0.6 * margin + 0.5
+    loc, _, _ = head.ray.intersects_location([(0.0, head.bounds[0][1] - 5.0, zp)], [(0, 1.0, 0)])
+    yf = float(np.asarray(loc).reshape(-1, 3)[:, 1].min()) if len(loc) else float(head.bounds[0][1])
+    xg_ = 0.95 * float(head.bounds[1][0]); yg_ = yr - 2.0                       # the crescent head's genal corner
+    zg = lambda x, y: (_surface_z(head, x, y, search=6.0) or 1.0)
+    for nm, solids, how in HEAD.spine_ornaments(P, Lc=Lc, margin=margin, wh=xg_, y_front=yf, y_rear=yr,
+                                                z_occ=(zo if zo is not None else 1.0) - 1.0, z_genal=zg, yr_genal=yg_, z_front=zp):
+        extra += solids
     if extra: head = M.union(head, *extra)
     head.metadata["notes"] = notes
     # underside behind the rear face: lowest head surface over each point (+inf where the head is not overhead)
@@ -521,13 +521,12 @@ def shaped_head(P, plans, PV, K, J, outline, face):
         else: z = min([zt(x, ye)] + [zt(x + R * np.cos(a), ye + R * np.sin(a)) for a in np.linspace(0, 2 * np.pi, 12, endpoint=False)]) - 0.3
         e = eye.copy(); e.apply_translation((x, ye, z)); extra += [e, M.mirror_x(e)]
     y_rear = S["flap"] + off; y_front = float(S["outline"](0.0, 1.0)[1]) + off
-    if P["occipitalSpine"] > 0.02:
-        yo = y_rear - 0.07 * Lc
-        extra.append(spine_solid(0.6 * margin + 0.4, 0.5, P["occipitalSpine"] * Lc, (0, yo, zt(0.0, yo) - 1.0), 0, pitch_deg=55))
-    if int(P.get("headProngs", 0)) > 0:
-        extra.append(prong(int(P["headProngs"]), P["headProngLen"] * Lc, P["headProngSplay"], P.get("headProngWidth", 0.45) * margin + 0.6,
-                           0.45, (0, y_front + 1.5, 0.6 * margin + 0.5), yaw_deg=180.0, pitch_deg=8.0, stem_frac=P.get("headProngStem", 0.0),
-                           center_bias=P.get("headProngCenter", 1.0), curl_deg=P.get("headProngCurl", 0.0)))
+    # the grafted spines, through the same function as the pin head (anatomy.head.spine_ornaments, 23 Oct 2026):
+    # occipital (tines, bend), prong (bend), frontal spine, genal horns. The genal angle is the shape's own (xg, yg).
+    yo = y_rear - 0.07 * Lc; xg_, yg_ = k * sh.xg, S["flap"] + off + k * sh.yg
+    for nm, solids, how in HEAD.spine_ornaments(P, Lc=Lc, margin=margin, wh=xg_, y_front=y_front, y_rear=y_rear,
+                                                z_occ=zt(0.0, yo) - 1.0 + 0.4, z_genal=lambda x, y: zt(x, y), yr_genal=yg_ + 1.5):
+        extra += solids
     return M.union(head, *extra) if extra else head
 
 
@@ -827,7 +826,8 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
     lap("ornaments")
     if term_spine > 0.05:                                                 # the rows model's terminal spine, from the tail's tip, along the axis
         name, mod, S, off = plans[-1]; y_tip = off + float(S["outline"](0.0, 1.0)[1]); zt = _surface_z(parts[-1], 0.0, y_tip - 2.0, search=3.0) or S["margin"]
-        parts[-1] = M.union(parts[-1], spine_solid(0.6 * S["margin"] + 0.6, 0.5, term_spine, (0, y_tip - 1.5, max(zt - 1.0, 1.2)), 0, pitch_deg=0))
+        parts[-1] = M.union(parts[-1], curved_spine(0.6 * S["margin"] + 0.6, 0.5, term_spine, (0, y_tip - 1.5, max(zt - 1.0, 1.2)), 0, 0.0,
+                                                    float(P.get("termBend", 0.0)), 0.0))
     gc.collect()                                                          # release the per-part clearance intermediates before the middle paste
     paste_middle(parts, plans, PV, K, skip=set(rep))
     for k in rep: copy(k)

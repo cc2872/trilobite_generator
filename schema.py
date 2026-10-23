@@ -8,7 +8,9 @@ artifact — derives from this table. Add a parameter here and it exists everywh
 from dataclasses import dataclass, asdict
 import json, hashlib, warnings
 
-SCHEMA_VERSION = "6.4"      # 21 Oct 2026: tailOutlineExp, pygAxisLen, pygAxisFrac, pygBorderWidth (TriloMorph pygidia; every default
+SCHEMA_VERSION = "6.5"      # 23 Oct 2026: curved spines (occipitalBend/Tines/Splay, genalHorn*, termBend, frontSpine*, headProngBend,
+                            # tailProngBend); defaults 0 reproduce every spine as built since 6.0.
+                            # 6.4 (21 Oct 2026): tailOutlineExp, pygAxisLen, pygAxisFrac, pygBorderWidth (TriloMorph pygidia; every default
                             # reproduces the tail as built since v4, so presets and the frozen readings are unchanged).
                             # 6.3 (20 Oct 2026): preglabField (default 0.10 = the head as built since 6.0); axisFrac to 0.70 and genalSpine to 2.5 (TriloMorph
                             # 5-95 %); eyeLat default 0.5 (TriloMorph median; presets set their own). 6.2 (27 Sep): sutureEnd / sutureDepth, eyeRidge.
@@ -140,6 +142,19 @@ PARAMS = [
     Param("occipitalSpine", "Occipital spine", 0.0, 0.0, 1.5, 0.05, "Spines", "Spine on the occipital ring / head length (0 = none)"),
     Param("pygMarginal", "Tail marginal spines", 0, 0, 10, 1, "Spines", "Spines around the tail margin (0 = none)", kind="int"),
     Param("pygMarginalLen", "Tail marginal length", 0.5, 0.1, 1.5, 0.05, "Spines", "Marginal spine length / shield length"),
+    # ---- curved spines (23 Oct 2026, schema 6.5): every grafted spine may follow a circular arc. bend = the tangent's total
+    #      turn root to tip (0 = straight, as before); roll = the plane it bends in about the spine's own axis (0 up, 90 out
+    #      toward the side, 180 down). Defaults 0, so every preset and reading is unchanged.
+    Param("occipitalBend", "Occipital bend", 0, -180, 180, 5, "Spines", "Occipital spine's arc, root to tip (0 straight, 150 a recurved horn)", unit="deg"),
+    Param("occipitalTines", "Occipital tines", 1, 1, 3, 1, "Spines", "The occipital spine splits into this many tines (2 = Dicranurus' forked horns)", kind="int"),
+    Param("occipitalSplay", "Occipital splay", 40, 0, 120, 5, "Spines", "Fan angle of the occipital tines", unit="deg"),
+    Param("genalHorn", "Genal horns", 0.0, 0.0, 2.0, 0.05, "Spines", "A solid horn rising from each genal angle / head length (0 = none; Ceratarges, Boedaspis)"),
+    Param("genalHornPitch", "Genal horn pitch", 40, 0, 90, 5, "Spines", "How steeply the genal horns leave the shield", unit="deg"),
+    Param("genalHornBend", "Genal horn bend", 0, -180, 180, 5, "Spines", "The genal horns' arc, root to tip", unit="deg"),
+    Param("genalHornRoll", "Genal horn roll", 0, -180, 180, 5, "Spines", "Plane the genal horns bend in (0 up/back, 90 outward, 180 down)", unit="deg"),
+    Param("termBend", "Terminal spine bend", 0, -180, 180, 5, "Spines", "The terminal spine's arc (0 straight; positive lifts the tip)", unit="deg"),
+    Param("frontSpine", "Frontal spine", 0.0, 0.0, 2.0, 0.05, "Spines", "A single median spine from the front of the head / head length (0 = none; Pagetia, Odontocephalus)"),
+    Param("frontSpineBend", "Frontal spine bend", 0, -180, 180, 5, "Spines", "The frontal spine's arc (positive lifts the tip)", unit="deg"),
     # ---- articulation (held constant across a sweep: the fixed ruler)
     # ---- prongs (11 Sep 2026): a spine that splits into d tines — 1 spine, 2 fork, 3 trident, ... n. One family per margin cell.
     Param("headProngs", "Head prongs", 0, 0, 5, 1, "Prongs", "Tines of the anterior prong at the head front (0 = none, 3 = Walliserops-style trident)", kind="int"),
@@ -149,6 +164,7 @@ PARAMS = [
     Param("headProngCenter", "Head prong centre", 1.0, 0.5, 2.0, 0.05, "Prongs", "Middle tine length / outer tines (odd tine counts)"),
     Param("headProngWidth", "Head prong width", 0.45, 0.2, 1.2, 0.05, "Prongs", "Root radius / margin height"),
     Param("headProngCurl", "Head prong curl", 0.0, -40, 40, 1, "Prongs", "Tines lift (+) or dip (-) at the split", unit="deg"),
+    Param("headProngBend", "Head prong bend", 0, -180, 180, 5, "Prongs", "Each anterior tine's arc along its length (0 straight; positive lifts the tips)", unit="deg"),
     Param("tailProngs", "Tail prongs", 0, 0, 5, 1, "Prongs", "Tines of the posterior prong at the tail tip (0 = none; the paired forks are pygSpine, the margin itself)", kind="int"),
     Param("tailProngLen", "Tail prong length", 0.5, 0.1, 2.0, 0.05, "Prongs", "Posterior prong length / tail length"),
     Param("tailProngSplay", "Tail prong splay", 30, 0, 90, 1, "Prongs", "Total fan angle of the posterior tines in the plan", unit="deg"),
@@ -156,6 +172,7 @@ PARAMS = [
     Param("tailProngCenter", "Tail prong centre", 1.0, 0.5, 2.0, 0.05, "Prongs", "Middle tine length / outer tines (odd tine counts)"),
     Param("tailProngWidth", "Tail prong width", 0.45, 0.2, 1.2, 0.05, "Prongs", "Root radius / margin height"),
     Param("tailProngCurl", "Tail prong curl", 0.0, -40, 40, 1, "Prongs", "Tines lift (+) or dip (-) at the split", unit="deg"),
+    Param("tailProngBend", "Tail prong bend", 0, -180, 180, 5, "Prongs", "Each posterior tine's arc along its length (0 straight; positive lifts the tips)", unit="deg"),
     Param("maxAngle", "Stop angle", 18, 4, 40, 0.5, "Hinge", "Ventral flexion per joint before the stop engages", unit="deg"),
     Param("clearance", "Clearance", 0.3, 0.15, 0.6, 0.01, "Hinge", "Gap between moving parts", unit="mm"),
     Param("boreDia", "Pin bore", 1.95, 1.6, 3.0, 0.05, "Hinge", "For 1.75 mm filament pins", unit="mm"),
@@ -220,21 +237,22 @@ CELLS = {
     "frame": dict(label="Body", doc="whole-animal size", primary=["length", "width", "relief"],
                   more=["segCount", "cephFrac", "pygFrac", "wall", "widthMaxPos", "widthHeadFront", "widthThoraxFront", "widthThoraxRear", "widthTail"]),
     "b1": dict(label="Glabella + occipital ring", doc="the raised axial part of the head", primary=["glabInflate", "glabRise", "glabLobes"],
-               more=["glabFront", "preglabField", "headDomeExp", "headDomeFill", "headOutlineExp", "cephParallel", "headRelief", "headWall", "occipitalSpine"]),
+               more=["glabFront", "preglabField", "headDomeExp", "headDomeFill", "headOutlineExp", "cephParallel", "headRelief", "headWall", "occipitalSpine", "occipitalTines", "occipitalSplay", "occipitalBend", "frontSpine", "frontSpineBend"]),
     "a1": dict(label="Cheek + genal angle", doc="the side of the head: eye, border, genal spine or prolongation", primary=["eyeSize", "genalSpine", "headRearArc"],
                more=["eyePos", "eyeArc", "eyeHeight", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade", "lensD", "lensGap", "lensRise",
                      "eyeStalk", "eyeStalkR", "eyeLean", "eyeStalkBend", "eyeSphere", "eyeAxial", "eyeTall", "eyeSink", "eyeCollar",
                      "borderWidth", "genalSweep", "genalCurve", "genalPath", "genalWidth", "genalWidthMM", "genalTaper", "headRearExp",
-                     "headProngs", "headProngLen", "headProngSplay", "headProngStem", "headProngCenter", "headProngWidth", "headProngCurl",
+                     "headProngs", "headProngLen", "headProngSplay", "headProngStem", "headProngCenter", "headProngWidth", "headProngCurl", "headProngBend",
+                     "genalHorn", "genalHornPitch", "genalHornBend", "genalHornRoll",
                      "sutureEnd", "sutureDepth", "eyeRidge"]),
     "b2": dict(label="Axial rings", doc="the ring chain over the hinges", primary=["axisFrac", "axisRise", "furrowDepth"],
                more=["effacement", "axisSigma", "ringArch", "tent", "vaultRound", "axialSpine"]),
     "a2": dict(label="Pleura", doc="inner run to the fulcrum, then the blade; its spine is the blade running on", primary=["overlap", "fulcrum", "pleuralSlope"],
                more=["marginHeight", "bladeCamber", "bladeChord", "tipSweep", "tipTaper", "spineBase", "spineGrad", "spineSweep", "macroIndex", "macroAmp"]),
     "b3": dict(label="Tail axis", doc="the pygidial axis and its rings", primary=["pygRings", "tailRelief", "tailDomeExp"],
-               more=["pygAxisLen", "pygAxisFrac", "tailWall", "termSpine"]),
+               more=["pygAxisLen", "pygAxisFrac", "tailWall", "termSpine", "termBend"]),
     "a3": dict(label="Tail field + margin", doc="the pleural field, border, forks and marginal spines", primary=["pygWidth", "pygSpine", "pygMarginal"],
-               more=["tailOutlineExp", "pygBorderWidth", "pygSplay", "pygMarginalLen", "tailProngs", "tailProngLen", "tailProngSplay", "tailProngStem", "tailProngCenter", "tailProngWidth", "tailProngCurl"]),
+               more=["tailOutlineExp", "pygBorderWidth", "pygSplay", "pygMarginalLen", "tailProngs", "tailProngLen", "tailProngSplay", "tailProngStem", "tailProngCenter", "tailProngWidth", "tailProngCurl", "tailProngBend"]),
     "ruler": dict(label="Print + hinge", doc="manufacturing, not morphology", primary=["maxAngle", "clearance", "nKnuckles"], more=["boreDia", "barrelR"]),
 }
 VERTICAL_SPINES = ["occipitalSpine", "axialSpine", "termSpine"]     # their own family (10 Sep verdict): dorsal, not a cell prong

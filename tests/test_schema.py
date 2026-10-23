@@ -7,7 +7,7 @@ import schema, parts, mesh as M
 REF = os.path.join(ROOT, "tests", "references")
 
 def test_version_and_coverage():
-    assert schema.SCHEMA_VERSION == "6.4"
+    assert schema.SCHEMA_VERSION == "6.5"
     missing, dup = schema.cells_check(); assert missing == [] and dup == []
     for c, d in schema.CELLS.items(): assert len(d["primary"]) == 3, c
 

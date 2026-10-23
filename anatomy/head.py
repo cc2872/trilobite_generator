@@ -15,7 +15,7 @@ import math
 import numpy as np
 import mesh as M
 from fields import seg_halfwidth, head_halfwidth, furrow_amp
-from anatomy.common import pitch, ring_top, smoothstep, plateau, trough, vault, spine_solid, prong, safe_expr, GRID_HEAD
+from anatomy.common import pitch, ring_top, smoothstep, plateau, trough, vault, spine_solid, curved_spine, prong, safe_expr, GRID_HEAD
 from anatomy.port import Port
 
 def eye_geometry(P):
@@ -183,7 +183,7 @@ def plan(P, notes=None):
         return np.where(body, zb, (1 - blend) * zb + blend * z)
     return dict(outline=outline, zfun=zfun, xmax=xmax, arm_outline=arm_outline, arm_z=arm_z, Lg=Lg, t=t, c=c, h=h, Lc=Lc,
                 wh=wh, a=a, margin=margin, u_a=a / X_tip, eye=G, suture=suture, eye_ridge=ridge,
-                zfun_base=zfun_base, detail=detail if has_detail else None)
+                zfun_base=zfun_base, detail=detail if has_detail else None, y_genal=float(cheek(np.array([1.0]))[0]))
 
 # ---------------------------------------------------------------- the facial suture (27 Sep 2026)
 # The line the cephalon splits along at the moult (Gon 2009 p. 21, p. 26): the anterior branch runs from the front margin
@@ -431,14 +431,42 @@ def ornaments(P, S, notes=None):
         zb = float(S["zfun"](np.array([G["xe"]]), np.array([G["ye"]]))[0]) - 0.3 + EP["stalk"]
         out.append(("eyes", [eye.copy().apply_translation((G["xe"], G["ye"], zb))], "mirror"))
         if notes is not None: notes.append(("head", "eye solid", f"{n_lens} lenses/eye"))
+    yf = float(S["outline"](0.0, 1.0)[1])                     # front margin at the axis (u = 0, v = 1)
+    zt = lambda x, y: float(S["zfun"](np.array([abs(x)]), np.array([y]))[0])
+    out += spine_ornaments(P, Lc=S["Lc"], margin=S["margin"], wh=S["wh"], y_front=yf, y_rear=0.0,
+                           z_occ=ring_top(P) - 1.0, z_genal=lambda x, y: zt(x, y), yr_genal=S["y_genal"])
+    return out
+
+def spine_ornaments(P, Lc, margin, wh, y_front, y_rear, z_occ, z_genal, yr_genal, z_front=None):
+    """The head's grafted spines, shared by the pin head and the isopod model's shaped head (23 Oct 2026) so the two
+    cannot drift: the occipital spine (1 to 3 tines, bend), the anterior prong (bend per tine), the frontal spine, and
+    the genal horns (solid spines from each genal angle, pitch / bend / roll). Frame: the head plan's (rear joint at
+    y_rear, front toward -y); z_genal(x, y) gives the shield's height at the horn's root. Entries as ornaments() returns."""
+    out = []
     if P["occipitalSpine"] > 0.02:
-        out.append(("occipitalSpine", [spine_solid(0.6 * S["margin"], 0.5, P["occipitalSpine"] * S["Lc"], (0, -0.07 * S["Lc"], ring_top(P) - 1.0), 0, pitch_deg=55)], "union"))
+        L = P["occipitalSpine"] * Lc; yo = y_rear - 0.07 * Lc; at = (0, yo, z_occ)
+        tines = int(P.get("occipitalTines", 1)); bend = float(P.get("occipitalBend", 0.0))
+        if tines <= 1 and abs(bend) < 1e-9:
+            sol = spine_solid(0.6 * margin, 0.5, L, at, 0, pitch_deg=55)                      # exactly the 6.0 spine
+        else:
+            sol = prong(tines, L, float(P.get("occipitalSplay", 40.0)), 0.6 * margin, 0.5, at, yaw_deg=0.0, pitch_deg=55,
+                        stem_frac=0.25 if tines > 1 else 0.0, bend_deg=bend, roll_deg=0.0)
+        out.append(("occipitalSpine", [sol], "union"))
     if int(P.get("headProngs", 0)) > 0:
-        yf = float(S["outline"](0.0, 1.0)[1])                 # front margin at the axis (u = 0, v = 1)
-        out.append(("headProngs", [prong(int(P["headProngs"]), P["headProngLen"] * S["Lc"], P["headProngSplay"],
-                                         P.get("headProngWidth", 0.45) * S["margin"] + 0.6, 0.45, (0, yf + 1.5, 0.6 * S["margin"] + 0.5),
+        out.append(("headProngs", [prong(int(P["headProngs"]), P["headProngLen"] * Lc, P["headProngSplay"],
+                                         P.get("headProngWidth", 0.45) * margin + 0.6, 0.45, (0, y_front + 1.5, 0.6 * margin + 0.5),
                                          yaw_deg=180.0, pitch_deg=8.0, stem_frac=P.get("headProngStem", 0.0), center_bias=P.get("headProngCenter", 1.0),
-                                         curl_deg=P.get("headProngCurl", 0.0))], "union"))
+                                         curl_deg=P.get("headProngCurl", 0.0), bend_deg=float(P.get("headProngBend", 0.0)))], "union"))
+    if float(P.get("frontSpine", 0.0)) > 0.02:
+        zf = z_front if z_front is not None else 0.6 * margin + 0.5
+        out.append(("frontSpine", [curved_spine(0.5 * margin + 0.5, 0.45, P["frontSpine"] * Lc, (0, y_front + 1.0, zf), 180.0, 5.0,
+                                                float(P.get("frontSpineBend", 0.0)), 0.0)], "union"))
+    if float(P.get("genalHorn", 0.0)) > 0.02:
+        L = P["genalHorn"] * Lc; xg = 0.92 * wh; yg = yr_genal - 1.5
+        at = (xg, yg, z_genal(xg, yg) - 0.5)
+        h = curved_spine(0.55 * margin + 0.4, 0.45, L, at, yaw_deg=10.0, pitch_deg=float(P.get("genalHornPitch", 40.0)),
+                         bend_deg=float(P.get("genalHornBend", 0.0)), roll_deg=float(P.get("genalHornRoll", 0.0)))
+        out.append(("genalHorns", [h, M.mirror_x(h)], "union"))
     return out
 
 def ports(P, S):

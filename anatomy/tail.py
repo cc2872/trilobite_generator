@@ -5,7 +5,7 @@ import math
 import numpy as np
 import mesh as M
 from fields import tail_halfwidth, furrow_amp
-from anatomy.common import pitch, ring_top, smoothstep, plateau, trough, vault, spine_solid, prong, GRID_TAIL
+from anatomy.common import pitch, ring_top, smoothstep, plateau, trough, vault, spine_solid, curved_spine, prong, GRID_TAIL
 from anatomy.port import Port
 
 def plan(P):
@@ -99,12 +99,13 @@ def ornaments(P, S):
     """Terminal spine, then the posterior prong. Forks and marginal spines are the margin itself (in the plan)."""
     out = []
     if P["termSpine"] > 0.02:
-        out.append(("termSpine", spine_solid(0.5 * S["margin"], 0.6, P["termSpine"] * S["Lp"], (0, 0.85 * S["Lp"], 0.5 * S["margin"]), 0)))
+        out.append(("termSpine", curved_spine(0.5 * S["margin"], 0.6, P["termSpine"] * S["Lp"], (0, 0.85 * S["Lp"], 0.5 * S["margin"]), 0, 0.0,
+                                              float(P.get("termBend", 0.0)), 0.0)))
     if int(P.get("tailProngs", 0)) > 0:
         out.append(("tailProngs", prong(int(P["tailProngs"]), P["tailProngLen"] * S["Lp"], P["tailProngSplay"],
                                         P.get("tailProngWidth", 0.45) * S["margin"] + 0.6, 0.45, (0, 0.90 * S["Lp"], 0.5 * S["margin"]),
                                         yaw_deg=0.0, pitch_deg=5.0, stem_frac=P.get("tailProngStem", 0.0), center_bias=P.get("tailProngCenter", 1.0),
-                                        curl_deg=P.get("tailProngCurl", 0.0))))
+                                        curl_deg=P.get("tailProngCurl", 0.0), bend_deg=float(P.get("tailProngBend", 0.0)))))
     return out
 
 def ports(P, S):
