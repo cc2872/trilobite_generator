@@ -77,6 +77,7 @@
 
   <div class="sect"><span>Rows</span><span id="reset">reset</span></div>
   <div class="row" style="margin-top:6px"><button class="btn" id="plus" title="add a row after the selected row">+ row</button><button class="btn" id="minus" title="remove the selected row">− row</button></div>
+  <div class="row" style="margin-top:6px"><button class="btn" id="addspine" title="then click anywhere on the animal in plan: a spine grows there (mirrored unless on the axis); drag its dots">+ spine anywhere</button></div>
   <div class="edits" id="rowtable"></div>
 
   <div class="sect"><span>Save</span><span id="del" style="display:none">delete body</span></div>
@@ -115,6 +116,9 @@ const HNKEYS=['horn_len','horn_rise','horn_roll','horn_yaw'];       // ... and i
 function hornOf(r,i){ const P=S.P||{}; const thx=S.BD.rows.filter(x=>x.row.kind!=='pyg'); const frac=thx.length>1?Math.min(i/(thx.length-1),1):0;
   if(+r.horn_own>=0.5) return {L:+r.horn_len, turn:+r.horn_rise, roll:+r.horn_roll, yaw:+r.horn_yaw, own:true};
   return {L:(+P.pleuralHorn||0)*(+r.width)*(1+(+P.pleuralHornGrad||0)*frac), turn:(+P.pleuralHornPitch||45)+(+P.pleuralHornBend||0), roll:(+P.pleuralHornRoll||0), yaw:0, own:false}; }
+const FSKEYS=['x','y','len','rise','roll','yaw']; const FSR={x:[0,120], y:[-80,400], len:[0,200], rise:[-180,180], roll:[-180,180], yaw:[-180,180]};
+let addMode=false; $('addspine').onclick=()=>{ addMode=!addMode; $('addspine').classList.toggle('on',addMode); status(addMode?'click on the animal to grow a spine there':'' ,false); };
+function freeList(){ const D=S.BD; const L=S.spec.spines||[]; const info=(D&&D.free)||[]; return L.map((q,j)=>Object.assign({}, q, {z:(info[j]&&info[j].z!=null)?info[j].z:((S.P&&+S.P.relief)||17)*0.6, part:info[j]?info[j].part:null})); }
 const TSKEYS=['phi','len','rise','roll','blade']; const TSR={phi:[0,90], len:[0,200], rise:[-180,180], roll:[-180,180], blade:[0,1]};
 function ownTail(){ if(S.spec.tail_spines) return; const T=S.BD&&S.BD.tail; S.spec.tail_spines=(T?T.spines:[]).map(q=>({phi:q.phi, len:q.len, rise:q.rise, roll:q.roll, blade:q.blade})); }   // freeze the preset's spines into the body's own list
 function ownHorn(i){ const r=S.spec.list[i]; if(+r.horn_own>=0.5) return; const h=hornOf(r,i); r.horn_own=1; r.horn_len=+h.L.toFixed(3); r.horn_rise=+h.turn.toFixed(1); r.horn_roll=+h.roll.toFixed(1); r.horn_yaw=+h.yaw.toFixed(1); }
@@ -224,6 +228,16 @@ function renderContext(rebuild=true){ const box=$('context');
     else { for(const k of keys){ const s=$('s_'+k); if(s&&document.activeElement!==s){ const v=headCur(k); s.value=v; $('v_'+k).textContent=fmt(v); $('v_'+k).classList.toggle('on',Math.abs(v-headBaseOf(k))>1e-9); } }
       if(S.P) for(const p of [...S.eyeParams,...S.hornParams]){ const s=$('s_'+p.key); if(s&&document.activeElement!==s){ s.value=S.P[p.key]; $('v_'+p.key).textContent=fmt(S.P[p.key]); } } }
     return; }
+  if(S.sel.type==='free'){ const j=S.sel.j; const L=S.spec.spines||[]; if(j>=L.length){ S.sel=null; return renderContext(); } const q=L[j];
+    $('ctxname').textContent=`Spine ${j}${q.x<0.75?' - on the axis':' - mirrored'}`; $('ctxtools').innerHTML='';
+    if(rebuild||box.dataset.k!=='fs'+j){ box.innerHTML=''; box.dataset.k='fs'+j;
+      for(const k of FSKEYS){ const rr=FSR[k]; slider(box,k,q[k],rr[0],rr[1],(rr[1]-rr[0])/300,val=>{ q[k]=+(+val).toFixed(3); sendBody(); },{x:'mm across',y:'mm along (- = head)',len:'mm',rise:'deg',roll:'deg',yaw:'deg, + outward'}[k]); }
+      const row=document.createElement('div'); row.className='row'; row.style.marginTop='8px';
+      for(const [t,f] of [['duplicate',()=>{ L.splice(j+1,0,Object.assign({},q,{y:q.y+8})); S.sel={type:'free',j:j+1}; sendBody(); renderContext(); }],
+                          ['- spine',()=>{ L.splice(j,1); S.sel=L.length?{type:'free',j:Math.min(j,L.length-1)}:null; sendBody(); renderContext(); }]]){ const b=document.createElement('button'); b.className='btn small'; b.textContent=t; b.onclick=f; row.appendChild(b); }
+      box.appendChild(row); }
+    else for(const k of FSKEYS){ const s=$('s_'+k); if(s&&document.activeElement!==s){ s.value=q[k]; $('v_'+k).textContent=fmt(q[k]); } }
+    return; }
   if(S.sel.type==='tailspine'){ const j=S.sel.j; const L=S.spec.tail_spines||[]; if(j>=L.length){ S.sel=null; return renderContext(); } const q=L[j];
     $('ctxname').textContent=`Tail spine ${j}`; $('ctxtools').innerHTML='';
     if(rebuild||box.dataset.k!=='ts'+j){ box.innerHTML=''; box.dataset.k='ts'+j;
@@ -305,7 +319,15 @@ new p5(s=>{
     const zmax=Math.max(...D.side.flatMap(p=>p.top.map(q=>q[1])), hz, 5)+2;
     const hreach=(S.HD&&S.HD.diagram.outline)?Math.max(...S.HD.diagram.outline.map(p=>p[1]))*headScale():0;   // how far back the head (its spine) reaches, model mm
     let treach=0, txw=0; for(const q of tailList()){ const yaw=Math.atan2(q.dir[0],q.dir[1])*180/Math.PI; const pts=arcPts([q.root[0],q.root[1],0.6],q.len,yaw,0,q.rise,q.roll,8); for(const p_ of pts){ treach=Math.max(treach,p_[1]); txw=Math.max(txw,Math.abs(p_[0])); } }   // the tail's spines
+    for(const q of freeList()){ const pts=arcPts([q.x,q.y,q.z],q.len,q.yaw,q.rise*0.35,q.rise*0.65,q.roll,8); for(const p_ of pts){ treach=Math.max(treach,p_[1]); txw=Math.max(txw,Math.abs(p_[0])); } }
     px=Math.min((H-80)/(Math.max(L,hreach,treach)+hl+6), (W-150)/(2*Math.max(xw,txw)+ZX*zmax+30)); ox=46+Math.max(xw,txw)*px; oy=40+hl*px; oxE=ox+Math.max(xw,txw)*px+30; }
+  function drawFreeSpines(){ const L=freeList(); if(!L.length) return; const zS=z=>oxE+z*ZX*px;
+    L.forEach((q,j)=>{ const on=S.sel&&S.sel.type==='free'&&S.sel.j===j; const pts=arcPts([q.x,q.y,q.z],q.len,q.yaw,q.rise*0.35,q.rise*0.65,q.roll,16);   // as free_spine_solid builds it
+      if(on) orange(1.3); else hair(255,1.2); for(const m of (q.x<0.75?[1]:[1,-1])){ s.beginShape(); for(const p_ of pts) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); }
+      hair(150,1); s.beginShape(); for(const p_ of pts) s.vertex(zS(p_[2]),Y(p_[1])); s.endShape();                                                     // side view
+      const rt=pts[0], tp=pts[16], md=pts[8];
+      for(const [k,p_,big] of [['fs_root',rt,true],['fs_tip',tp,false],['fs_mid',md,false]]){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):s.color(255,210)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(k==='fs_root'?s.color(255,120):0)); s.circle(sx,sy,on?(big?9:7):(big?6:4.5)); HP.push({kind:'fs',j,k,sx,sy}); }
+      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`spine ${j} - ${q.len.toFixed(1)} mm - rise ${Math.round(q.rise)}° - roll ${Math.round(q.roll)}° - yaw ${Math.round(q.yaw)}°${q.part==null?'':q.part<0?' - on the head':' - on piece '+(q.part+1)}`, X(tp[0])+9, Y(tp[1])-6); } }); }
   function tailList(){ const D=S.BD, T=D&&D.tail; if(!T||!T.tube) return []; const own=!!S.spec.tail_spines;
     return own?S.spec.tail_spines.map(q=>{ const ph=q.phi*Math.PI/180; const x0=T.wp*Math.cos(ph), y0=T.y0+T.Lp*Math.sin(ph); const r0=Math.hypot(x0,y0-T.y0)||1e-6; return Object.assign({}, q, {root:[x0,y0], dir:[x0/r0,(y0-T.y0)/r0]}); }):T.spines; }
   const X=x=>ox+x*px, Y=y=>oy+y*px;
@@ -356,6 +378,7 @@ new p5(s=>{
     if(headOn && S.P) drawEye();
     drawHorn(headOn);                                                                // the genal horn (P.genalHorn*), drawn live from P, with its handles
     drawBodySpines();                                                                // axial spines, pleural horns, tail spines: live from P (24 Oct 2026)
+    drawFreeSpines();                                                                // the free spines: anywhere, with root / tip / mid dots
     s.noStroke(); s.fill(255,90); s.textAlign(s.RIGHT,s.BOTTOM); s.text(((inflightB||inflightH)?'drawing…':'')+' ', W-12, H-10);
     window.__hp=HP;                                                                  // the handles this frame (for scripted tests)
   };
@@ -430,6 +453,10 @@ new p5(s=>{
   function nearest(mx,my){ let best=null,bd=12; for(const h of HP){ const d=Math.hypot(h.sx-mx,h.sy-my); if(d<bd){ bd=d; best=h; } } return best; }
   s.mouseMoved=()=>{ const h=nearest(s.mouseX,s.mouseY); const hi=h&&h.kind==='row'?h.i:null; if(hi!==S.hover){ S.hover=hi; } stage.style.cursor=h?'grab':'default'; };
   s.mousePressed=()=>{ if(s.mouseX<0||s.mouseY<0||s.mouseX>W||s.mouseY>H) return; const h=nearest(s.mouseX,s.mouseY);
+    if(addMode&&!(h&&h.kind==='fs')){ const mx=Math.abs((s.mouseX-ox)/px), my=(s.mouseY-oy)/px; if(s.mouseX>oxE-10) return;      // add mode: a click in plan grows a spine there
+      S.spec.spines=S.spec.spines||[]; const rel=(S.P&&+S.P.relief)||17; S.spec.spines.push({x:+(mx<1.5?0:mx).toFixed(2), y:+my.toFixed(2), len:+(1.2*rel).toFixed(1), rise:45, roll:0, yaw:(mx<1.5?0:35)});
+      S.sel={type:'free',j:S.spec.spines.length-1}; addMode=false; $('addspine').classList.remove('on'); status('spine added - drag its dots (root, mid, tip) or use the sliders',false); sendBody(); renderContext(); renderTable(); return; }
+    if(h&&h.kind==='fs'){ S.sel={type:'free',j:h.j}; S.drag={kind:'fs',j:h.j,k:h.k}; renderContext(); renderTable(); stage.style.cursor='grabbing'; return; }
     if(h&&h.kind==='row'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; S.drag={kind:'row',i:h.i,k:h.k,x0:s.mouseX,y0:s.mouseY,start:Object.assign({},rowOf(h.i))}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='eye'){ S.sel={type:'head'}; S.eyeSel=h.k; S.drag={kind:'eye',k:h.k,d:h}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='horn'){ S.sel={type:'head'}; S.headSel=h.k; S.drag={kind:'horn',k:h.k}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
@@ -438,7 +465,7 @@ new p5(s=>{
     else if(h&&h.kind==='ts'){ ownTail(); S.sel={type:'tailspine',j:h.j}; S.drag={kind:'ts',j:h.j,k:h.k}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='head'){ S.sel={type:'head'}; S.headSel=h.k; S.drag={kind:'head',k:h.k,elev:!!h.elev,x0:s.mouseX,y0:s.mouseY,start:headSnapshot()}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else { S.sel=null; S.drag=null; renderContext(); renderTable(); } };
-  s.mouseReleased=()=>{ if(S.drag){ if(S.drag.kind==='ax'||S.drag.kind==='ph'||S.drag.kind==='ts') sendBody(); S.drag=null; stage.style.cursor='grab'; } };
+  s.mouseReleased=()=>{ if(S.drag){ if(['ax','ph','ts','fs'].includes(S.drag.kind)) sendBody(); S.drag=null; stage.style.cursor='grab'; } };
   s.mouseDragged=()=>{ if(!S.drag) return;
     if(S.drag.kind==='row'){ const d=S.drag, st=d.start, i=d.i; const dx=(s.mouseX-d.x0)/px, dy=(s.mouseY-d.y0)/px;
       switch(d.k){
@@ -452,6 +479,12 @@ new p5(s=>{
         S.P.eyeStalk=Math.max(0,Math.min(4,+dist.toFixed(2))); S.P.eyeLean=Math.max(0,Math.min(90,Math.round(lean))); }
       else if(S.drag.k==='height'){ const proj=((mx-d.bx)*d.dx+(my-d.by)*d.dy)/d.er; S.P.eyeHeight=Math.max(0.2,Math.min(1.6,+proj.toFixed(2))); }
       S.edited=true; renderContext(false); return; }
+    if(S.drag.kind==='fs'){ const d=S.drag, q=(S.spec.spines||[])[d.j]; if(!q) return; const mx=Math.abs((s.mouseX-ox)/px), my=(s.mouseY-oy)/px; const z=freeList()[d.j].z;
+      if(d.k==='fs_root'){ q.x=+(mx<1.5?0:mx).toFixed(2); q.y=+my.toFixed(2); }
+      else { const cur=arcPts([q.x,q.y,z],Math.max(q.len,1),q.yaw,q.rise*0.35,q.rise*0.65,0,16); const tx=cur[16][0]-q.x, ty=cur[16][1]-q.y; const cl=Math.hypot(tx,ty)||1e-6; const vx=mx-q.x, vy=my-q.y;
+        if(d.k==='fs_tip'){ const c1=Math.hypot(vx,vy); q.len=+Math.max(0,Math.min(200,Math.max(q.len,1)*c1/cl)).toFixed(2); const dA=(Math.atan2(vx,vy)-Math.atan2(tx,ty))*180/Math.PI; q.yaw=+Math.max(-180,Math.min(180,q.yaw+dA)).toFixed(1); }
+        else { const sag=(vx*ty-vy*tx)/cl; const th=Math.abs(q.rise)*Math.PI/180; const sagV=th>1e-3?(q.len/th)*(1-Math.cos(th/2)):0; if(sagV>1e-6){ const rl=Math.asin(Math.max(-1,Math.min(1,sag/sagV)))*180/Math.PI; q.roll=+Math.max(-180,Math.min(180,Math.round(rl/5)*5)).toFixed(1); } } }
+      S.edited=true; invalidateBuild(); renderContext(false); return; }
     if(S.drag.kind==='ts'){ const d=S.drag, T=S.BD.tail, q=S.spec.tail_spines[d.j]; if(!T||!q) return; const mx=Math.abs((s.mouseX-ox)/px), my=(s.mouseY-oy)/px;   // mouse in model mm (plan, right side)
       if(d.k==='ts_tip'){ const phi=Math.atan2((my-T.y0)/T.Lp, mx/T.wp)*180/Math.PI; q.phi=+Math.max(0,Math.min(90,phi)).toFixed(2);               // where on the margin: the mouse's angle about the tail's centre
         const ph=q.phi*Math.PI/180; const x0=T.wp*Math.cos(ph), y0=T.y0+T.Lp*Math.sin(ph); const r0=Math.hypot(x0,y0-T.y0)||1e-6; const yaw=Math.atan2(x0/r0,(y0-T.y0)/r0)*180/Math.PI;

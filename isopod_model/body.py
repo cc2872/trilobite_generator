@@ -445,6 +445,19 @@ def isopod_head(P, plans, J, PV, K, step=0.25, face=None, _grid=False):
 SKIPPED = []
 
 
+def free_spine_solid(sd, mesh, P):
+    """One free spine (and its mirror unless on the axis) as solids standing on `mesh` at the spine's (x, y): a curved
+    tube (anatomy.common.curved_spine) with a collar, rooted half a millimetre into the surface. [] if nothing is under it."""
+    x, y, L = float(sd["x"]), float(sd["y"]), float(sd["len"])
+    if L < 0.5: return []
+    z = _surface_z(mesh, x, y, search=2.0)
+    if z is None: return []
+    r0 = 0.45 * float(P["marginHeight"]) * float(P["relief"]) + 0.5
+    h = curved_spine(r0, 0.45, L, (x, y, z - 0.5), yaw_deg=float(sd.get("yaw", 0.0)), pitch_deg=float(sd.get("rise", 45.0)) * 0.35,
+                     bend_deg=float(sd.get("rise", 45.0)) * 0.65, roll_deg=float(sd.get("roll", 0.0)), flare=1.4)   # a third of the rise at the root, the rest as the arc
+    return [h] if abs(x) < 0.75 else [h, M.mirror_x(h)]
+
+
 def body_ornaments(P, plans, parts, skip=()):
     """The preset's spines on the body, as the generator puts them: each thorax ring's axial spine, the tail's
     terminal spine and prongs (plan frame, moved to the part's rest placement). An axial spine stands where the ring's
@@ -472,6 +485,21 @@ def body_ornaments(P, plans, parts, skip=()):
                         SKIPPED.append(f"{name}: axial spine (ring covered by the part ahead)"); continue
                 solids.append(x)
         if solids: parts[k] = M.union(parts[k], *solids)
+    # the free spines (24 Oct 2026): each stands on the part whose plate is under its (x, y) -- found on the built parts
+    free = ROWS_INFO.get("free_spines") or []
+    if free:
+        y_first = plans[1][3]
+        for sd in free:
+            x, y = float(sd["x"]), float(sd["y"])
+            if y < y_first: continue                                       # on the head: _build adds those
+            best = None
+            for k in range(1, len(plans)):
+                if k in skip: continue
+                z = _surface_z(parts[k], x, y)
+                if z is not None and (best is None or z > best[1]): best = (k, z)   # the topmost plate owns the point
+            if best is None: continue
+            sols = free_spine_solid(sd, parts[best[0]], P)
+            if sols: parts[best[0]] = M.union(parts[best[0]], *sols)
 
 
 def shaped_head(P, plans, PV, K, J, outline, face):
@@ -549,7 +577,7 @@ def build(P, head="isopod", face=None, outline=None, rows=None):
         ga = BALL.GAP_AXIAL_FRAC * BALL.ISO_PITCH * s                          # the joint gaps: constant in print mm
         J = dict(gap_axial=ga, gap_vertical=BALL.GAP_VERT_FRAC * BALL.ISO_PITCH * s, gap_lateral=BALL.GAP_LAT_FRAC * BALL.ISO_PITCH * s)
         K = iso_kit(P, s=s); PV = pivots(plans, J, K)
-        ROWS_INFO.clear(); ROWS_INFO.update(groups=R["groups"], scale=R["scale"], term_spine=R["term_spine"], rows=R["rows"], model=R["model"])
+        ROWS_INFO.clear(); ROWS_INFO.update(groups=R["groups"], scale=R["scale"], term_spine=R["term_spine"], rows=R["rows"], model=R["model"], free_spines=R.get("free_spines", []))
         return _build(P, head, face, outline, plans, J, K, PV, shell=(R["model"] == "slab"), term_spine=R["term_spine"])
     ROWS_INFO.clear()
     plans = placed_plans(P)
@@ -730,6 +758,10 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
     def lap(name): STAGE_SECONDS[name] = round(_t.time() - t0 - sum(STAGE_SECONDS.values()), 1)
     U = None; H = None; n = len(plans); _progress(0, 0, n)
     if head in ("isopod", "shaped"): H, U = _head_cached(P, head, face, outline, plans, J, K, PV)
+    if H is not None and ROWS_INFO.get("free_spines"):                      # free spines standing on the head (24 Oct 2026): rooted on its built surface
+        hs = [free_spine_solid(sd, H, P) for sd in ROWS_INFO["free_spines"] if float(sd["y"]) < plans[1][3]]
+        hs = [h for pair in hs if pair for h in pair]
+        if hs: H = M.union(H, *hs)
     lap("head")
     parts = []
     for k in range(n):

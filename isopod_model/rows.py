@@ -81,6 +81,7 @@ BODY_KEYS = dict(
     pyg_len=("mm", "length of the pygidium (all pygidial rows together)"),
     term_spine=("mm", "a terminal spine from the pygidium's tip (0 = none)"),
     tail_spines=("list", "the tail's own margin spines (24 Oct 2026): [{phi: deg along the margin (0 front corner .. 90 rear tip), len: mm, rise: deg, roll: deg, blade: 0..1}], right side; absent = the preset's pair + marginals"),
+    spines=("list", "free spines anywhere on the animal (24 Oct 2026): [{x: mm across (>= 0, mirrored unless on the axis), y: mm along the body (0 = the first row's front; negative = on the head), len: mm, rise: deg, roll: deg, yaw: deg (0 straight back, + outward)}]"),
     min_joint_mm=("mm", "the joint minimum at print: a row shorter than this fuses"),
     print_scale=("x", "print mm per model mm (default: 18 mm per median thoracic row)"),
 )
@@ -195,6 +196,25 @@ TAIL_SPINE_RANGE = dict(phi=(0.0, 90.0), len=(0.0, 500.0), rise=(-180.0, 180.0),
 TAIL_SPINE_DEFAULT = dict(phi=70.0, len=20.0, rise=30.0, roll=0.0, blade=0.0)
 MAX_TAIL_SPINES = 24
 
+FREE_SPINE_RANGE = dict(x=(0.0, 400.0), y=(-400.0, 2000.0), len=(0.0, 500.0), rise=(-180.0, 180.0), roll=(-180.0, 180.0), yaw=(-180.0, 180.0))
+FREE_SPINE_DEFAULT = dict(x=0.0, y=0.0, len=15.0, rise=45.0, roll=0.0, yaw=0.0)
+MAX_FREE_SPINES = 64
+
+def validate_free_spines(lst):
+    """The body's free spines: up to MAX_FREE_SPINES dicts, every number inside FREE_SPINE_RANGE (missing ones default)."""
+    if not isinstance(lst, list): raise ValueError("spines is not a list")
+    if len(lst) > MAX_FREE_SPINES: raise ValueError(f"{len(lst)} free spines: at most {MAX_FREE_SPINES}")
+    out = []
+    for j, sd in enumerate(lst):
+        if not isinstance(sd, dict): raise ValueError(f"spine {j} is not a dict")
+        bad = set(sd) - set(FREE_SPINE_RANGE)
+        if bad: raise KeyError(f"spine {j}: unknown keys {sorted(bad)} (have {sorted(FREE_SPINE_RANGE)})")
+        row = dict(FREE_SPINE_DEFAULT); row.update(sd)
+        for k, (lo, hi) in FREE_SPINE_RANGE.items(): row[k] = _num(row[k], k, lo, hi, f"spine {j}")
+        out.append(row)
+    return out
+
+
 def validate_tail_spines(lst):
     """The body's own tail spines: a list of up to MAX_TAIL_SPINES dicts, every number inside TAIL_SPINE_RANGE (missing ones default)."""
     if not isinstance(lst, list): raise ValueError("tail_spines is not a list")
@@ -218,6 +238,7 @@ def apply(rows, edits=None):
     if bad: raise KeyError(f"unknown body keys {sorted(bad)} (have {sorted(BODY_KEYS)}, 'rows' and 'list')")
     if edits.get("model") not in (None, "thorax", "slab"): raise ValueError("model must be 'thorax' or 'slab'")
     if edits.get("tail_spines") is not None: validate_tail_spines(edits["tail_spines"])
+    if edits.get("spines") is not None: validate_free_spines(edits["spines"])
     for k, (lo, hi) in BODY_RANGE.items():
         if edits.get(k) is not None: _num(edits[k], k, lo, hi, "body")
     if edits.get("list") is not None: rows = validate_list(edits["list"])
@@ -474,6 +495,7 @@ def plans(P, spec=None, strict=True):
             S = tail_plan(P, pg, th[-1]["len"], spec.get("tail_spines")); out.append(("tail", TAIL, S, y)); offsets.append(y); y += S["d"]
             gs = gs + [list(range(len(th), len(rows)))]
     return dict(rows=rows, groups=gs, scale=scale, min_joint_mm=min_mm, parts=out, offsets=offsets, length=y, model=model, problems=problems(rows, scale, term),
+                free_spines=validate_free_spines(spec["spines"]) if spec.get("spines") is not None else [],
                 term_spine=float(spec.get("term_spine") or 0.0), mode=("list" if spec.get("list") is not None else "preset"))
 
 
@@ -501,6 +523,28 @@ def _tail_band(S, y_tail, row, y0, last):
         return yf, yr
     return dict(edges=edges, X_tip=X_tip, poly=poly, zfun=lambda x, y: S["zfun"](x, np.asarray(y, float) - y_tail), w=X_tip, a=row["axis"] * X_tip, h=row["relief"])
 
+
+def resolve_free_spine(sd, parts, offsets, head_z=None):
+    """Which part a free spine stands on and its surface height there, from the PLANS (the drawing): the first part whose
+    plate covers y (plates overlap the next row's lip), the tail for anything behind, the head for y < 0 (head_z(x, y) if
+    given). Returns (k or -1 for the head, z) -- z None when nothing is under (x, y)."""
+    x, y = float(sd["x"]), float(sd["y"])
+    if y < offsets[0]:
+        return -1, (float(head_z(x, y)) if head_z is not None else None)
+    for k, (name, mod, S, off) in enumerate(parts):
+        if off <= y < off + S["d"] + (S.get("ovl", 0.0) if name != "tail" else 0.0):
+            try: z = float(np.asarray(S["zfun"](np.array([abs(x)]), np.array([y - off]))).ravel()[0])
+            except Exception: z = None
+            return k, (z if z is not None and np.isfinite(z) and z > 0.05 else None)
+    return len(parts) - 1, None
+
+def _free_info(R, P):
+    """The free spines for the studio: each with the part it stands on and its surface height (None off the animal)."""
+    out = []
+    for sd in R.get("free_spines", []):
+        k, z = resolve_free_spine(sd, R["parts"], R["offsets"])
+        out.append(dict(sd, part=k, z=(round(z, 3) if z is not None else None)))
+    return out
 
 def _tail_info(S, y_off, P, spec):
     """The tail for the studio (24 Oct 2026): its base margin (right half, body frame, model mm) and every margin spine with
@@ -584,6 +628,7 @@ def diagram(P, spec=None, n=60):
     pivots = [[round(R["offsets"][k], 3), round(PIV_Z, 3)] for k in range(1, len(R["offsets"]))]
     return dict(rows=drawn, pieces=pieces, joints=joints, scale=scale, min_joint_mm=R["min_joint_mm"], length=R["length"], term_spine=R["term_spine"],
                 side=side, pivots=pivots, wall=WALL, gap_z=GAP_Z, model=model, problems=R["problems"], tail=_tail_info(tail_S, y_tail, P, spec),
+                free=_free_info(R, P),
                 body_keys={k: dict(unit=u, doc=dd) for k, (u, dd) in BODY_KEYS.items()},
                 mode=R["mode"], list=[{k: (v if k == "kind" else round(float(v), 4)) for k, v in r.items()} for r in rows],
                 body=dict(model=model, thorax_rows=sum(1 for r in rows if r["kind"] == "thorax"), pyg_rows=sum(1 for r in rows if r["kind"] == "pyg"),
