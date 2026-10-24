@@ -109,7 +109,7 @@ def _dense(pts, step=0.15):
 
 class Shape:
     def __init__(self, outline=None, n=1601):
-        o = self.o = outline_of(outline); tr = o.get("trace")
+        o = self.o = outline_of(outline); tr = o.get("trace"); self.notes = []   # what the silhouette had to refuse (the studio shows them)
         if tr is not None:                                         # a traced margin: its own length, widest line and genal angle
             T = np.array(tr, float) * RO; L1 = self.L1 = float(-T[:, 1].min())
             iw = int(np.argmax(T[:, 0])); yw = float(T[iw, 1])
@@ -187,6 +187,17 @@ class Shape:
             dsx, dsy = np.sin(th) * Lh / 240, np.cos(th) * Lh / 240
             xc = x0 + np.r_[0, np.cumsum(dsx[1:])]; yc = y0 + np.r_[0, np.cumsum(dsy[1:])]
             r = 0.5 * w0 * (1 - (1 - o["genal_tip"]) * S); r = np.maximum(r, 0.35)
+            # 24 Oct 2026: the band lives in the silhouette's columns (one front and one rear edge per x), so it can only
+            # run OUTWARD of its own root: a centreline that turns in over the head (negative spread, a curve that hooks
+            # back) made the head's rear margin the band's upper edge and the solid filled down to the band (the studio's
+            # spines through the pygidium, 23 Oct). The band is cut where its CENTRELINE would cross its root's inner
+            # edge (a drift of up to the root half-width is tolerated: harpes' -6 deg curl always had that sliver);
+            # a spine that turns under or over the head is the genal HORN (P.genalHorn*, a solid of its own).
+            bad = np.where(xc < x0 - r[0])[0]
+            if len(bad) and bad[0] < len(S) - 1:
+                cut = max(int(bad[0]), 2)
+                self.notes.append(f"genal band cut at {S[cut]:.0%} of its length: it would turn in over the head (use the genal horn for a curved or inward spine)")
+                S, xc, yc, r = S[:cut + 1] / S[cut], xc[:cut + 1], yc[:cut + 1], r[:cut + 1]; Lh = float(np.hypot(xc[-1] - x0, yc[-1] - y0))
         else:
             S = xc = yc = r = None
         self.horn, self.x_in, self.yg, self.xg, self.yw = horn, x_in, yg, xg, yw
@@ -352,5 +363,5 @@ def diagram(outline=None, face=None, n=260):
     if b > 0.02: H["brim"] = (0.7 * (1 - b), float(np.interp(0.7 * RO, ax, sh.yf)) * (1 - b) * u + sh.yw * b * u)
     if eye is not None: H["eye"] = (E["xe"] * u, float(eye[:, 1].mean()))
     return dict(outline=plan_, glabella=glab, eye=eye, brim=brim, boss=boss, section=np.c_[ys * u, sec * kz], profile=np.c_[ys * u, prof * kz],
-                handles=H, size=dict(length=sh.L1 * u, halfwidth=sh.Xmax * u, width_vs_thorax=o["width"]),
+                handles=H, size=dict(length=sh.L1 * u, halfwidth=sh.Xmax * u, width_vs_thorax=o["width"]), notes=list(sh.notes),
                 trace=(np.array(o["trace"], float) if o.get("trace") is not None else None))

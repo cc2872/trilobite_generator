@@ -177,7 +177,7 @@ async function sendHead(){ S.edited=true; invalidateBuild(); postState(); render
   inflightH=fetch('/api/head_diagram',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({style:S.head, outline:S.headOutline, face:S.headFace})})
     .then(r=>r.json()).then(d=>{ if(d.error){ status(d.error,true); return; } S.HD=d; kv(); renderContext(false); })
     .catch(e=>status(String(e),true)).finally(()=>{ inflightH=null; if(S.pendingH){ S.pendingH=false; sendHead(); } }); }
-function kv(){ const D=S.BD; if(!D) return; $('kv').innerHTML=`<b>${S.savedBody?S.savedBody:(S.start==='plain'?'plain trilobite':S.preset)}</b> - head <b>${S.savedHead||S.head}</b><br>rows <b>${D.rows.length}</b> - pieces <b>${D.pieces.length}</b><br>print <b>${D.print_size_mm.length} × ${D.print_size_mm.width} mm</b> - scale <b>${D.scale.toFixed(2)}</b>`+((D.problems||[]).length?`<br><span style="color:var(--accent)">cannot build: ${D.problems.join(' - ')}</span>`:''); $('build').disabled=!!(D.problems||[]).length; }
+function kv(){ const D=S.BD; if(!D) return; $('kv').innerHTML=`<b>${S.savedBody?S.savedBody:(S.start==='plain'?'plain trilobite':S.preset)}</b> - head <b>${S.savedHead||S.head}</b><br>rows <b>${D.rows.length}</b> - pieces <b>${D.pieces.length}</b><br>print <b>${D.print_size_mm.length} × ${D.print_size_mm.width} mm</b> - scale <b>${D.scale.toFixed(2)}</b>`+((D.problems||[]).length?`<br><span style="color:var(--accent)">cannot build: ${D.problems.join(' - ')}</span>`:'')+(((S.HD&&S.HD.diagram.notes)||[]).length?`<br><span style="color:var(--accent)">head: ${S.HD.diagram.notes.join(' - ')}</span>`:''); $('build').disabled=!!(D.problems||[]).length; }
 
 // ---------- panel ----------
 function fillPickers(){ const ps=$('preset'); ps.innerHTML=`<option value="plain">plain trilobite</option><optgroup label="presets">${S.presets.map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+(S.savedBodies.length?`<optgroup label="saved bodies">${S.savedBodies.map(b=>`<option value="saved:${b.name}">${b.name} - ${b.preset}</option>`).join('')}</optgroup>`:''); ps.value=S.savedBody?'saved:'+S.savedBody:(S.start==='plain'?'plain':S.preset);
@@ -259,10 +259,11 @@ new p5(s=>{
   const headScale=()=>{ const w0=S.BD.rows[0].row.width; return w0*(S.HD&&S.HD.diagram.size?S.HD.diagram.size.width_vs_thorax:1.15); };
   const headLen=()=>{ const h=S.HD&&S.HD.diagram; return h?(-h.outline.reduce((m,p)=>Math.min(m,p[1]),0))*headScale():0; };
   function fit(){ W=s.width; H=s.height; const D=S.BD; const L=D.length+(D.term_spine||0); const hl=headLen();
-    const xw=Math.max(...D.rows.map(r=>r.row.width+r.row.tip), headScale());
+    const hsz=S.HD&&S.HD.diagram.size; const xw=Math.max(...D.rows.map(r=>r.row.width+r.row.tip), headScale()*(hsz?Math.max(hsz.halfwidth,1):1));   // 24 Oct 2026: the head's full reach (its spine), not its half-width
     const hz=(S.HD&&S.HD.diagram.profile&&S.HD.diagram.profile.length)?Math.max(...S.HD.diagram.profile.map(p=>p[1]))*headScale():0;   // the head's elevation depth, in model mm
     const zmax=Math.max(...D.side.flatMap(p=>p.top.map(q=>q[1])), hz, 5)+2;
-    px=Math.min((H-80)/(L+hl+6), (W-150)/(2*xw+ZX*zmax+30)); ox=46+xw*px; oy=40+hl*px; oxE=ox+xw*px+30; }
+    const hreach=(S.HD&&S.HD.diagram.outline)?Math.max(...S.HD.diagram.outline.map(p=>p[1]))*headScale():0;   // how far back the head (its spine) reaches, model mm
+    px=Math.min((H-80)/(Math.max(L,hreach)+hl+6), (W-150)/(2*xw+ZX*zmax+30)); ox=46+xw*px; oy=40+hl*px; oxE=ox+xw*px+30; }
   const X=x=>ox+x*px, Y=y=>oy+y*px;
   function hair(a,w=1){ s.stroke(255,a); s.strokeWeight(w); s.noFill(); }
   function orange(w=1){ s.stroke(246,112,79); s.strokeWeight(w); s.noFill(); }
@@ -370,7 +371,7 @@ new p5(s=>{
       case 'glabella': v.glab_len=st.glab_len-along/L; v.glab_inflate=st.glab_inflate+across*1.5; break;
       case 'eye':      v.eye_pos=st.eye_pos-along/L; v.eye_lat=st.eye_lat+across; break;
       case 'brim':     v.brim_w=st.brim_w-across/0.7; break;
-      case 'spine': {  const r=(S.HD.diagram.handles||{}).root||[1,0]; const tx=(s.mouseX-ox)/pxH, ty=(s.mouseY-oy)/pxH-HEADDY/1;   // mouse in head units
+      case 'spine': {  const r=(S.HD.diagram.handles||{}).root||[1,0]; const tx=(s.mouseX-ox)/pxH, ty=(s.mouseY-oy)/pxH-HEADDY/sc;   // mouse in head units (24 Oct 2026: HEADDY is model mm, so / sc - it put the tip half a head-width behind the cursor)
                        const ax=Math.abs(tx), ay=ty; const dx=ax-r[0], dy=ay-r[1]; v.genal=Math.hypot(dx,dy)/L; v.genal_spread=Math.atan2(dx,dy)*180/Math.PI; break; } }
     for(const [k,val] of Object.entries(v)) if(Number.isFinite(val)) setHeadKey(k,val,true);
     sendHead(); };

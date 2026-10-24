@@ -101,7 +101,7 @@ def head_from(rec, n_front=40, n_rear=30):
     if Lg >= 0.05:
         outline["genal"] = round(min(Lg, 3.5), 3)
         outline["genal_spread"] = round(float(np.degrees(math.atan2(sp[0], sp[1]))), 1)    # 0 = straight back; + outward
-        outline["genal_spread"] = max(-60.0, min(80.0, outline["genal_spread"]))
+        outline["genal_spread"] = max(0.0, min(80.0, outline["genal_spread"]))     # 24 Oct 2026: the band runs outward only
     else:
         outline["genal"] = 0.0
     # the face
