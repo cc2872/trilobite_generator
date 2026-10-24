@@ -15,7 +15,7 @@ import math
 import numpy as np
 import mesh as M
 from fields import seg_halfwidth, pleural_spine_field, furrow_amp
-from anatomy.common import pitch, smoothstep, plateau, trough, vault, spine_solid, GRID_SEG
+from anatomy.common import pitch, smoothstep, plateau, trough, vault, spine_solid, curved_spine, GRID_SEG
 from anatomy.port import Port
 
 TIP_KEEP_MM = 3.0        # (used by the pin joint's band rule via Port.halfwidth; kept here for reference)
@@ -82,7 +82,7 @@ def plan(P, i):
         z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y - yf))
         return z
     return dict(outline=outline, zfun=zfun, edges=edges, t=t, w=w, a=a, d=d, ovl=ovl, margin=margin, rise=rise, h=h,
-                X_tip=X_tip, u_a=a / X_tip, last=(i == int(P["segCount"]) - 1))
+                X_tip=X_tip, u_a=a / X_tip, last=(i == int(P["segCount"]) - 1), i=i, n=int(P["segCount"]))
 
 def _doublure(seg, S, P):
     """Vertical rim + inward lip along the blade margin, only on broad square-tipped pleurae (as in the BREP builder)."""
@@ -110,10 +110,18 @@ def solid(P, S, grid=GRID_SEG):
 def ornaments(P, S):
     """Solids unioned onto the part AFTER the joint, in this order. Plan frame."""
     out = []
+    frac = (S.get("i", 0) / max(S.get("n", 1) - 1, 1))                       # 0 on the first segment, 1 on the last
     if P["axialSpine"] > 0.02:
-        r = 0.45 * S["margin"]
-        out.append(("axialSpine", spine_solid(0.6 * r + 0.6, 0.5, P["axialSpine"] * S["h"],
-                                              (0, S["ovl"] + 0.45 * (S["d"] - S["ovl"]), S["h"] + S["rise"] - 1.0), 0, pitch_deg=60)))
+        r = 0.45 * S["margin"]; L = P["axialSpine"] * S["h"] * (1.0 + float(P.get("axialGrad", 0.0)) * frac)
+        out.append(("axialSpine", curved_spine(0.6 * r + 0.6, 0.5, L, (0, S["ovl"] + 0.45 * (S["d"] - S["ovl"]), S["h"] + S["rise"] - 1.0), 0,
+                                               pitch_deg=float(P.get("axialPitch", 60.0)), bend_deg=float(P.get("axialBend", 0.0)), roll_deg=0.0)))   # 24 Oct 2026: a curve; defaults = the 60 deg rod
+    if float(P.get("pleuralHorn", 0.0)) > 0.02 and "X_tip" in S:              # 24 Oct 2026: a horn from each blade tip (Koneprusia)
+        L = P["pleuralHorn"] * S["w"] * (1.0 + float(P.get("pleuralHornGrad", 0.0)) * frac)
+        xt = S["X_tip"]; yt = float(S["outline"](1.0, 0.5)[1]); x0 = max(xt - 1.5, 0.5 * S["w"])
+        z0 = float(np.asarray(S["zfun"](np.array([x0]), np.array([yt]))).ravel()[0]) - 0.6
+        h = curved_spine(0.45 * S["margin"] + 0.5, 0.45, L, (x0, yt, z0), yaw_deg=90.0 - float(P["spineSweep"]),
+                         pitch_deg=float(P.get("pleuralHornPitch", 45.0)), bend_deg=float(P.get("pleuralHornBend", 0.0)), roll_deg=float(P.get("pleuralHornRoll", 0.0)), flare=1.5)
+        out.append(("pleuralHorns", [h, M.mirror_x(h)], "union"))
     return out
 
 def ports(P, S, i):

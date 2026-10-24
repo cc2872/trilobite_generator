@@ -1,0 +1,20 @@
+{
+ "face": {
+  "eye_size": 0.16,
+  "eye_pos": 0.62,
+  "eye_height": 0.85,
+  "eye_lat": 0.5,
+  "glab_inflate": 1.35,
+  "glab_rise": 0.18,
+  "glab_front": 2.5,
+  "glab_lobes": 3
+ },
+ "k": 1.5208333333333333,
+ "y_w": 42.0,
+ "y_face": 50.5,
+ "eye": [
+  18.25,
+  29.02583333333333,
+  5.84
+ ]
+}

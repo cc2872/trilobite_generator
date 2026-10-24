@@ -139,6 +139,16 @@ PARAMS = [
     Param("termSpine", "Terminal spine", 0.0, 0.0, 2.5, 0.05, "Tail", "Single median terminal spine / shield length (0 = none)"),
     # ---- extra spine families and ornament
     Param("axialSpine", "Axial spines", 0.0, 0.0, 2.5, 0.05, "Spines", "Dorsal spine on every thoracic ring / relief (0 = none)"),
+    # 24 Oct 2026: the thoracic spines as curves that leave the plane (Koneprusia, Comura, Ceratonurus): the axial spines get a
+    # pitch, a bend and a length gradient; pleural HORNS are solid spines rising from each blade tip, pitched, bent, rolled.
+    Param("axialPitch", "Axial spine pitch", 60, 10, 90, 5, "Spines", "How steeply the axial spines leave the ring (was fixed at 60)", unit="deg"),
+    Param("axialBend", "Axial spine bend", 0, -180, 180, 5, "Spines", "The axial spines' arc, root to tip (+ recurves the tip back and down)", unit="deg"),
+    Param("axialGrad", "Axial spine gradient", 0.0, -1.0, 2.0, 0.05, "Spines", "Change in axial spine length from the first ring to the last (x the base length)"),
+    Param("pleuralHorn", "Pleural horns", 0.0, 0.0, 2.0, 0.05, "Spines", "A solid spine rising from every pleural blade tip / half-width (0 = none)"),
+    Param("pleuralHornPitch", "Pleural horn pitch", 45, 0, 90, 5, "Spines", "How steeply the pleural horns rise", unit="deg"),
+    Param("pleuralHornBend", "Pleural horn bend", 0, -180, 180, 5, "Spines", "The pleural horns' arc, root to tip", unit="deg"),
+    Param("pleuralHornRoll", "Pleural horn roll", 0, -180, 180, 5, "Spines", "Plane the pleural horns bend in (0 up, 90 outward, 180 down)", unit="deg"),
+    Param("pleuralHornGrad", "Pleural horn gradient", 0.0, -1.0, 2.0, 0.05, "Spines", "Change in pleural horn length from the first segment to the last (x the base length)"),
     Param("occipitalSpine", "Occipital spine", 0.0, 0.0, 1.5, 0.05, "Spines", "Spine on the occipital ring / head length (0 = none)"),
     Param("pygMarginal", "Tail marginal spines", 0, 0, 10, 1, "Spines", "Spines around the tail margin (0 = none)", kind="int"),
     Param("pygMarginalLen", "Tail marginal length", 0.5, 0.1, 1.5, 0.05, "Spines", "Marginal spine length / shield length"),
@@ -206,7 +216,7 @@ UI = {
         # midline ("top") one - previously scattered across Thorax/Tail and, for axialSpine/occipitalSpine/
         # termSpine/macroIndex/macroAmp/pygMarginalLen, not editable individually at all (only blendable via
         # the "Spines" dial, or for the last three, not reachable from the UI whatsoever).
-        "Spines": ["genalSpine", "occipitalSpine", "axialSpine", "spineBase", "spineGrad", "spineSweep",
+        "Spines": ["genalSpine", "occipitalSpine", "axialSpine", "axialPitch", "axialBend", "axialGrad", "pleuralHorn", "pleuralHornPitch", "pleuralHornBend", "pleuralHornRoll", "pleuralHornGrad", "spineBase", "spineGrad", "spineSweep",
                    "macroIndex", "macroAmp", "pygSpine", "pygSplay", "termSpine", "pygMarginal", "pygMarginalLen"],
     },
     "ruler": ["maxAngle", "clearance", "boreDia", "barrelR", "nKnuckles"],
@@ -247,9 +257,10 @@ CELLS = {
                      "genalHorn", "genalHornPitch", "genalHornBend", "genalHornRoll", "genalHornYaw",
                      "sutureEnd", "sutureDepth", "eyeRidge"]),
     "b2": dict(label="Axial rings", doc="the ring chain over the hinges", primary=["axisFrac", "axisRise", "furrowDepth"],
-               more=["effacement", "axisSigma", "ringArch", "tent", "vaultRound", "axialSpine"]),
+               more=["effacement", "axisSigma", "ringArch", "tent", "vaultRound", "axialSpine", "axialPitch", "axialBend", "axialGrad"]),
     "a2": dict(label="Pleura", doc="inner run to the fulcrum, then the blade; its spine is the blade running on", primary=["overlap", "fulcrum", "pleuralSlope"],
-               more=["marginHeight", "bladeCamber", "bladeChord", "tipSweep", "tipTaper", "spineBase", "spineGrad", "spineSweep", "macroIndex", "macroAmp"]),
+               more=["marginHeight", "bladeCamber", "bladeChord", "tipSweep", "tipTaper", "spineBase", "spineGrad", "spineSweep", "macroIndex", "macroAmp",
+                     "pleuralHorn", "pleuralHornPitch", "pleuralHornBend", "pleuralHornRoll", "pleuralHornGrad"]),
     "b3": dict(label="Tail axis", doc="the pygidial axis and its rings", primary=["pygRings", "tailRelief", "tailDomeExp"],
                more=["pygAxisLen", "pygAxisFrac", "tailWall", "termSpine", "termBend"]),
     "a3": dict(label="Tail field + margin", doc="the pleural field, border, forks and marginal spines", primary=["pygWidth", "pygSpine", "pygMarginal"],

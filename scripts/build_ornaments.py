@@ -23,6 +23,12 @@ CASES = {
   "ceratarges":     ("shaped", "lichas", dict(genalHorn=1.5, genalHornPitch=50, genalHornBend=130, genalHornRoll=-25, occipitalSpine=0.8, occipitalBend=120)),
   "odontocephalus": ("shaped", "dalmanites", dict(frontSpine=0.7, frontSpineBend=35)),
   "boedaspis":      ("shaped", "odontopleura", dict(genalHorn=1.0, genalHornPitch=35, genalHornBend=90, genalHornRoll=60, occipitalSpine=1.0, occipitalBend=100, spineBase=0.8)),
+  # 24 Oct 2026: the spiny Devonian forms whose thoracic spines leave the plane (Koneprusia, Comura, Ceratonurus)
+  "koneprusia":     ("shaped", "odontopleura", dict(genalHorn=1.2, genalHornPitch=40, genalHornBend=110, genalHornRoll=-35, genalHornYaw=25,
+                                                   occipitalSpine=1.1, occipitalBend=130,
+                                                   axialSpine=1.6, axialPitch=55, axialBend=80, axialGrad=0.6,
+                                                   pleuralHorn=0.7, pleuralHornPitch=55, pleuralHornBend=90, pleuralHornRoll=-20, pleuralHornGrad=0.4,
+                                                   spineBase=0.5, spineGrad=0.3, spineSweep=55, pygSpine=1.4, segCount=9)),
 }
 
 def main():
