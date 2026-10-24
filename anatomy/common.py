@@ -73,20 +73,22 @@ def spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg=0):
 # bend_deg = 0 it returns spine_solid() exactly, so every existing spine is unchanged. Two numbers per family (bend, roll)
 # cover a horn, a hook and an arch; the arc is a circle, which is what the limits of a spine curling under its own
 # growth look like in the fossils and is the smallest description that has a tip direction.
-SPINE_SEGMENTS = 10
+SPINE_SEGMENTS = 24      # 24 Oct 2026: was 10 (a visibly beaded arc at print size); the joints are finer spheres too
 
-def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0, roll_deg=0.0, n=SPINE_SEGMENTS):
+def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0, roll_deg=0.0, n=SPINE_SEGMENTS, flare=0.0):
     """A tapered spine along a circular arc: `bend_deg` is the total turn of the tangent from root to tip (0 = straight,
     180 = a half circle, tip pointing back at the root), `roll_deg` the plane it bends in about the spine's own axis
     (0 up, 90 toward +x, -90 toward -x, 180 down). Root at `at`, leaving along (yaw, pitch) as spine_solid does.
-    Built as n frustums joined by spheres, one closed solid. bend_deg = 0 returns spine_solid()."""
-    if abs(bend_deg) < 1e-9: return spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg)
+    Built as n frustums joined by spheres, one closed solid. bend_deg = 0 returns spine_solid().
+    flare (24 Oct 2026): a root collar, `flare` x base_r wide at the root narrowing to base_r over the first 0.12 of the
+    length, so a horn grows out of the shield instead of standing on it (0 = none, as every spine was)."""
+    if abs(bend_deg) < 1e-9 and flare <= 1.0: return spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg)
     import trimesh
     R = trimesh.transformations.rotation_matrix
-    n = max(2, int(n)); phi = math.radians(bend_deg); rad = length / abs(phi)
+    n = max(2, int(n)); phi = math.radians(bend_deg); rad = length / abs(phi) if abs(phi) > 1e-9 else 0.0
     # the arc in its own frame: along +y from the origin, bending toward +z (roll 0); then rolled about y, pitched, yawed
     ts = np.linspace(0.0, 1.0, n + 1); ang = ts * phi
-    pts = np.c_[np.zeros(n + 1), rad * np.sin(np.abs(ang)), np.sign(phi) * rad * (1 - np.cos(ang))]
+    pts = np.c_[np.zeros(n + 1), rad * np.sin(np.abs(ang)), np.sign(phi) * rad * (1 - np.cos(ang))] if abs(phi) > 1e-9 else np.c_[np.zeros(n + 1), ts * length, np.zeros(n + 1)]
     Mrot = R(math.radians(-yaw_deg), (0, 0, 1)) @ R(math.radians(pitch_deg), (1, 0, 0)) @ R(math.radians(roll_deg), (0, 1, 0))
     W = (np.c_[pts, np.ones(n + 1)] @ Mrot.T)[:, :3] + np.asarray(at, float)
     radii = base_r + (tip_r - base_r) * ts
@@ -100,8 +102,10 @@ def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0
         else:
             x = x / np.linalg.norm(x); T = R(math.acos(float(np.clip(z[2], -1, 1))), x)
         seg.apply_transform(T); seg.apply_translation(a); solids.append(seg)
+        if k == 0 and flare > 1.0:                                       # the collar: over the first 0.12 of the length, flare x base_r -> base_r
+            Lc = max(0.12 * length, 1.0); c = M.frustum(flare * base_r, base_r, Lc); c.apply_transform(T); c.apply_translation(a); solids.append(c)
         if k < n - 1:
-            j = trimesh.creation.icosphere(subdivisions=1, radius=float(radii[k + 1])); j.apply_translation(b); solids.append(j)
+            j = trimesh.creation.icosphere(subdivisions=2, radius=float(radii[k + 1])); j.apply_translation(b); solids.append(j)
     return M.union(*solids) if len(solids) > 1 else solids[0]
 
 def spine_tip(length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0, roll_deg=0.0):

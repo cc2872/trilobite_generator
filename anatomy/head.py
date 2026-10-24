@@ -465,7 +465,7 @@ def spine_ornaments(P, Lc, margin, wh, y_front, y_rear, z_occ, z_genal, yr_genal
         L = P["genalHorn"] * Lc; xg = 0.92 * wh; yg = yr_genal - 1.5
         at = (xg, yg, z_genal(xg, yg) - 0.5)
         h = curved_spine(0.55 * margin + 0.4, 0.45, L, at, yaw_deg=float(P.get("genalHornYaw", 10.0)), pitch_deg=float(P.get("genalHornPitch", 40.0)),
-                         bend_deg=float(P.get("genalHornBend", 0.0)), roll_deg=float(P.get("genalHornRoll", 0.0)))
+                         bend_deg=float(P.get("genalHornBend", 0.0)), roll_deg=float(P.get("genalHornRoll", 0.0)), flare=1.8)   # 24 Oct: a root collar
         out.append(("genalHorns", [h, M.mirror_x(h)], "union"))
     return out
 
