@@ -21,6 +21,11 @@ CASES = {
   "walliserops":    ("shaped", "walliserops", dict(headProngs=3, headProngLen=0.9, headProngStem=0.5, headProngSplay=40, headProngBend=55, occipitalSpine=0.5)),
   "dicranurus":     ("shaped", "odontopleura", dict(occipitalSpine=1.3, occipitalTines=2, occipitalSplay=60, occipitalBend=160, spineBase=0.6, spineSweep=55)),
   "ceratarges":     ("shaped", "lichas", dict(genalHorn=1.5, genalHornPitch=50, genalHornBend=130, genalHornRoll=-25, occipitalSpine=0.8, occipitalBend=120)),
+  "ceratarges_tail": ("shaped", "lichas", dict(genalHorn=1.5, genalHornPitch=50, genalHornBend=130, genalHornRoll=-25, occipitalSpine=0.8, occipitalBend=120,
+                                               pygFrac=0.18, pygRings=2, pygRibRelief=1.2, pygFurrowScale=1.8, pygSpine=2.0, pygSplay=35, pygMarginal=6, pygMarginalLen=0.25,
+                                               pygSpineRise=35, pygSpineBend=80, pygSpineGrow=0.6)),   # 24 Oct 2026: a tail of its own
+  "acanthopyge":    ("shaped", "lichas", dict(pygFrac=0.30, pygWidth=1.0, pygRings=3, pygRibRelief=1.6, pygFurrowScale=2.2, pygSpine=1.0, pygSplay=30, pygMarginal=2, pygMarginalLen=0.7,
+                                               pygSpineRise=10, pygSpineBend=15, pygSpineGrow=0.3, tailOutlineExp=2.4, spineBase=0.4, tipTaper=0.5)),   # lichid: a big ribbed tail, broad lobate spines
   "odontocephalus": ("shaped", "dalmanites", dict(frontSpine=0.7, frontSpineBend=35)),
   "boedaspis":      ("shaped", "odontopleura", dict(genalHorn=1.0, genalHornPitch=35, genalHornBend=90, genalHornRoll=60, occipitalSpine=1.0, occipitalBend=100, spineBase=0.8)),
   # 24 Oct 2026: the spiny Devonian forms whose thoracic spines leave the plane (Koneprusia, Comura, Ceratonurus)
@@ -28,7 +33,9 @@ CASES = {
                                                    occipitalSpine=1.1, occipitalBend=130,
                                                    axialSpine=2.5, axialPitch=70, axialBend=45, axialGrad=0.8,
                                                    pleuralHorn=1.0, pleuralHornPitch=55, pleuralHornBend=75, pleuralHornRoll=-20, pleuralHornGrad=0.4,
-                                                   spineBase=0.0, tipTaper=0.65, spineSweep=55, pygSpine=0.9, segCount=9)),   # the horn IS the pleural spine: no flat blade spine under it
+                                                   spineBase=0.0, tipTaper=0.65, spineSweep=55, segCount=9,
+                                                   pygFrac=0.12, pygRings=3, pygRibRelief=0.8, pygFurrowScale=1.6, pygSpine=1.7, pygSplay=28, pygMarginal=4, pygMarginalLen=0.3,
+                                                   pygSpineRise=30, pygSpineBend=45, pygSpineGrow=0.4)),   # the horn IS the pleural spine: no flat blade spine under it
 }
 
 def main():

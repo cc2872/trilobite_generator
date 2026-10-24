@@ -25,13 +25,20 @@ def plan(P):
     se = lambda c: np.sign(c) * np.abs(c) ** (2.0 / nO)         # superellipse coordinate; se(c) = c when nO = 2
     margin = P["marginHeight"] * h
     rise = P["axisRise"] * h
-    F = furrow_amp(P)
+    F = furrow_amp(P) * float(P.get("pygFurrowScale", 1.0))
+    rib = float(P.get("pygRibRelief", 0.0)) * F                   # 24 Oct 2026: convex ribs between the pleural furrows
     n = int(P["pygRings"])
     def xmax(y):
         yy = np.clip(np.asarray(y, float) / Lp, 0, 1)
         return np.maximum(wp * np.clip(1 - yy ** nO, 0, 1) ** (1.0 / nO), 1.5)
-    Lf = P["pygSpine"] * Lp
-    n_m = int(P["pygMarginal"]); Lm = P["pygMarginalLen"] * Lp
+    Lf_full = P["pygSpine"] * Lp
+    n_m = int(P["pygMarginal"]); Lm_full = P["pygMarginalLen"] * Lp
+    # 24 Oct 2026: with pygSpineRise / Bend / Grow the margin spines run on as curved solid spines (ornaments); the flat
+    # bump in the plan then stops at 0.55 of its length and the solid spine takes over from there (the blade-into-spine
+    # hand-over of the pleural horns), so no flat blade runs on under a rising spine.
+    tube = abs(float(P.get("pygSpineRise", 0.0))) > 1e-6 or abs(float(P.get("pygSpineBend", 0.0))) > 1e-6 or float(P.get("pygSpineGrow", 0.0)) > 0.01
+    cut = 0.55 if tube else 1.0
+    Lf = Lf_full * cut; Lm = Lm_full * cut
     sp = math.radians(P["pygSplay"])
     phi_f = math.atan(wp / Lp * math.tan(math.pi / 2 - sp)) if Lf > 0.5 else None
     hphi_f = math.radians(13)
@@ -58,6 +65,7 @@ def plan(P):
         r = (np.abs(x / wp) ** nO + np.abs(y / Lp) ** nO) ** (1.0 / nO)
         Lmax = max(Lf if Lf > 0.5 else 0.0, Lm if n_m else 0.0, 1e-6)
         return np.clip((r - 1) * np.hypot(x, y) / np.maximum(r, 1e-6) / Lmax, 0, 1)
+    def ov_pre(ax, y): return np.where(y > 0.35 * Lp, outside(ax, y), 0.0)   # the margin spines' region (no ribs there)
     def zfun(x, y):
         ax = np.abs(x); xm = xmax(y); yy = np.clip(y / Lp, 0, 1)
         nT = P["tailDomeExp"]
@@ -66,12 +74,16 @@ def plan(P):
         ay = a * (1 - 0.85 * np.clip(yy / ka, 0, 1))
         z += rise * plateau(x, ay) * (1 - smoothstep((Lax - 0.10) * Lp, (Lax + 0.10) * Lp, y))
         z -= F * trough(ax - (ay + 0.6), 0.9) * (y < (Lax + 0.05) * Lp)
+        dy_k = Lp * ka / (n + 1.5)                                 # the furrow spacing
         for k in range(n):
             yk = Lp * ka * (k + 1) / (n + 1.5)
             fade = 1 - 0.6 * k / max(n, 1)
             z -= 0.7 * F * fade * trough(y - yk, 0.8) * plateau(x, ay + 1.5, 1.0)
             px = np.clip((ax - ay) / np.maximum(xm - ay, 1), 0, 1); ly = yk + px * 0.5 * Lp * ka / (n + 1.5)
             z -= 0.6 * F * fade * trough(y - ly, 0.9) * (ax > ay + 1.0)
+            if rib > 0.01:                                         # the rib: a cos^2 ridge over the pleural field behind this furrow, fading to the margin
+                lm = ly + 0.5 * dy_k; w_ = np.clip(1 - np.abs(y - lm) / (0.45 * dy_k), 0, 1)
+                z += rib * fade * (np.sin(0.5 * np.pi * w_) ** 2) * (ax > ay + 1.0) * (1 - 0.6 * px) * (1 - np.clip(ov_pre(ax, y), 0, 1))
         if bwf > 0.005:
             bw = bwf * wp
             dist = np.minimum(xm - ax, (1 - yy) * Lp)
@@ -84,8 +96,15 @@ def plan(P):
         drop = np.minimum(t + c + 0.7 * F + 0.3, np.maximum(z - 1.2, 0))
         z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y))
         return z
+    # the margin spines, for ornaments(): where each leaves the base margin and how far it runs as a bump (24 Oct 2026)
+    spines = []                                                   # (phi, bump length as planned, full length asked for, hh, e)
+    if Lf > 0.5: spines.append((phi_f, Lf, Lf_full, hphi_f, 1.5))
+    for pk in phi_m: spines.append((pk, Lm, Lm_full, hphi_m, 1.2))
+    def base_pt(phi): return wp * se(math.cos(phi)), Lp * se(math.sin(phi))
+    def margin_xy(phi):
+        mx, my = margin_pt(np.asarray(phi, float)); return np.c_[mx, my]
     return dict(outline=outline, zfun=zfun, t=t, Lp=Lp, wp=wp, a=a, margin=margin, u_a=a / max(wp, 1e-6),
-                axis_len=Lax, border_frac=bwf, outline_exp=nO)
+                axis_len=Lax, border_frac=bwf, outline_exp=nO, spines=spines, base_pt=base_pt, margin_xy=margin_xy)
 
 def shell(P, S, grid=GRID_TAIL):
     tail = M.heightfield_shell(S["outline"], S["zfun"], S["t"], nu=grid[0], nv=grid[1])
@@ -96,8 +115,29 @@ def solid(P, S, grid=GRID_TAIL):
     return M.under_envelope(S["outline"], S["zfun"], nu=grid[0], nv=grid[1], floor=0.0)
 
 def ornaments(P, S):
-    """Terminal spine, then the posterior prong. Forks and marginal spines are the margin itself (in the plan)."""
+    """Terminal spine, then the posterior prong. Forks and marginal spines are the margin itself (in the plan); with
+    pygSpineRise / Bend / Grow (24 Oct 2026) each of them runs on as a curved solid spine that continues the bump."""
     out = []
+    rise, bend, grow = float(P.get("pygSpineRise", 0.0)), float(P.get("pygSpineBend", 0.0)), float(P.get("pygSpineGrow", 0.0))
+    if (abs(rise) > 1e-6 or abs(bend) > 1e-6 or grow > 0.01) and S.get("spines"):
+        for phi_k, Lk, L_full, hh, e in S["spines"]:
+            x0, y0 = S["base_pt"](phi_k); r0 = math.hypot(x0, y0); dx, dy = x0 / r0, y0 / r0        # the radial direction of this spine
+            # the bump's half-width across the spine at each fraction of its length, measured on the actual margin curve
+            fr = np.linspace(0.0, 0.97, 24); dphi = hh * (1 - fr ** (1.0 / e))
+            pa = S["margin_xy"](phi_k + dphi); pb = S["margin_xy"](phi_k - dphi); half_w = 0.5 * np.hypot(*(pa - pb).T)
+            s_root = 0.5                                                                              # root inside the bump
+            rx, ry = x0 + dx * s_root * Lk, y0 + dy * s_root * Lk
+            zr = float(np.asarray(S["zfun"](np.array([rx]), np.array([ry]))).ravel()[0])
+            yaw = math.degrees(math.atan2(dx, dy))                                                   # spine_solid's +y is rear; yaw + toward +x
+            def bump_section(W, ts, ra, rb, Lk=Lk, x0=x0, y0=y0, dx=dx, dy=dy, fr=fr, half_w=half_w):   # over the bump: its width and height
+                sdist = ((W[:, 0] - x0) * dx + (W[:, 1] - y0) * dy); frac = sdist / Lk; inside = (frac < 0.97) & (ts < 0.8)
+                hw = np.interp(np.clip(frac, 0, 0.97), fr, half_w); zz = np.asarray(S["zfun"](W[:, 0], W[:, 1])).ravel()
+                return np.where(inside, np.maximum(hw, 0.35), ra), np.where(inside, np.maximum(0.5 * zz + 0.3, 0.35), rb)   # +0.3: the crest stands proud of the plate (a flush top met it tangentially: sliver faces)
+            L = (1 - s_root) * Lk + (L_full - Lk) + grow * S["Lp"]                                  # to the bump's planned tip, the length cut from the plan, the growth
+            r_leave = max(float(half_w[-1]), 0.6)                                                   # the bump's half-width where the solid takes over
+            h = curved_spine(r_leave, 0.45, L, (rx, ry, 0.5 * zr), yaw_deg=yaw, pitch_deg=0.0, bend_deg=rise + bend, roll_deg=0.0,
+                             flare=1.0, plate=max(zr, 0.8), profile=bump_section)                   # tangent to the bump, curving up from it
+            out.append(("pygSpineHorns", [h, M.mirror_x(h)], "union"))
     if P["termSpine"] > 0.02:
         out.append(("termSpine", curved_spine(0.5 * S["margin"], 0.6, P["termSpine"] * S["Lp"], (0, 0.85 * S["Lp"], 0.5 * S["margin"]), 0, 0.0,
                                               float(P.get("termBend", 0.0)), 0.0)))
