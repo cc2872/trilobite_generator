@@ -129,7 +129,7 @@ def ornaments(P, S):
         def blade_section(W, ts, ra, rb):                                   # over the plate: the blade's own chord and height
             x = np.abs(W[:, 0]); inside = (x < xt) & (ts < 0.8)
             ra2 = np.where(inside, np.maximum(np.interp(x, xs, 0.5 * chord), 0.35), ra)
-            rb2 = np.where(inside, np.maximum(np.interp(x, xs, zmid) + 0.3, 0.35), rb)   # +0.3: the crest stands proud of the blade (flush was a tangent meeting: sliver faces)
+            rb2 = np.where(inside, np.maximum(np.interp(x, xs, zmid) + 0.15, 0.35), rb)   # +0.15: the crest stands proud of the blade (flush was a tangent meeting: sliver faces)
             return ra2, rb2
         h = curved_spine(r_leave, 0.45, L, (x0, y0, z0), yaw_deg=90.0 - float(P["spineSweep"]), pitch_deg=slope,
                          bend_deg=float(P.get("pleuralHornPitch", 45.0)) + float(P.get("pleuralHornBend", 0.0)) - slope, roll_deg=float(P.get("pleuralHornRoll", 0.0)),

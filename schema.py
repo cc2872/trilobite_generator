@@ -160,6 +160,7 @@ PARAMS = [
     Param("pygSpineRise", "Tail spine rise", 0, 0, 80, 5, "Spines", "The tail's margin spines (the pair and the marginals) leave the shield at this pitch", unit="deg"),
     Param("pygSpineBend", "Tail spine bend", 0, -180, 180, 5, "Spines", "Their arc, root to tip", unit="deg"),
     Param("pygSpineGrow", "Tail spine extra length", 0.0, 0.0, 2.0, 0.05, "Spines", "Each margin spine runs on as a solid spine this much further / shield length (0 = the flat bump as built)"),
+    Param("pygSpineBlade", "Tail spine blade fraction", 1.0, 0.0, 1.0, 0.05, "Spines", "How much of each margin spine is the flat blade of the shield (1 = all, as built; 0 = a round spine straight from the margin; 0.6 = a lichid lobe with a spine tip). Only with rise / bend / extra length."),
     # ---- curved spines (23 Oct 2026, schema 6.5): every grafted spine may follow a circular arc. bend = the tangent's total
     #      turn root to tip (0 = straight, as before); roll = the plane it bends in about the spine's own axis (0 up, 90 out
     #      toward the side, 180 down). Defaults 0, so every preset and reading is unchanged.
@@ -225,7 +226,7 @@ UI = {
         # termSpine/macroIndex/macroAmp/pygMarginalLen, not editable individually at all (only blendable via
         # the "Spines" dial, or for the last three, not reachable from the UI whatsoever).
         "Spines": ["genalSpine", "occipitalSpine", "axialSpine", "axialPitch", "axialBend", "axialGrad", "pleuralHorn", "pleuralHornPitch", "pleuralHornBend", "pleuralHornRoll", "pleuralHornGrad", "spineBase", "spineGrad", "spineSweep",
-                   "macroIndex", "macroAmp", "pygSpine", "pygSplay", "termSpine", "pygMarginal", "pygMarginalLen", "pygSpineRise", "pygSpineBend", "pygSpineGrow"],
+                   "macroIndex", "macroAmp", "pygSpine", "pygSplay", "termSpine", "pygMarginal", "pygMarginalLen", "pygSpineRise", "pygSpineBend", "pygSpineGrow", "pygSpineBlade"],
     },
     "ruler": ["maxAngle", "clearance", "boreDia", "barrelR", "nKnuckles"],
     "arm": {"path": "genalPath", "curve": "genalCurve", "taper": "genalTaper"},
@@ -272,7 +273,7 @@ CELLS = {
     "b3": dict(label="Tail axis", doc="the pygidial axis and its rings", primary=["pygRings", "tailRelief", "tailDomeExp"],
                more=["pygRibRelief", "pygFurrowScale", "pygAxisLen", "pygAxisFrac", "tailWall", "termSpine", "termBend"]),
     "a3": dict(label="Tail field + margin", doc="the pleural field, border, forks and marginal spines", primary=["pygWidth", "pygSpine", "pygMarginal"],
-               more=["tailOutlineExp", "pygBorderWidth", "pygSplay", "pygMarginalLen", "pygSpineRise", "pygSpineBend", "pygSpineGrow", "tailProngs", "tailProngLen", "tailProngSplay", "tailProngStem", "tailProngCenter", "tailProngWidth", "tailProngCurl", "tailProngBend"]),
+               more=["tailOutlineExp", "pygBorderWidth", "pygSplay", "pygMarginalLen", "pygSpineRise", "pygSpineBend", "pygSpineGrow", "pygSpineBlade", "tailProngs", "tailProngLen", "tailProngSplay", "tailProngStem", "tailProngCenter", "tailProngWidth", "tailProngCurl", "tailProngBend"]),
     "ruler": dict(label="Print + hinge", doc="manufacturing, not morphology", primary=["maxAngle", "clearance", "nKnuckles"], more=["boreDia", "barrelR"]),
 }
 VERTICAL_SPINES = ["occipitalSpine", "axialSpine", "termSpine"]     # their own family (10 Sep verdict): dorsal, not a cell prong
