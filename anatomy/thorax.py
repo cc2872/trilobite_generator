@@ -115,13 +115,25 @@ def ornaments(P, S):
         r = 0.45 * S["margin"]; L = P["axialSpine"] * S["h"] * (1.0 + float(P.get("axialGrad", 0.0)) * frac)
         out.append(("axialSpine", curved_spine(0.6 * r + 0.6, 0.5, L, (0, S["ovl"] + 0.45 * (S["d"] - S["ovl"]), S["h"] + S["rise"] - 1.0), 0,
                                                pitch_deg=float(P.get("axialPitch", 60.0)), bend_deg=float(P.get("axialBend", 0.0)), roll_deg=0.0)))   # 24 Oct 2026: a curve; defaults = the 60 deg rod
-    if float(P.get("pleuralHorn", 0.0)) > 0.02 and "X_tip" in S:              # 24 Oct 2026: a horn from each blade tip (Koneprusia)
+    if float(P.get("pleuralHorn", 0.0)) > 0.02 and "X_tip" in S:              # 24 Oct 2026: a horn continuing each pleural blade (Koneprusia)
         L = P["pleuralHorn"] * S["w"] * (1.0 + float(P.get("pleuralHornGrad", 0.0)) * frac)
-        xt = S["X_tip"]; yt = float(S["outline"](1.0, 0.5)[1]); x0 = max(xt - 1.5, 0.5 * S["w"])
-        zt = float(np.asarray(S["zfun"](np.array([x0]), np.array([yt]))).ravel()[0])   # the blade's height at the root: the horn is as thick as that
-        h = curved_spine(0.45 * S["margin"] + 0.5, 0.45, L, (x0, yt, 0.5 * zt), yaw_deg=90.0 - float(P["spineSweep"]),
-                         pitch_deg=float(P.get("pleuralHornPitch", 45.0)), bend_deg=float(P.get("pleuralHornBend", 0.0)), roll_deg=float(P.get("pleuralHornRoll", 0.0)),
-                         flare=1.5, plate=max(zt, 0.8))
+        # The horn leaves the plate with the section the blade has at its tip (chord across, height up) and tapers from
+        # there; while its centreline is still over the plate its section IS the blade's, so nothing of the blade runs
+        # on underneath. The root is 2.5 mm inboard of the tip, at the blade's mid-height, sloping as the blade does.
+        # (A root at the tip was a 4.7 mm bulb on a 1.8 mm blade kinked off it at 55 deg -- the junction close-ups, 11:10.)
+        xt = float(S["X_tip"]); xs = np.linspace(0.45 * S["w"], xt, 120); yf, yr = S["edges"](xs)
+        chord = np.asarray(yr) - np.asarray(yf); ymid = 0.5 * (np.asarray(yf) + np.asarray(yr)); zs = np.asarray(S["zfun"](xs, ymid)).ravel(); zmid = 0.5 * zs
+        x0 = max(xt - 2.5, 0.45 * S["w"]); y0 = float(np.interp(x0, xs, ymid)); z0 = float(np.interp(x0, xs, zmid))
+        r_leave = max(0.5 * float(np.interp(xt - 0.3, xs, chord)), 0.6)   # the blade's half-chord where it ends
+        slope = float(np.degrees(np.arctan2(float(zmid[-1]) - z0, max(xt - x0, 1e-6))))
+        def blade_section(W, ts, ra, rb):                                   # over the plate: the blade's own chord and height
+            x = np.abs(W[:, 0]); inside = (x < xt) & (ts < 0.8)
+            ra2 = np.where(inside, np.maximum(np.interp(x, xs, 0.5 * chord), 0.35), ra)
+            rb2 = np.where(inside, np.maximum(np.interp(x, xs, zmid), 0.35), rb)
+            return ra2, rb2
+        h = curved_spine(r_leave, 0.45, L, (x0, y0, z0), yaw_deg=90.0 - float(P["spineSweep"]), pitch_deg=slope,
+                         bend_deg=float(P.get("pleuralHornPitch", 45.0)) + float(P.get("pleuralHornBend", 0.0)) - slope, roll_deg=float(P.get("pleuralHornRoll", 0.0)),
+                         flare=1.0, plate=max(2.0 * z0, 0.8), profile=blade_section)
         out.append(("pleuralHorns", [h, M.mirror_x(h)], "union"))
     return out
 

@@ -28,7 +28,7 @@ CASES = {
                                                    occipitalSpine=1.1, occipitalBend=130,
                                                    axialSpine=2.5, axialPitch=70, axialBend=45, axialGrad=0.8,
                                                    pleuralHorn=1.0, pleuralHornPitch=55, pleuralHornBend=75, pleuralHornRoll=-20, pleuralHornGrad=0.4,
-                                                   spineBase=0.0, tipTaper=0.9, spineSweep=55, pygSpine=0.9, segCount=9)),   # the horn IS the pleural spine: no flat blade spine under it
+                                                   spineBase=0.0, tipTaper=0.65, spineSweep=55, pygSpine=0.9, segCount=9)),   # the horn IS the pleural spine: no flat blade spine under it
 }
 
 def main():
