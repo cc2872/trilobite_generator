@@ -82,7 +82,8 @@ def plan(P, i):
         z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y - yf))
         return z
     return dict(outline=outline, zfun=zfun, edges=edges, t=t, w=w, a=a, d=d, ovl=ovl, margin=margin, rise=rise, h=h,
-                X_tip=X_tip, u_a=a / X_tip, last=(i == int(P["segCount"]) - 1), i=i, n=int(P["segCount"]))
+                X_tip=X_tip, u_a=a / X_tip, last=(i == int(P["segCount"]) - 1), i=i, n=int(P["segCount"]),
+                axial=dict(L=float(P["axialSpine"]) * h, pitch=float(P.get("axialPitch", 60.0)), bend=float(P.get("axialBend", 0.0)), grad=float(P.get("axialGrad", 0.0))))   # the row's own P reaches ornaments() this way (rows model: _P_row)
 
 def _doublure(seg, S, P):
     """Vertical rim + inward lip along the blade margin, only on broad square-tipped pleurae (as in the BREP builder)."""
@@ -110,11 +111,12 @@ def solid(P, S, grid=GRID_SEG):
 def ornaments(P, S):
     """Solids unioned onto the part AFTER the joint, in this order. Plan frame."""
     out = []
-    frac = (S.get("i", 0) / max(S.get("n", 1) - 1, 1))                       # 0 on the first segment, 1 on the last
-    if P["axialSpine"] > 0.02:
-        r = 0.45 * S["margin"]; L = P["axialSpine"] * S["h"] * (1.0 + float(P.get("axialGrad", 0.0)) * frac)
+    frac = min(max(S.get("i", 0) / max(S.get("n", 1) - 1, 1), 0.0), 1.0)      # 0 on the first segment, 1 on the last
+    A = S.get("axial") or dict(L=float(P["axialSpine"]) * S["h"], pitch=float(P.get("axialPitch", 60.0)), bend=float(P.get("axialBend", 0.0)), grad=float(P.get("axialGrad", 0.0)))
+    if A["L"] > 0.02 * S["h"]:
+        r = 0.45 * S["margin"]; L = A["L"] * (1.0 + A["grad"] * frac)
         out.append(("axialSpine", curved_spine(0.6 * r + 0.6, 0.5, L, (0, S["ovl"] + 0.45 * (S["d"] - S["ovl"]), S["h"] + S["rise"] - 1.0), 0,
-                                               pitch_deg=float(P.get("axialPitch", 60.0)), bend_deg=float(P.get("axialBend", 0.0)), roll_deg=0.0)))   # 24 Oct 2026: a curve; defaults = the 60 deg rod
+                                               pitch_deg=A["pitch"], bend_deg=A["bend"], roll_deg=0.0)))   # 24 Oct 2026: a curve; defaults = the 60 deg rod
     if float(P.get("pleuralHorn", 0.0)) > 0.02 and "X_tip" in S:              # 24 Oct 2026: a horn continuing each pleural blade (Koneprusia)
         L = P["pleuralHorn"] * S["w"] * (1.0 + float(P.get("pleuralHornGrad", 0.0)) * frac)
         # The horn leaves the plate with the section the blade has at its tip (chord across, height up) and tapers from

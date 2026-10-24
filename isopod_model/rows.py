@@ -58,8 +58,15 @@ ROW_KEYS = dict(
     fulcrum=("frac", "where the pleura bends down, / (width - axis)"),
     slope=("frac", "how far the pleura drops from the fulcrum to the edge / relief"),
     rear_round=("frac", "the rear margin's roundness (pygidial end): 0 straight across, 1 a half-ellipse (slab model only)"),
+    # 24 Oct 2026: the row's own axial spine (the studio's tip and mid dots in ROWS SIDE). ax_own 0 = the preset's axial spine
+    # (P.axialSpine / Pitch / Bend / Grad) as on every row; 1 = this row's ax_len / ax_pitch / ax_bend instead.
+    ax_own=("0/1", "1 = this row's axial spine is its own (ax_len, ax_pitch, ax_bend); 0 = the preset's"),
+    ax_len=("mm", "this row's axial spine length (with ax_own; 0 = none)"),
+    ax_pitch=("deg", "how steeply it leaves the ring (with ax_own)"),
+    ax_bend=("deg", "its arc, root to tip (with ax_own; + recurves the tip back)"),
     kind=("", "'thorax' or 'pyg' (which block the preset put it in; a label, not a rule)"),
 )
+ROW_EXTRA = dict(ax_own=0.0, ax_len=0.0, ax_pitch=60.0, ax_bend=0.0)   # optional keys: a row without them gets these (saved bodies predate them)
 BODY_KEYS = dict(
     model=("", "'thorax': the generator's own segments and tail, as the site already prints them (default); 'slab': the tergite slab"),
     thorax_rows=("n", "number of thoracic rows (the preset's segCount); rows are re-spaced over the thorax length"),
@@ -132,7 +139,8 @@ def boring(P=None, n_thorax=9, n_pyg=6):
 # the range every row / body number must lie in (model mm, deg, fractions): what the surfaces are drawn for, and a
 # ceiling on what a build may cost. Outside it the spec is refused (400), never built.
 ROW_RANGE = dict(len=(0.2, 500.0), width=(0.5, 400.0), axis=(0.05, 0.9), relief=(0.5, 200.0), margin=(0.0, 1.0), sweep=(-85.0, 85.0),
-                 curve=(-85.0, 85.0), tip=(0.0, 400.0), tip_w=(0.02, 5.0), arch=(0.0, 2.0), fulcrum=(0.02, 0.98), slope=(0.0, 3.0), rear_round=(0.0, 1.0))
+                 curve=(-85.0, 85.0), tip=(0.0, 400.0), tip_w=(0.02, 5.0), arch=(0.0, 2.0), fulcrum=(0.02, 0.98), slope=(0.0, 3.0), rear_round=(0.0, 1.0),
+                 ax_own=(0.0, 1.0), ax_len=(0.0, 500.0), ax_pitch=(0.0, 90.0), ax_bend=(-180.0, 180.0))
 BODY_RANGE = dict(thorax_rows=(1, 80), pyg_rows=(0, 80), thorax_len=(0.5, 2000.0), pyg_len=(0.0, 2000.0), term_spine=(0.0, 500.0),
                   min_joint_mm=(1.0, 100.0), print_scale=(0.1, 20.0))
 MAX_ROWS = 80
@@ -149,6 +157,7 @@ def _num(v, k, lo, hi, where):
 def check_row(row, where="row"):
     """A full row: kinds and every number inside ROW_RANGE."""
     if row.get("kind") not in ("thorax", "pyg"): raise ValueError(f"{where}: kind must be 'thorax' or 'pyg'")
+    for k, v in ROW_EXTRA.items(): row.setdefault(k, v)
     for k, (lo, hi) in ROW_RANGE.items(): row[k] = _num(row.get(k), k, lo, hi, where)
     return row
 
@@ -164,7 +173,8 @@ def validate_list(lst):
         bad = set(r) - set(ROW_KEYS)
         if bad: raise KeyError(f"row {i}: unknown row keys {sorted(bad)} (have {sorted(ROW_KEYS)})")
         prev = out[-1] if out else base
-        row = dict(prev); row.update({k: (str(v) if k == "kind" else v) for k, v in r.items()})
+        row = dict(prev); row.update(ROW_EXTRA)                       # a row's OWN spine is never inherited from the row before (only its shape keys are)
+        row.update({k: (str(v) if k == "kind" else v) for k, v in r.items()})
         out.append(check_row(row, f"row {i}"))
     seen_pyg = False                                               # kinds must be contiguous: all thorax, then all pyg
     for i, r in enumerate(out):
@@ -370,6 +380,9 @@ def _P_row(P, row, i, inner=False, n_rows=None):
     Pi["tipSweep"] = math.tan(math.radians(max(min(row["sweep"], 80.0), -80.0))) * max(w - a, 1e-6) / row["len"]
     sp = np.zeros(max(n, (n_rows or 0), i + 1)); sp[i] = max(row["tip"], 0.0) / w; Pi["_spines"] = sp
     Pi["spineSweep"] = P["spineSweep"] + row["curve"]
+    if float(row.get("ax_own", 0.0)) >= 0.5:                               # the row's own axial spine (24 Oct 2026)
+        Pi["axialSpine"] = float(row.get("ax_len", 0.0)) / max(float(row["relief"]), 1e-6); Pi["axialGrad"] = 0.0
+        Pi["axialPitch"] = float(row.get("ax_pitch", 60.0)); Pi["axialBend"] = float(row.get("ax_bend", 0.0))
     if inner: Pi["clearance"] = 0.0; Pi["wall"] = min(P["wall"], 0.6)
     return Pi
 
