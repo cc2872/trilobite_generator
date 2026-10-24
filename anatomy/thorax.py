@@ -118,9 +118,10 @@ def ornaments(P, S):
     if float(P.get("pleuralHorn", 0.0)) > 0.02 and "X_tip" in S:              # 24 Oct 2026: a horn from each blade tip (Koneprusia)
         L = P["pleuralHorn"] * S["w"] * (1.0 + float(P.get("pleuralHornGrad", 0.0)) * frac)
         xt = S["X_tip"]; yt = float(S["outline"](1.0, 0.5)[1]); x0 = max(xt - 1.5, 0.5 * S["w"])
-        z0 = float(np.asarray(S["zfun"](np.array([x0]), np.array([yt]))).ravel()[0]) - 0.6
-        h = curved_spine(0.45 * S["margin"] + 0.5, 0.45, L, (x0, yt, z0), yaw_deg=90.0 - float(P["spineSweep"]),
-                         pitch_deg=float(P.get("pleuralHornPitch", 45.0)), bend_deg=float(P.get("pleuralHornBend", 0.0)), roll_deg=float(P.get("pleuralHornRoll", 0.0)), flare=1.5)
+        zt = float(np.asarray(S["zfun"](np.array([x0]), np.array([yt]))).ravel()[0])   # the blade's height at the root: the horn is as thick as that
+        h = curved_spine(0.45 * S["margin"] + 0.5, 0.45, L, (x0, yt, 0.5 * zt), yaw_deg=90.0 - float(P["spineSweep"]),
+                         pitch_deg=float(P.get("pleuralHornPitch", 45.0)), bend_deg=float(P.get("pleuralHornBend", 0.0)), roll_deg=float(P.get("pleuralHornRoll", 0.0)),
+                         flare=1.5, plate=max(zt, 0.8))
         out.append(("pleuralHorns", [h, M.mirror_x(h)], "union"))
     return out
 

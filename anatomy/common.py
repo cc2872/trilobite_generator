@@ -75,14 +75,17 @@ def spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg=0):
 # growth look like in the fossils and is the smallest description that has a tip direction.
 SPINE_SEGMENTS = 24      # 24 Oct 2026: was 10 (a visibly beaded arc at print size); the joints are finer spheres too
 
-def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0, roll_deg=0.0, n=SPINE_SEGMENTS, flare=0.0):
+def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0, roll_deg=0.0, n=SPINE_SEGMENTS, flare=0.0, plate=None):
     """A tapered spine along a circular arc: `bend_deg` is the total turn of the tangent from root to tip (0 = straight,
     180 = a half circle, tip pointing back at the root), `roll_deg` the plane it bends in about the spine's own axis
     (0 up, 90 toward +x, -90 toward -x, 180 down). Root at `at`, leaving along (yaw, pitch) as spine_solid does.
     Built as one swept tube (sweep_tube). bend_deg = 0 returns spine_solid().
     flare (24 Oct 2026): a root collar, `flare` x base_r wide at the root narrowing to base_r over the first 0.12 of the
-    length, so a horn grows out of the shield instead of standing on it (0 = none, as every spine was)."""
-    if abs(bend_deg) < 1e-9 and flare <= 1.0: return spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg)
+    length, so a horn grows out of the shield instead of standing on it (0 = none, as every spine was).
+    plate (24 Oct 2026, later): the thickness of the plate the spine leaves, model mm. The root is then an ELLIPSE no
+    thicker than the plate (vertically) and `flare` wide across it, turning round over the first 0.35 of the length: a
+    spine is the plate continuing, not a rod stood on it (a 14 mm collar on a 3 mm shield edge looked unnatural)."""
+    if abs(bend_deg) < 1e-9 and flare <= 1.0 and plate is None: return spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg)
     import trimesh
     R = trimesh.transformations.rotation_matrix
     n = max(2, int(n)); phi = math.radians(bend_deg); rad = length / abs(phi) if abs(phi) > 1e-9 else 0.0
@@ -91,30 +94,43 @@ def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0
     pts = np.c_[np.zeros(n + 1), rad * np.sin(np.abs(ang)), np.sign(phi) * rad * (1 - np.cos(ang))] if abs(phi) > 1e-9 else np.c_[np.zeros(n + 1), ts * length, np.zeros(n + 1)]
     Mrot = R(math.radians(-yaw_deg), (0, 0, 1)) @ R(math.radians(pitch_deg), (1, 0, 0)) @ R(math.radians(roll_deg), (0, 1, 0))
     W = (np.c_[pts, np.ones(n + 1)] @ Mrot.T)[:, :3] + np.asarray(at, float)
-    radii = base_r + (tip_r - base_r) * ts
-    if flare > 1.0:                                                       # the collar: flare x base_r at the root -> base_r at 0.12 of the length
-        c = np.clip(ts / 0.12, 0, 1); radii = np.maximum(radii, base_r * (flare - (flare - 1.0) * (3 * c ** 2 - 2 * c ** 3)))
-    return sweep_tube(W, radii)
+    radii = base_r + (tip_r - base_r) * ts; ra = radii.copy()
+    if flare > 1.0:                                                       # the collar: flare x base_r at the root -> base_r at 0.12 of the length (in the plane only)
+        c = np.clip(ts / 0.12, 0, 1); ra = np.maximum(ra, base_r * (flare - (flare - 1.0) * (3 * c ** 2 - 2 * c ** 3)))
+    if plate is None: return sweep_tube(W, ra)
+    c = np.clip(ts / 0.35, 0, 1); c = 3 * c ** 2 - 2 * c ** 3                # the vertical half-thickness: the plate's at the root -> round by 0.35
+    rb = np.minimum(radii, 0.5 * float(plate)) * (1 - c) + radii * c
+    return sweep_tube(W, ra, rb=rb)
 
-def sweep_tube(path, radii, sections=32):
+def sweep_tube(path, radii, rb=None, sections=32):
     """One closed surface along a polyline: a ring of `sections` points at every path point (radius radii[i]), frames
     carried by parallel transport so the rings never twist, flat caps at both ends. Replaces the frustum-and-sphere
-    chain (24 Oct 2026): that was one solid per segment with a seam at every joint, a visibly ribbed horn at print size."""
+    chain (24 Oct 2026): that was one solid per segment with a seam at every joint, a visibly ribbed horn at print size.
+    rb: a second radius per point for an elliptical section -- radii[i] across the HORIZONTAL (in-plane) axis, rb[i] up
+    the vertical one; the frames are then horizontal-anchored (no transport) so "vertical" stays vertical."""
     import trimesh
     P = np.asarray(path, float); r = np.asarray(radii, float); m = len(P)
     T = np.gradient(P, axis=0); T /= np.maximum(np.linalg.norm(T, axis=1), 1e-12)[:, None]
-    N = np.cross(T[0], [1.0, 0, 0]);
-    if np.linalg.norm(N) < 1e-6: N = np.cross(T[0], [0, 1.0, 0])
-    N /= np.linalg.norm(N); frames = [N]
-    for i in range(1, m):                                                 # parallel transport of N along the tangent
-        b = np.cross(T[i - 1], T[i]); sb = np.linalg.norm(b)
-        if sb > 1e-9:
-            b /= sb; th = math.atan2(sb, float(np.dot(T[i - 1], T[i])))
-            N = N * math.cos(th) + np.cross(b, N) * math.sin(th) + b * np.dot(b, N) * (1 - math.cos(th))
-        N = N - T[i] * np.dot(N, T[i]); N /= max(np.linalg.norm(N), 1e-12); frames.append(N)
+    if rb is not None:                                                    # horizontal-anchored frames: N = T x z (the in-plane direction)
+        rb = np.asarray(rb, float); frames = []; prev = None
+        for i in range(m):
+            N = np.cross(T[i], [0, 0, 1.0]); nn = np.linalg.norm(N)
+            N = N / nn if nn > 0.1 else (prev if prev is not None else np.array([1.0, 0, 0]))
+            N = N - T[i] * np.dot(N, T[i]); N /= max(np.linalg.norm(N), 1e-12); frames.append(N); prev = N
+    else:
+        N = np.cross(T[0], [1.0, 0, 0]);
+        if np.linalg.norm(N) < 1e-6: N = np.cross(T[0], [0, 1.0, 0])
+        N /= np.linalg.norm(N); frames = [N]
+        for i in range(1, m):                                             # parallel transport of N along the tangent
+            b = np.cross(T[i - 1], T[i]); sb = np.linalg.norm(b)
+            if sb > 1e-9:
+                b /= sb; th = math.atan2(sb, float(np.dot(T[i - 1], T[i])))
+                N = N * math.cos(th) + np.cross(b, N) * math.sin(th) + b * np.dot(b, N) * (1 - math.cos(th))
+            N = N - T[i] * np.dot(N, T[i]); N /= max(np.linalg.norm(N), 1e-12); frames.append(N)
     th = np.linspace(0, 2 * np.pi, sections, endpoint=False); V = []
     for i in range(m):
-        Bv = np.cross(T[i], frames[i]); V.append(P[i] + r[i] * (np.cos(th)[:, None] * frames[i] + np.sin(th)[:, None] * Bv))
+        Bv = np.cross(T[i], frames[i]); rbi = r[i] if rb is None else rb[i]
+        V.append(P[i] + r[i] * np.cos(th)[:, None] * frames[i] + rbi * np.sin(th)[:, None] * Bv)
     V = np.vstack(V); F = []
     for i in range(m - 1):
         for j in range(sections):
