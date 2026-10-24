@@ -44,13 +44,25 @@ def plan(P):
     hphi_f = math.radians(13)
     phi_m = [math.radians(50 + 80 * (k + 0.5) / n_m) for k in range(n_m)]
     hphi_m = math.radians(80 / max(n_m, 1)) * 0.5 * 1.3
+    # the margin spines as ONE list (24 Oct 2026): each dict(phi, Lk = the flat bump's length in the plan, L_full = the whole
+    # spine, hh, e, rise, roll) -- the preset's pair + marginals, or the body's own `_tailSpines` list (the studio's dots:
+    # phi deg, len mm, rise, roll, blade), right side only (phi <= 90), mirrored here. rise / roll None = P's.
+    spines = []
+    own = P.get("_tailSpines")
+    if own:
+        for sd in own:
+            L_full = float(sd.get("len", 0.0)); bl = float(sd.get("blade", 0.0)); phi_k = math.radians(float(sd.get("phi", 90.0)))
+            if L_full > 0.5: spines.append(dict(phi=phi_k, Lk=L_full * bl, L_full=L_full, hh=hphi_f, e=1.5, rise=float(sd.get("rise", 30.0)), roll=float(sd.get("roll", 0.0))))
+        tube = True
+    else:
+        if Lf_full > 0.5: spines.append(dict(phi=phi_f, Lk=Lf, L_full=Lf_full, hh=hphi_f, e=1.5, rise=None, roll=None))
+        for pk in phi_m: spines.append(dict(phi=pk, Lk=Lm, L_full=Lm_full, hh=hphi_m, e=1.2, rise=None, roll=None))
     def bump(phi, phi_k, hh, e): return np.clip(1 - np.abs(phi - phi_k) / hh, 0, 1) ** e
     def radial_extra(phi):
         ex = np.zeros_like(phi)
-        if Lf > 0.5:
-            for pf in (phi_f, math.pi - phi_f): ex = np.maximum(ex, Lf * bump(phi, pf, hphi_f, 1.5))
-        for pk in phi_m:
-            for pm in (pk, math.pi - pk): ex = np.maximum(ex, Lm * bump(phi, pm, hphi_m, 1.2))
+        for sd in spines:
+            if sd["Lk"] > 0.5:
+                for pm in (sd["phi"], math.pi - sd["phi"]): ex = np.maximum(ex, sd["Lk"] * bump(phi, pm, sd["hh"], sd["e"]))
         return ex
     def margin_pt(phi):
         x0, y0 = wp * se(np.cos(phi)), Lp * se(np.sin(phi))
@@ -63,7 +75,7 @@ def plan(P):
         return float((1 - v) * fx + v * mx[0]), float(v * my[0])
     def outside(x, y):
         r = (np.abs(x / wp) ** nO + np.abs(y / Lp) ** nO) ** (1.0 / nO)
-        Lmax = max(Lf if Lf > 0.5 else 0.0, Lm if n_m else 0.0, 1e-6)
+        Lmax = max([sd["Lk"] for sd in spines if sd["Lk"] > 0.5] + [1e-6])
         return np.clip((r - 1) * np.hypot(x, y) / np.maximum(r, 1e-6) / Lmax, 0, 1)
     def ov_pre(ax, y): return np.where(y > 0.35 * Lp, outside(ax, y), 0.0)   # the margin spines' region (no ribs there)
     def zfun(x, y):
@@ -97,14 +109,11 @@ def plan(P):
         z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y))
         return z
     # the margin spines, for ornaments(): where each leaves the base margin and how far it runs as a bump (24 Oct 2026)
-    spines = []                                                   # (phi, bump length as planned, full length asked for, hh, e)
-    if Lf_full > 0.5: spines.append((phi_f, Lf, Lf_full, hphi_f, 1.5))
-    for pk in phi_m: spines.append((pk, Lm, Lm_full, hphi_m, 1.2))
     def base_pt(phi): return wp * se(math.cos(phi)), Lp * se(math.sin(phi))
     def margin_xy(phi):
         mx, my = margin_pt(np.asarray(phi, float)); return np.c_[mx, my]
     return dict(outline=outline, zfun=zfun, t=t, Lp=Lp, wp=wp, a=a, margin=margin, u_a=a / max(wp, 1e-6),
-                axis_len=Lax, border_frac=bwf, outline_exp=nO, spines=spines, base_pt=base_pt, margin_xy=margin_xy)
+                axis_len=Lax, border_frac=bwf, outline_exp=nO, spines=spines, base_pt=base_pt, margin_xy=margin_xy, tube=tube)
 
 def shell(P, S, grid=GRID_TAIL):
     tail = M.heightfield_shell(S["outline"], S["zfun"], S["t"], nu=grid[0], nv=grid[1])
@@ -118,9 +127,12 @@ def ornaments(P, S):
     """Terminal spine, then the posterior prong. Forks and marginal spines are the margin itself (in the plan); with
     pygSpineRise / Bend / Grow (24 Oct 2026) each of them runs on as a curved solid spine that continues the bump."""
     out = []
-    rise, bend, grow = float(P.get("pygSpineRise", 0.0)), float(P.get("pygSpineBend", 0.0)), float(P.get("pygSpineGrow", 0.0))
-    if (abs(rise) > 1e-6 or abs(bend) > 1e-6 or grow > 0.01) and S.get("spines"):
-        for phi_k, Lk, L_full, hh, e in S["spines"]:
+    rise0, bend0, grow = float(P.get("pygSpineRise", 0.0)), float(P.get("pygSpineBend", 0.0)), float(P.get("pygSpineGrow", 0.0))
+    if S.get("tube") and S.get("spines"):
+        for sd in S["spines"]:
+            phi_k, Lk, L_full, hh, e = sd["phi"], sd["Lk"], sd["L_full"], sd["hh"], sd["e"]
+            turn = (rise0 + bend0) if sd["rise"] is None else float(sd["rise"]); roll = 0.0 if sd["roll"] is None else float(sd["roll"])
+            own = sd["rise"] is not None; grow_k = 0.0 if own else grow                        # an own spine's length is its len; the preset's grows by pygSpineGrow
             x0, y0 = S["base_pt"](phi_k); r0 = math.hypot(x0, y0); dx, dy = x0 / r0, y0 / r0        # the radial direction of this spine
             # the bump's half-width across the spine at each fraction of its length, measured on the actual margin curve
             fr = np.linspace(0.0, 0.97, 24); dphi = hh * (1 - fr ** (1.0 / e))
@@ -135,9 +147,9 @@ def ornaments(P, S):
                 sdist = ((W[:, 0] - x0) * dx + (W[:, 1] - y0) * dy); frac = sdist / Lk; inside = (frac < 0.97) & (ts < 0.8)
                 hw = np.interp(np.clip(frac, 0, 0.97), fr, half_w); zz = np.asarray(S["zfun"](W[:, 0], W[:, 1])).ravel()
                 return np.where(inside, np.maximum(hw, 0.35), ra), np.where(inside, np.maximum(0.5 * zz + 0.15, 0.35), rb)
-            L = (1 - s_root) * Lk + (L_full - Lk) + grow * S["Lp"] + (0.0 if blade else 1.0)         # to the bump's planned tip, the length cut from the plan, the growth
+            L = (1 - s_root) * Lk + (L_full - Lk) + grow_k * S["Lp"] + (0.0 if blade else 1.0)       # to the bump's planned tip, the length cut from the plan, the growth
             r_leave = max(float(half_w[-1]), 0.6) if blade else max(0.45 * S["margin"] + 0.5, 0.6)   # the bump's half-width where the solid takes over; or a spine's own root
-            h = curved_spine(r_leave, 0.45, L, (rx, ry, 0.5 * zr), yaw_deg=yaw, pitch_deg=0.0, bend_deg=rise + bend, roll_deg=0.0,
+            h = curved_spine(r_leave, 0.45, L, (rx, ry, 0.5 * zr), yaw_deg=yaw, pitch_deg=0.0, bend_deg=turn, roll_deg=roll,
                              flare=1.0, plate=max(zr, 0.8), profile=bump_section)                   # tangent to the bump, curving up from it
             out.append(("pygSpineHorns", [h, M.mirror_x(h)], "union"))
     if P["termSpine"] > 0.02:

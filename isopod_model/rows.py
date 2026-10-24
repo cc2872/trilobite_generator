@@ -80,6 +80,7 @@ BODY_KEYS = dict(
     thorax_len=("mm", "length of the thorax (all thoracic rows together)"),
     pyg_len=("mm", "length of the pygidium (all pygidial rows together)"),
     term_spine=("mm", "a terminal spine from the pygidium's tip (0 = none)"),
+    tail_spines=("list", "the tail's own margin spines (24 Oct 2026): [{phi: deg along the margin (0 front corner .. 90 rear tip), len: mm, rise: deg, roll: deg, blade: 0..1}], right side; absent = the preset's pair + marginals"),
     min_joint_mm=("mm", "the joint minimum at print: a row shorter than this fuses"),
     print_scale=("x", "print mm per model mm (default: 18 mm per median thoracic row)"),
 )
@@ -190,6 +191,25 @@ def validate_list(lst):
     return out
 
 
+TAIL_SPINE_RANGE = dict(phi=(0.0, 90.0), len=(0.0, 500.0), rise=(-180.0, 180.0), roll=(-180.0, 180.0), blade=(0.0, 1.0))
+TAIL_SPINE_DEFAULT = dict(phi=70.0, len=20.0, rise=30.0, roll=0.0, blade=0.0)
+MAX_TAIL_SPINES = 24
+
+def validate_tail_spines(lst):
+    """The body's own tail spines: a list of up to MAX_TAIL_SPINES dicts, every number inside TAIL_SPINE_RANGE (missing ones default)."""
+    if not isinstance(lst, list): raise ValueError("tail_spines is not a list")
+    if len(lst) > MAX_TAIL_SPINES: raise ValueError(f"{len(lst)} tail spines: at most {MAX_TAIL_SPINES}")
+    out = []
+    for j, sd in enumerate(lst):
+        if not isinstance(sd, dict): raise ValueError(f"tail spine {j} is not a dict")
+        bad = set(sd) - set(TAIL_SPINE_RANGE)
+        if bad: raise KeyError(f"tail spine {j}: unknown keys {sorted(bad)} (have {sorted(TAIL_SPINE_RANGE)})")
+        row = dict(TAIL_SPINE_DEFAULT); row.update(sd)
+        for k, (lo, hi) in TAIL_SPINE_RANGE.items(): row[k] = _num(row[k], k, lo, hi, f"tail spine {j}")
+        out.append(row)
+    return out
+
+
 def apply(rows, edits=None):
     """edits: {"rows": {"<i>": {key: value}}, "list": [full rows] (the editor's explicit list: REPLACES rows and
     ignores thorax_rows / pyg_rows / thorax_len / pyg_len), + the BODY_KEYS}. Unknown keys raise KeyError."""
@@ -197,6 +217,7 @@ def apply(rows, edits=None):
     bad = set(edits) - set(BODY_KEYS) - {"rows", "list"}
     if bad: raise KeyError(f"unknown body keys {sorted(bad)} (have {sorted(BODY_KEYS)}, 'rows' and 'list')")
     if edits.get("model") not in (None, "thorax", "slab"): raise ValueError("model must be 'thorax' or 'slab'")
+    if edits.get("tail_spines") is not None: validate_tail_spines(edits["tail_spines"])
     for k, (lo, hi) in BODY_RANGE.items():
         if edits.get(k) is not None: _num(edits[k], k, lo, hi, "body")
     if edits.get("list") is not None: rows = validate_list(edits["list"])
@@ -403,7 +424,7 @@ def thorax_row(P, row, i, inner=False, n_rows=None):
     return THORAX.plan(_P_row(P, row, i, inner, n_rows), i)
 
 
-def tail_plan(P, pyg, d_last):
+def tail_plan(P, pyg, d_last, tail_spines=None):
     """tail.plan for the pygidial rows together: their total length, the first row's width, relief and axis, one rib
     per row; the segment pitch it reads (its overlap under the last segment's plate) is the last thoracic row's."""
     Pt = dict(P); n = int(P["segCount"]); Lp = sum(r["len"] for r in pyg)
@@ -411,6 +432,7 @@ def tail_plan(P, pyg, d_last):
     # the first row's width is the ellipse at the row's centre (rows_from_P); the tail's own half-width is at y = 0
     yc = 0.5 * pyg[0]["len"]; Pt["_w"] = max(pyg[0]["width"], 1.5) / max(math.sqrt(max(1 - (yc / max(Lp, 1e-6)) ** 2, 0.05)), 1e-6)
     Pt["pygRings"] = max(len(pyg), 1)
+    if tail_spines: Pt["_tailSpines"] = validate_tail_spines(tail_spines)                     # the body's own margin spines (24 Oct 2026)
     Pt["tailRelief"] = pyg[0]["relief"] / max(P["relief"], 1e-6); Pt["axisFrac"] = pyg[0]["axis"]
     S = TAIL.plan(Pt); S = dict(S); S["d"] = Lp; S["Lp_rows"] = [r["len"] for r in pyg]
     return S
@@ -449,7 +471,7 @@ def plans(P, spec=None, strict=True):
             S = group_plan(th, g, 0.0, maker=maker); name = f"seg{n}" if (pg or n < len(gs) - 1) else "tail"
             out.append((name, THORAX, S, y)); offsets.append(y); y += S["d"]
         if pg:
-            S = tail_plan(P, pg, th[-1]["len"]); out.append(("tail", TAIL, S, y)); offsets.append(y); y += S["d"]
+            S = tail_plan(P, pg, th[-1]["len"], spec.get("tail_spines")); out.append(("tail", TAIL, S, y)); offsets.append(y); y += S["d"]
             gs = gs + [list(range(len(th), len(rows)))]
     return dict(rows=rows, groups=gs, scale=scale, min_joint_mm=min_mm, parts=out, offsets=offsets, length=y, model=model, problems=problems(rows, scale, term),
                 term_spine=float(spec.get("term_spine") or 0.0), mode=("list" if spec.get("list") is not None else "preset"))
@@ -478,6 +500,27 @@ def _tail_band(S, y_tail, row, y0, last):
         yr = np.full(ax.shape, (float(ym.max()) if last else y1), float)
         return yf, yr
     return dict(edges=edges, X_tip=X_tip, poly=poly, zfun=lambda x, y: S["zfun"](x, np.asarray(y, float) - y_tail), w=X_tip, a=row["axis"] * X_tip, h=row["relief"])
+
+
+def _tail_info(S, y_off, P, spec):
+    """The tail for the studio (24 Oct 2026): its base margin (right half, body frame, model mm) and every margin spine with
+    its root, radial direction and numbers -- the preset's or the body's own (tail_spines)."""
+    if S is None: return None
+    import math as _m
+    phis = np.linspace(0.0, _m.pi / 2, 40); mx, my = [], []
+    for ph in phis:
+        x, y = S["base_pt"](ph); mx.append(round(float(x), 3)); my.append(round(float(y) + y_off, 3))
+    own = (spec or {}).get("tail_spines") is not None
+    rise0 = float(P.get("pygSpineRise", 0.0)) + float(P.get("pygSpineBend", 0.0)); grow = float(P.get("pygSpineGrow", 0.0)) * S["Lp"]
+    sp = []
+    for sd in S.get("spines", []):
+        if sd["phi"] > _m.pi / 2 + 1e-6: continue
+        x0, y0 = S["base_pt"](sd["phi"]); r0 = _m.hypot(x0, y0) or 1e-6
+        L = sd["L_full"] + (0.0 if sd["rise"] is not None else grow)
+        sp.append(dict(phi=round(_m.degrees(sd["phi"]), 2), root=[round(float(x0), 3), round(float(y0) + y_off, 3)], dir=[round(x0 / r0, 4), round(y0 / r0, 4)],
+                       len=round(float(L), 3), rise=round(rise0 if sd["rise"] is None else float(sd["rise"]), 1), roll=round(0.0 if sd["roll"] is None else float(sd["roll"]), 1),
+                       blade=round(float(sd["Lk"] / sd["L_full"]) if sd["L_full"] > 1e-6 else 0.0, 3)))
+    return dict(margin=[list(p) for p in zip(mx, my)], Lp=round(float(S["Lp"]), 3), wp=round(float(S["wp"]), 3), y0=round(float(y_off), 3), own=own, tube=bool(S.get("tube")), spines=sp)
 
 
 def diagram(P, spec=None, n=60):
@@ -540,7 +583,7 @@ def diagram(P, spec=None, n=60):
         prev = dict(y=yy, bottom=bottom, y_end=y_end)
     pivots = [[round(R["offsets"][k], 3), round(PIV_Z, 3)] for k in range(1, len(R["offsets"]))]
     return dict(rows=drawn, pieces=pieces, joints=joints, scale=scale, min_joint_mm=R["min_joint_mm"], length=R["length"], term_spine=R["term_spine"],
-                side=side, pivots=pivots, wall=WALL, gap_z=GAP_Z, model=model, problems=R["problems"],
+                side=side, pivots=pivots, wall=WALL, gap_z=GAP_Z, model=model, problems=R["problems"], tail=_tail_info(tail_S, y_tail, P, spec),
                 body_keys={k: dict(unit=u, doc=dd) for k, (u, dd) in BODY_KEYS.items()},
                 mode=R["mode"], list=[{k: (v if k == "kind" else round(float(v), 4)) for k, v in r.items()} for r in rows],
                 body=dict(model=model, thorax_rows=sum(1 for r in rows if r["kind"] == "thorax"), pyg_rows=sum(1 for r in rows if r["kind"] == "pyg"),

@@ -333,6 +333,9 @@ def api_body_diagram():
     Pp = _presets().get(preset)
     if Pp is None: return jsonify(error="no such preset"), 404
     P = schema.coerce(Pp, base=schema.table_defaults())
+    if request.method == "POST" and isinstance(q.get("P"), dict):             # 24 Oct 2026: the studio's edited P (spines, tail), so the drawing shows what Build will build
+        try: P = schema.coerce(q["P"], base=P)
+        except (KeyError, ValueError, TypeError) as ex: return jsonify(error=f"P: {str(ex)[:160]}"), 400
     try:
         spec = _body_spec(q.get("spec") if request.method == "POST" else q.get("body")) or {}
         if request.method == "GET" and q.get("start") == "boring": spec = {"list": RW.boring(P)}    # the editor's plain starting animal

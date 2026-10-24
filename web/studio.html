@@ -115,6 +115,8 @@ const HNKEYS=['horn_len','horn_rise','horn_roll','horn_yaw'];       // ... and i
 function hornOf(r,i){ const P=S.P||{}; const thx=S.BD.rows.filter(x=>x.row.kind!=='pyg'); const frac=thx.length>1?Math.min(i/(thx.length-1),1):0;
   if(+r.horn_own>=0.5) return {L:+r.horn_len, turn:+r.horn_rise, roll:+r.horn_roll, yaw:+r.horn_yaw, own:true};
   return {L:(+P.pleuralHorn||0)*(+r.width)*(1+(+P.pleuralHornGrad||0)*frac), turn:(+P.pleuralHornPitch||45)+(+P.pleuralHornBend||0), roll:(+P.pleuralHornRoll||0), yaw:0, own:false}; }
+const TSKEYS=['phi','len','rise','roll','blade']; const TSR={phi:[0,90], len:[0,200], rise:[-180,180], roll:[-180,180], blade:[0,1]};
+function ownTail(){ if(S.spec.tail_spines) return; const T=S.BD&&S.BD.tail; S.spec.tail_spines=(T?T.spines:[]).map(q=>({phi:q.phi, len:q.len, rise:q.rise, roll:q.roll, blade:q.blade})); }   // freeze the preset's spines into the body's own list
 function ownHorn(i){ const r=S.spec.list[i]; if(+r.horn_own>=0.5) return; const h=hornOf(r,i); r.horn_own=1; r.horn_len=+h.L.toFixed(3); r.horn_rise=+h.turn.toFixed(1); r.horn_roll=+h.roll.toFixed(1); r.horn_yaw=+h.yaw.toFixed(1); }
 // what a row's axial spine is: its own numbers, or the preset's (P) with the gradient along the thorax
 function axialOf(r,i){ const P=S.P||{}; const rel=+P.relief||17; const thx=S.BD.rows.filter(x=>x.row.kind!=='pyg'); const frac=thx.length>1?Math.min(i/(thx.length-1),1):0;
@@ -139,7 +141,7 @@ const headCur=k=>S.HD?(isOut(k)?S.HD.outline[k]:S.HD.face[k]):undefined;
 function clampR(k,v,T){ const r=(T||R)[k]||[-1e9,1e9]; v=Math.min(r[1],Math.max(r[0],v)); if(r[2]) v=Math.round(v); return v; }
 function clampH(k,v){ const r=RH[k]||[-1e9,1e9]; v=Math.min(r[1],Math.max(r[0],v)); if(r[2]) v=Math.round(v); return v; }
 function setHeadKey(k,v,quiet){ v=clampH(k,v); const edits=isOut(k)?S.headOutline:S.headFace; if(Math.abs(v-headBaseOf(k))<1e-9) delete edits[k]; else edits[k]=+v.toFixed(4); if(!quiet) sendHead(); }
-function setEyeParam(k,v){ if(!S.P) return; S.P[k]=+v; S.edited=true; invalidateBuild(); status('edited - Build to see it',false); }   // a schema param on P (eye / prong); the 2D drawing can't show it, so feedback is on Build / 3D
+function setEyeParam(k,v){ if(!S.P) return; S.P[k]=+v; S.edited=true; invalidateBuild(); status('edited - Build to see it',false); if(/^(pyg|term|tail|relief|axialSpine)/.test(k)) sendBody(); }   // tail / side-view params: the server draws those   // a schema param on P (eye / prong); the 2D drawing can't show it, so feedback is on Build / 3D
 function renderProngs(){ const box=$('prongctl'); if(!box) return; if(!S.P||!S.prongParams.length){ box.innerHTML=''; return; } box.innerHTML='';
   for(const p of S.prongParams){ const v=(S.P[p.key]!=null?S.P[p.key]:p.default);
     if(p.key==='headProngs'||p.key==='tailProngs') prongStepper(box,p);
@@ -170,7 +172,7 @@ async function loadAll(preset, bodyName, start){
   S.savedHead=hd.saved?hd.saved.name:null; if(hd.saved){ S.head=hd.base; S.headOutline=Object.assign({},hd.saved.outline); S.headFace=Object.assign({},hd.saved.face); }
   // body
   S.preset=preset; S.savedBody=bodyName||null; S.start=bodyName?'saved':(start||'preset');
-  S.spec=Object.assign({}, bd.spec||{}); delete S.spec.rows; for(const k of ['thorax_rows','pyg_rows','thorax_len','pyg_len']) delete S.spec[k];
+  S.spec=Object.assign({}, bd.spec||{}); delete S.spec.rows; for(const k of ['thorax_rows','pyg_rows','thorax_len','pyg_len']) delete S.spec[k];   // tail_spines (if saved) stays
   S.spec.list=bd.diagram.list.map(r=>Object.assign({},r)); S.spec.model=S.spec.model||bd.diagram.model||'thorax'; $('model').value=S.spec.model;
   S.BD=bd.diagram; S.presets=bd.presets; S.savedBodies=bd.saved_bodies; S.pinned=null; S.sel=null;
   try{ S.P=await (await fetch('/api/preset/'+encodeURIComponent(preset))).json(); }catch(_){ S.P=S.P||{}; }   // the schema params (incl. the eye): editable here, built as-is by the generator pipeline
@@ -181,7 +183,7 @@ async function loadAll(preset, bodyName, start){
 let inflightB=null, inflightH=null;
 async function sendBody(){ S.edited=true; invalidateBuild(); postState(); renderTable();
   if(inflightB){ S.pendingB=true; return; }
-  inflightB=fetch('/api/body_diagram',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({preset:S.preset, spec:S.spec, head:S.head})})
+  inflightB=fetch('/api/body_diagram',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({preset:S.preset, spec:S.spec, head:S.head, P:S.P||undefined})})
     .then(r=>r.json()).then(d=>{ if(d.error){ status(d.error,true); return; } S.BD=d.diagram; kv(); renderContext(false); renderTable(); })
     .catch(e=>status(String(e),true)).finally(()=>{ inflightB=null; if(S.pendingB){ S.pendingB=false; sendBody(); } }); }
 async function sendHead(){ S.edited=true; invalidateBuild(); postState(); renderContext(false);
@@ -221,6 +223,17 @@ function renderContext(rebuild=true){ const box=$('context');
         for(const p of S.hornParams){ const v=(S.P[p.key]!=null?S.P[p.key]:p.default); slider(box,p.key,v,p.lo,p.hi,p.step||((p.hi-p.lo)/200),val=>setEyeParam(p.key,val),p.unit||''); } } }
     else { for(const k of keys){ const s=$('s_'+k); if(s&&document.activeElement!==s){ const v=headCur(k); s.value=v; $('v_'+k).textContent=fmt(v); $('v_'+k).classList.toggle('on',Math.abs(v-headBaseOf(k))>1e-9); } }
       if(S.P) for(const p of [...S.eyeParams,...S.hornParams]){ const s=$('s_'+p.key); if(s&&document.activeElement!==s){ s.value=S.P[p.key]; $('v_'+p.key).textContent=fmt(S.P[p.key]); } } }
+    return; }
+  if(S.sel.type==='tailspine'){ const j=S.sel.j; const L=S.spec.tail_spines||[]; if(j>=L.length){ S.sel=null; return renderContext(); } const q=L[j];
+    $('ctxname').textContent=`Tail spine ${j}`; $('ctxtools').innerHTML='';
+    if(rebuild||box.dataset.k!=='ts'+j){ box.innerHTML=''; box.dataset.k='ts'+j;
+      for(const k of TSKEYS){ const rr=TSR[k]; slider(box,k,q[k],rr[0],rr[1],(rr[1]-rr[0])/300,val=>{ q[k]=+(+val).toFixed(3); sendBody(); },{phi:'deg along the margin',len:'mm',rise:'deg',roll:'deg',blade:'flat share'}[k]); }
+      const row=document.createElement('div'); row.className='row'; row.style.marginTop='8px';
+      for(const [t,f] of [['+ spine',()=>{ L.splice(j+1,0,Object.assign({},q,{phi:Math.max(0,q.phi-8)})); S.sel={type:'tailspine',j:j+1}; sendBody(); renderContext(); }],
+                          ['- spine',()=>{ L.splice(j,1); S.sel=L.length?{type:'tailspine',j:Math.min(j,L.length-1)}:null; sendBody(); renderContext(); }],
+                          ["preset's spines",()=>{ delete S.spec.tail_spines; S.sel=null; sendBody(); renderContext(); }]]){ const b=document.createElement('button'); b.className='btn small'; b.textContent=t; b.onclick=f; row.appendChild(b); }
+      box.appendChild(row); }
+    else for(const k of TSKEYS){ const s=$('s_'+k); if(s&&document.activeElement!==s){ s.value=q[k]; $('v_'+k).textContent=fmt(q[k]); } }
     return; }
   // a row
   const i=S.sel.i; if(i>=S.spec.list.length){ S.sel=null; return renderContext(); }
@@ -285,12 +298,16 @@ new p5(s=>{
   s.windowResized=()=>s.resizeCanvas(stage.clientWidth,stage.clientHeight);
   const headScale=()=>{ const w0=S.BD.rows[0].row.width; return w0*(S.HD&&S.HD.diagram.size?S.HD.diagram.size.width_vs_thorax:1.15); };
   const headLen=()=>{ const h=S.HD&&S.HD.diagram; return h?(-h.outline.reduce((m,p)=>Math.min(m,p[1]),0))*headScale():0; };
-  function fit(){ W=s.width; H=s.height; const D=S.BD; const L=D.length+(D.term_spine||0); const hl=headLen();
+  function fit(){ W=s.width; H=s.height; if(S.drag&&px) return;                         // the scale holds still while a dot is being dragged (a growing spine must not zoom the sheet under the cursor)
+    const D=S.BD; const L=D.length+(D.term_spine||0); const hl=headLen();
     const hsz=S.HD&&S.HD.diagram.size; const xw=Math.max(...D.rows.map(r=>r.row.width+r.row.tip), headScale()*(hsz?Math.max(hsz.halfwidth,1):1));   // 24 Oct 2026: the head's full reach (its spine), not its half-width
     const hz=(S.HD&&S.HD.diagram.profile&&S.HD.diagram.profile.length)?Math.max(...S.HD.diagram.profile.map(p=>p[1]))*headScale():0;   // the head's elevation depth, in model mm
     const zmax=Math.max(...D.side.flatMap(p=>p.top.map(q=>q[1])), hz, 5)+2;
     const hreach=(S.HD&&S.HD.diagram.outline)?Math.max(...S.HD.diagram.outline.map(p=>p[1]))*headScale():0;   // how far back the head (its spine) reaches, model mm
-    px=Math.min((H-80)/(Math.max(L,hreach)+hl+6), (W-150)/(2*xw+ZX*zmax+30)); ox=46+xw*px; oy=40+hl*px; oxE=ox+xw*px+30; }
+    let treach=0, txw=0; for(const q of tailList()){ const yaw=Math.atan2(q.dir[0],q.dir[1])*180/Math.PI; const pts=arcPts([q.root[0],q.root[1],0.6],q.len,yaw,0,q.rise,q.roll,8); for(const p_ of pts){ treach=Math.max(treach,p_[1]); txw=Math.max(txw,Math.abs(p_[0])); } }   // the tail's spines
+    px=Math.min((H-80)/(Math.max(L,hreach,treach)+hl+6), (W-150)/(2*Math.max(xw,txw)+ZX*zmax+30)); ox=46+Math.max(xw,txw)*px; oy=40+hl*px; oxE=ox+Math.max(xw,txw)*px+30; }
+  function tailList(){ const D=S.BD, T=D&&D.tail; if(!T||!T.tube) return []; const own=!!S.spec.tail_spines;
+    return own?S.spec.tail_spines.map(q=>{ const ph=q.phi*Math.PI/180; const x0=T.wp*Math.cos(ph), y0=T.y0+T.Lp*Math.sin(ph); const r0=Math.hypot(x0,y0-T.y0)||1e-6; return Object.assign({}, q, {root:[x0,y0], dir:[x0/r0,(y0-T.y0)/r0]}); }):T.spines; }
   const X=x=>ox+x*px, Y=y=>oy+y*px;
   function hair(a,w=1){ s.stroke(255,a); s.strokeWeight(w); s.noFill(); }
   function orange(w=1){ s.stroke(246,112,79); s.strokeWeight(w); s.noFill(); }
@@ -375,13 +392,12 @@ new p5(s=>{
           hair(150,1); s.beginShape(); for(const q of pts) s.vertex(zS(q[2]),Y(q[1])); s.endShape();                                                                        // side
           const tp=pts[16], md=pts[8]; for(const [k,q] of [['ph_tip',tp],['ph_mid',md]]){ const sx=X(q[0]), sy=Y(q[1]); s.stroke(on?s.color(246,112,79):s.color(255,200)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):0); s.circle(sx,sy,on?7:4.5); HP.push({kind:'ph',i,k,sx,sy,root}); }
           if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`horn ${hn.L.toFixed(1)} mm - rise ${Math.round(hn.turn)}° - roll ${Math.round(hn.roll)}° - yaw ${Math.round(hn.yaw)}°${hn.own?'':' (preset)'}`, X(tp[0])+9, Y(tp[1])-6); } } } });
-    // the tail's spines, in plan, from the last row's margin (an approximation of tail.py's margin_pt)
-    const last=D.rows[n-1]; if(!last) return; const pyg=D.rows.filter(r=>r.row.kind==='pyg'); const Lp=Math.max(pyg.length?pyg.reduce((a,r)=>a+(+r.row.len),0):(+last.row.len), 4);
-    const wp=(pyg[0]||last).row.width, yb=last.handles.rear[1]; const grow=+P.pygSpineGrow||0, rise=+P.pygSpineRise||0, bend=+P.pygSpineBend||0;
-    const spine=(phi,Lk)=>{ const x0=wp*Math.cos(phi), y0=yb-Lp+Lp*Math.sin(phi); const yaw=Math.atan2(x0,y0-(yb-Lp))*180/Math.PI; const pts=arcPts([x0,y0,0.6],Lk+grow*Lp,yaw,0,rise+bend,0,16);
-      hair(230,1.1); for(const m of [1,-1]){ s.beginShape(); for(const q of pts) s.vertex(X(m*q[0]),Y(q[1])); s.endShape(); } };
-    if((+P.pygSpine||0)>0.05){ const sp=(+P.pygSplay||20)*Math.PI/180; spine(Math.atan(wp/Lp*Math.tan(Math.PI/2-sp)), (+P.pygSpine)*Lp); }
-    const nm=Math.round(+P.pygMarginal||0); for(let k=0;k<nm;k++){ const phi=(50+80*(k+0.5)/nm)*Math.PI/180; if(phi<=Math.PI/2) spine(phi,(+P.pygMarginalLen||0.5)*Lp); } }
+    // the tail's spines, in plan, from tail.py's own margin (the body diagram's `tail`), with dots (24 Oct 2026)
+    const T=D.tail; if(!T||!T.tube) return; const own=!!S.spec.tail_spines; const list=tailList();
+    list.forEach((q,j)=>{ const yaw=Math.atan2(q.dir[0],q.dir[1])*180/Math.PI; const pts=arcPts([q.root[0],q.root[1],0.6],q.len,yaw,0,q.rise,q.roll,16); const on=S.sel&&S.sel.type==='tailspine'&&S.sel.j===j;
+      if(on) orange(1.3); else if(own) hair(255,1.2); else hair(200,1.0); for(const m of [1,-1]){ s.beginShape(); for(const p_ of pts) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); }
+      const tp=pts[16], md=pts[8]; for(const [k,p_] of [['ts_tip',tp],['ts_mid',md]]){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):s.color(255,200)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):0); s.circle(sx,sy,on?7:4.5); HP.push({kind:'ts',j,k,sx,sy}); }
+      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`tail spine ${j} - ${q.len.toFixed(1)} mm - at ${Math.round(q.phi)}° - rise ${Math.round(q.rise)}° - roll ${Math.round(q.roll)}°`, X(tp[0])+9, Y(tp[1])-6); } }); }
   function drawHorn(headOn){ const P=S.P; if(!P||!S.HD) return; const pts=hornPts(P,hornRoot(),24); if(!pts) return;
     for(const m of [1,-1]){ if(headOn) orange(1.3); else hair(255,1.1); s.beginShape(); for(const q of pts) s.vertex(headSX([m*q[0],q[1]]), headSY(q)); s.endShape(); }
     if(!headOn) return;
@@ -419,9 +435,10 @@ new p5(s=>{
     else if(h&&h.kind==='horn'){ S.sel={type:'head'}; S.headSel=h.k; S.drag={kind:'horn',k:h.k}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='ax'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; ownAxial(h.i); S.drag={kind:'ax',i:h.i,k:h.k,root:h.root}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='ph'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; ownHorn(h.i); S.drag={kind:'ph',i:h.i,k:h.k,root:h.root}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
+    else if(h&&h.kind==='ts'){ ownTail(); S.sel={type:'tailspine',j:h.j}; S.drag={kind:'ts',j:h.j,k:h.k}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='head'){ S.sel={type:'head'}; S.headSel=h.k; S.drag={kind:'head',k:h.k,elev:!!h.elev,x0:s.mouseX,y0:s.mouseY,start:headSnapshot()}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else { S.sel=null; S.drag=null; renderContext(); renderTable(); } };
-  s.mouseReleased=()=>{ if(S.drag){ if(S.drag.kind==='ax'||S.drag.kind==='ph') sendBody(); S.drag=null; stage.style.cursor='grab'; } };
+  s.mouseReleased=()=>{ if(S.drag){ if(S.drag.kind==='ax'||S.drag.kind==='ph'||S.drag.kind==='ts') sendBody(); S.drag=null; stage.style.cursor='grab'; } };
   s.mouseDragged=()=>{ if(!S.drag) return;
     if(S.drag.kind==='row'){ const d=S.drag, st=d.start, i=d.i; const dx=(s.mouseX-d.x0)/px, dy=(s.mouseY-d.y0)/px;
       switch(d.k){
@@ -435,12 +452,21 @@ new p5(s=>{
         S.P.eyeStalk=Math.max(0,Math.min(4,+dist.toFixed(2))); S.P.eyeLean=Math.max(0,Math.min(90,Math.round(lean))); }
       else if(S.drag.k==='height'){ const proj=((mx-d.bx)*d.dx+(my-d.by)*d.dy)/d.er; S.P.eyeHeight=Math.max(0.2,Math.min(1.6,+proj.toFixed(2))); }
       S.edited=true; renderContext(false); return; }
+    if(S.drag.kind==='ts'){ const d=S.drag, T=S.BD.tail, q=S.spec.tail_spines[d.j]; if(!T||!q) return; const mx=Math.abs((s.mouseX-ox)/px), my=(s.mouseY-oy)/px;   // mouse in model mm (plan, right side)
+      if(d.k==='ts_tip'){ const phi=Math.atan2((my-T.y0)/T.Lp, mx/T.wp)*180/Math.PI; q.phi=+Math.max(0,Math.min(90,phi)).toFixed(2);               // where on the margin: the mouse's angle about the tail's centre
+        const ph=q.phi*Math.PI/180; const x0=T.wp*Math.cos(ph), y0=T.y0+T.Lp*Math.sin(ph); const r0=Math.hypot(x0,y0-T.y0)||1e-6; const yaw=Math.atan2(x0/r0,(y0-T.y0)/r0)*180/Math.PI;
+        const cur=arcPts([x0,y0,0.6],Math.max(q.len,1),yaw,0,q.rise,q.roll,16); const c0=Math.hypot(cur[16][0]-x0,cur[16][1]-y0)||1e-6; const c1=Math.hypot(mx-x0,my-y0);   // length: the plan footprint scales with it
+        q.len=+Math.max(0,Math.min(200,Math.max(q.len,1)*c1/c0)).toFixed(2); }
+      else { const ph=q.phi*Math.PI/180; const x0=T.wp*Math.cos(ph), y0=T.y0+T.Lp*Math.sin(ph); const r0=Math.hypot(x0,y0-T.y0)||1e-6; const yaw=Math.atan2(x0/r0,(y0-T.y0)/r0)*180/Math.PI;
+        const cur=arcPts([x0,y0,0.6],q.len,yaw,0,q.rise,0,16); const tx=cur[16][0]-x0, ty=cur[16][1]-y0; const cl=Math.hypot(tx,ty)||1e-6; const sag=((mx-x0)*ty-(my-y0)*tx)/cl;   // against the UNROLLED arc's chord (its own moved with the roll: feedback)
+        const th=Math.abs(q.rise)*Math.PI/180; const sagV=th>1e-3?(q.len/th)*(1-Math.cos(th/2)):0; if(sagV>1e-6){ const rl=Math.asin(Math.max(-1,Math.min(1,sag/sagV)))*180/Math.PI; q.roll=+Math.max(-180,Math.min(180,Math.round(rl/5)*5)).toFixed(1); } }
+      S.edited=true; invalidateBuild(); renderContext(false); return; }
     if(S.drag.kind==='ph'){ const d=S.drag, row=S.spec.list[d.i], r=S.BD.rows[d.i]; const P=S.P||{}; const mx=Math.abs((s.mouseX-ox)/px), my=(s.mouseY-oy)/px;   // mouse in model mm (plan, right side)
       const hn=hornOf(row,d.i); const yaw0=90-(+P.spineSweep||50)+(+r.row.curve||0); const cur=arcPts(d.root,hn.L,yaw0+hn.yaw,0,hn.turn,hn.roll,16);
       const vx=mx-d.root[0], vy=my-d.root[1];
       if(d.k==='ph_tip'){ const tx=cur[16][0]-d.root[0], ty=cur[16][1]-d.root[1]; const c0=Math.hypot(tx,ty)||1e-6, c1=Math.hypot(vx,vy);     // the plan footprint scales with L; its direction is the yaw
         row.horn_len=+Math.max(0,Math.min(120,hn.L*c1/c0)).toFixed(2); const dA=(Math.atan2(vx,vy)-Math.atan2(tx,ty))*180/Math.PI; row.horn_yaw=+Math.max(-80,Math.min(80,hn.yaw+dA)).toFixed(1); }
-      else { const tx=cur[16][0]-d.root[0], ty=cur[16][1]-d.root[1]; const cl=Math.hypot(tx,ty)||1e-6; const sag=(vx*ty-vy*tx)/cl;            // the plan sagitta of the mid: the arc's plane rolled sideways
+      else { const c0=arcPts(d.root,hn.L,yaw0+hn.yaw,0,hn.turn,0,16); const tx=c0[16][0]-d.root[0], ty=c0[16][1]-d.root[1]; const cl=Math.hypot(tx,ty)||1e-6; const sag=(vx*ty-vy*tx)/cl;   // against the UNROLLED arc's chord
         const th=Math.abs(hn.turn)*Math.PI/180; const sagV=th>1e-3?(hn.L/th)*(1-Math.cos(th/2)):0; if(sagV>1e-6){ const rl=Math.asin(Math.max(-1,Math.min(1,sag/sagV)))*180/Math.PI; row.horn_roll=+Math.max(-180,Math.min(180,Math.round(rl/5)*5)).toFixed(1); } }
       S.edited=true; invalidateBuild(); renderContext(false); return; }
     if(S.drag.kind==='ax'){ const d=S.drag, row=S.spec.list[d.i]; const my=(s.mouseY-oy)/px, mz=(s.mouseX-oxE)/(ZX*px);   // mouse in model mm: y along, z up (side view)
