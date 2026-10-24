@@ -96,7 +96,7 @@ const $=id=>document.getElementById(id);
 const S={ preset:'textured', head:'plain', savedBody:null, savedHead:null,
           spec:{list:null, model:'thorax'}, headOutline:{}, headFace:{}, headBaseOutline:{}, headBaseFace:{}, headMeta:null,
           BD:null, HD:null, presets:[], savedBodies:[], savedHeads:[],
-          sel:null, pinned:null, hover:null, drag:null, pendingB:false, pendingH:false, edited:false, built:null, P:null, eyeParams:[], prongParams:[] };
+          sel:null, pinned:null, hover:null, drag:null, pendingB:false, pendingH:false, edited:false, built:null, P:null, eyeParams:[], prongParams:[], hornParams:[] };
 const fmt=v=>Number.isInteger(v)?String(v):(+v).toFixed(Math.abs(v)<1?3:(Math.abs(v)<10?2:1));
 function status(t,bad){ $('status').textContent=t||''; $('status').classList.toggle('busy',!!bad); }
 // a build (STL download + the 3D embed) belongs to one exact animal; any edit after it makes both stale, so drop them (13 Oct 2026)
@@ -204,9 +204,11 @@ function renderContext(rebuild=true){ const box=$('context');
     if(rebuild||box.dataset.k!=='head'){ box.innerHTML=''; box.dataset.k='head';
       for(const k of keys){ const r=RH[k]||[0,1]; slider(box,k,headCur(k),r[0],r[1],r[2]||((r[1]-r[0])/200),val=>setHeadKey(k,val),isOut(k)?'':'face'); }
       if(S.P && S.eyeParams.length){ const hdr=document.createElement('div'); hdr.className='sect'; hdr.innerHTML='<span>Eye</span><span class="mono" style="color:var(--mid);text-transform:none;letter-spacing:0">shows on build / 3D</span>'; box.appendChild(hdr);
-        for(const p of S.eyeParams){ const v=(S.P[p.key]!=null?S.P[p.key]:p.default); slider(box,p.key,v,p.lo,p.hi,p.step||((p.hi-p.lo)/200),val=>setEyeParam(p.key,val),p.unit||''); } } }
+        for(const p of S.eyeParams){ const v=(S.P[p.key]!=null?S.P[p.key]:p.default); slider(box,p.key,v,p.lo,p.hi,p.step||((p.hi-p.lo)/200),val=>setEyeParam(p.key,val),p.unit||''); } }
+      if(S.P && S.hornParams.length){ const hdr=document.createElement('div'); hdr.className='sect'; hdr.innerHTML='<span>Genal horn</span><span class="mono" style="color:var(--mid);text-transform:none;letter-spacing:0">a solid spine of its own - curves, hooks, turns in</span>'; box.appendChild(hdr);
+        for(const p of S.hornParams){ const v=(S.P[p.key]!=null?S.P[p.key]:p.default); slider(box,p.key,v,p.lo,p.hi,p.step||((p.hi-p.lo)/200),val=>setEyeParam(p.key,val),p.unit||''); } } }
     else { for(const k of keys){ const s=$('s_'+k); if(s&&document.activeElement!==s){ const v=headCur(k); s.value=v; $('v_'+k).textContent=fmt(v); $('v_'+k).classList.toggle('on',Math.abs(v-headBaseOf(k))>1e-9); } }
-      if(S.P) for(const p of S.eyeParams){ const s=$('s_'+p.key); if(s&&document.activeElement!==s){ s.value=S.P[p.key]; $('v_'+p.key).textContent=fmt(S.P[p.key]); } } }
+      if(S.P) for(const p of [...S.eyeParams,...S.hornParams]){ const s=$('s_'+p.key); if(s&&document.activeElement!==s){ s.value=S.P[p.key]; $('v_'+p.key).textContent=fmt(S.P[p.key]); } } }
     return; }
   // a row
   const i=S.sel.i; if(i>=S.spec.list.length){ S.sel=null; return renderContext(); }
@@ -310,9 +312,29 @@ new p5(s=>{
       if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(k+'  '+headKeysFor(k).join(' - '), sx+9, sy-6); } }
     // the P-eye side editor: drawn from P with draggable stalk / lean / height handles (these drive the BUILT eye)
     if(headOn && S.P) drawEye();
+    drawHorn(headOn);                                                                // the genal horn (P.genalHorn*), drawn live from P, with its handles
     s.noStroke(); s.fill(255,90); s.textAlign(s.RIGHT,s.BOTTOM); s.text(((inflightB||inflightH)?'drawing…':'')+' ', W-12, H-10);
+    window.__hp=HP;                                                                  // the handles this frame (for scripted tests)
   };
   const HEADHANDLE_SKIP=new Set(['crown']);                 // elevation-only; edit via the slider in the panel
+  // ---- the genal horn (24 Oct 2026): anatomy/common.curved_spine's arc projected to plan, in head units. The arc lies along +y
+  // (rear) bending toward +z (roll 0), rolled about its own axis, pitched up, yawed outward; root at 0.92 x the genal angle.
+  function hornPts(P,root,n){ const L=(+P.genalHorn||0)*S.HD.diagram.size.length; if(L<=0.02) return null;
+    const phi=(+P.genalHornBend||0)*Math.PI/180, roll=(+P.genalHornRoll||0)*Math.PI/180, pit=(+P.genalHornPitch||40)*Math.PI/180, yaw=(P.genalHornYaw!=null?+P.genalHornYaw:10)*Math.PI/180;
+    const out=[]; for(let i=0;i<=n;i++){ const t=i/n; let x,y,z;
+      if(Math.abs(phi)<1e-6){ x=0; y=t*L; z=0; } else { const rad=L/Math.abs(phi), a=t*phi; x=0; y=rad*Math.sin(Math.abs(a)); z=Math.sign(phi)*rad*(1-Math.cos(a)); }
+      let x1=x*Math.cos(roll)+z*Math.sin(roll), z1=-x*Math.sin(roll)+z*Math.cos(roll);                       // Ry(roll)
+      let y2=y*Math.cos(pit)-z1*Math.sin(pit), z2=y*Math.sin(pit)+z1*Math.cos(pit);                          // Rx(pitch)
+      let x3=x1*Math.cos(yaw)+y2*Math.sin(yaw), y3=-x1*Math.sin(yaw)+y2*Math.cos(yaw);                       // Rz(-yaw): + yaw = outward
+      out.push([root[0]+x3, root[1]+y3, z2]); }
+    return out; }
+  function hornRoot(){ const H=S.HD.diagram.handles||{}; const a=H.angle||[1,0]; return [0.92*a[0], a[1]]; }
+  function drawHorn(headOn){ const P=S.P; if(!P||!S.HD) return; const pts=hornPts(P,hornRoot(),24); if(!pts) return;
+    for(const m of [1,-1]){ if(headOn) orange(1.3); else hair(255,1.1); s.beginShape(); for(const q of pts) s.vertex(headSX([m*q[0],q[1]]), headSY(q)); s.endShape(); }
+    if(!headOn) return;
+    const tip=pts[pts.length-1], mid=pts[12]; const on=k=>S.headSel===k;
+    for(const [k,q] of [['horn_tip',tip],['horn_mid',mid]]){ const sx=headSX(q), sy=headSY(q); s.stroke(246,112,79); s.strokeWeight(1); s.fill(on(k)?s.color(246,112,79):0); s.circle(sx,sy,on(k)?8:5); HP.push({kind:'horn',k,sx,sy});
+      if(on(k)){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(k==='horn_tip'?'horn tip  genalHorn - genalHornYaw':'horn mid  genalHornBend - genalHornRoll', sx+9, sy-6); } } }
   function drawEye(){ const P=S.P; const ex=W-165, ey=250;                        // the eye in side view, drawn from P (top-right); drives the built eye
     const eyeSize=+P.eyeSize||0.14, eyeStalk=+P.eyeStalk||0, eyeLean=+P.eyeLean||0, eyeHeight=+P.eyeHeight||0.8;
     const er=Math.max(eyeSize*150,7), lean=eyeLean*Math.PI/180, dx=Math.sin(lean), dy=-Math.cos(lean), stalkPx=eyeStalk*er;
@@ -341,6 +363,7 @@ new p5(s=>{
   s.mousePressed=()=>{ if(s.mouseX<0||s.mouseY<0||s.mouseX>W||s.mouseY>H) return; const h=nearest(s.mouseX,s.mouseY);
     if(h&&h.kind==='row'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; S.drag={kind:'row',i:h.i,k:h.k,x0:s.mouseX,y0:s.mouseY,start:Object.assign({},rowOf(h.i))}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='eye'){ S.sel={type:'head'}; S.eyeSel=h.k; S.drag={kind:'eye',k:h.k,d:h}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
+    else if(h&&h.kind==='horn'){ S.sel={type:'head'}; S.headSel=h.k; S.drag={kind:'horn',k:h.k}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='head'){ S.sel={type:'head'}; S.headSel=h.k; S.drag={kind:'head',k:h.k,elev:!!h.elev,x0:s.mouseX,y0:s.mouseY,start:headSnapshot()}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else { S.sel=null; S.drag=null; renderContext(); renderTable(); } };
   s.mouseReleased=()=>{ if(S.drag){ S.drag=null; stage.style.cursor='grab'; } };
@@ -357,6 +380,15 @@ new p5(s=>{
         S.P.eyeStalk=Math.max(0,Math.min(4,+dist.toFixed(2))); S.P.eyeLean=Math.max(0,Math.min(90,Math.round(lean))); }
       else if(S.drag.k==='height'){ const proj=((mx-d.bx)*d.dx+(my-d.by)*d.dy)/d.er; S.P.eyeHeight=Math.max(0.2,Math.min(1.6,+proj.toFixed(2))); }
       S.edited=true; renderContext(false); return; }
+    if(S.drag.kind==='horn'){ const P=S.P, r=hornRoot(), sc=headScale(), pxH=sc*px;                  // the horn's handles drive P directly
+      const mx=(s.mouseX-ox)/pxH, my=(s.mouseY-oy)/pxH-HEADDY/sc; const tx=Math.abs(mx)-r[0], ty=my-r[1];   // mouse in head units, from the root
+      const pit=(+P.genalHornPitch||40)*Math.PI/180, L=S.HD.diagram.size.length;
+      if(S.drag.k==='horn_tip'){ const plan=Math.hypot(tx,ty); P.genalHorn=Math.max(0,Math.min(2,+(plan/Math.max(Math.cos(pit),0.2)/L).toFixed(2)));   // plan length, un-foreshortened by the pitch
+        P.genalHornYaw=Math.max(-60,Math.min(90,Math.round(Math.atan2(tx,ty)*180/Math.PI))); }
+      else { const pts=hornPts(Object.assign({},P,{genalHornBend:0}),r,2); if(pts){ const cx=pts[2][0]-r[0], cy=pts[2][1]-r[1]; const c=Math.hypot(cx,cy)||1e-6;   // the STRAIGHT horn's chord (not the bent one: that fed back)
+          const sag=(tx*cy-ty*cx)/c; const bend=4*Math.atan(2*Math.abs(sag)/c)*180/Math.PI;                        // a circular arc: sagitta / chord = tan(bend/4) / 2; sag > 0 = the outward side
+          P.genalHornBend=Math.max(0,Math.min(180,Math.round(bend/5)*5)); P.genalHornRoll=sag>=0?90:-90; } }      // bending in plan = rolled to the side (+x = outward)
+      S.edited=true; invalidateBuild(); renderContext(false); return; }
     // head: the body canvas runs fore-aft DOWN and across to the RIGHT, so remap the head editor's deltas
     const sc=headScale(); const pxH=sc*px; const st=S.drag.start, L=S.HD.diagram.size.length;
     const along=(s.mouseY-S.drag.y0)/pxH, across=(s.mouseX-S.drag.x0)/pxH;   // along:+rear  across:+outward
@@ -382,7 +414,7 @@ function headKeysFor(h){ const ks=((S.headMeta&&S.headMeta.handles[h])||[]).map(
 // ---------- start ----------
 (async()=>{ const u=new URLSearchParams(location.search); S.head=u.get('head')||'plain';
   try{ const sc=await (await fetch('/api/schema')).json(); const EK=new Set(['eyeSize','eyeArc','eyePos','eyeLat','eyeHeight','eyeProfile','eyeStalk','eyeStalkR','eyeStalkBend','eyeLean','eyeSphere','lensD','lensGap']);
-       S.eyeParams=(sc.params||[]).filter(p=>EK.has(p.key)); S.prongParams=(sc.params||[]).filter(p=>p.group==='Prongs'); }catch(_){ S.eyeParams=[]; S.prongParams=[]; }   // the eye and prong params -> their panel sliders
+       S.eyeParams=(sc.params||[]).filter(p=>EK.has(p.key)); S.prongParams=(sc.params||[]).filter(p=>p.group==='Prongs'); S.hornParams=(sc.params||[]).filter(p=>p.key.startsWith('genalHorn')); }catch(_){ S.eyeParams=[]; S.prongParams=[]; S.hornParams=[]; }   // the eye and prong params -> their panel sliders
   const body=u.get('body'); if(body){ const b=(await (await fetch('/api/bodies')).json()).find(x=>x.name===body); if(b){ if(b.head) S.head=b.head; await loadAll(b.preset, body); return; } }
   if(u.get('preset')) await loadAll(u.get('preset')); else await loadAll('textured', null, 'plain'); })();
 </script>
