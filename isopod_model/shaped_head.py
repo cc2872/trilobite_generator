@@ -144,9 +144,14 @@ class Shape:
             # spine's length (which made every lengthening of the spine deepen the notch), and it runs out to the genal
             # angle: the columns between the spine's inner edge and the angle sat at yg, a wall of notch x Lh wherever the
             # spine did not run straight back over them (the "stub" at the genal corner, studio, 23 Oct).
+            # The U is deepest at the spine's inner edge (x_in) and RETURNS to the genal angle over the spine's root width,
+            # so its wall tops out exactly where the spine leaves (hidden under a band that runs straight back; the
+            # margin's own return where the band leaves at an angle). Without a corner spine the margin runs to the angle as before.
             y_n = yg + o["notch"] * L1; q = o["notch_exp"]
-            yrb = np.full(nb, y_n); inb = axb <= x_in
-            yrb[inb] = y_n * (1 - np.clip(1 - (axb[inb] / max(x_in, 1e-6)) ** q, 0, 1) ** (1 / q))
+            w_ret = w0 if corner_horn else 0.0; x_n = max(xg - w_ret, 1e-6)
+            yrb = np.full(nb, yg); inb = axb <= x_n; ret = (axb > x_n) & (axb <= xg)
+            yrb[inb] = y_n * (1 - np.clip(1 - (axb[inb] / x_n) ** q, 0, 1) ** (1 / q))
+            if ret.any(): yrb[ret] = yg + (y_n - yg) * np.clip(1 - ((axb[ret] - x_n) / w_ret) ** q, 0, 1) ** (1 / q)
             sidec = axb > xg                                       # a side that tapers back from the widest line
             if sidec.any(): yrb[sidec] = yw + (yg - yw) * np.sqrt(np.clip((RO - axb[sidec]) / max(RO - xg, 1e-6), 0, 1))
         if tr is None and not corner_horn and o["corner"] > 0.01:  # round the genal angle: open the silhouette with a disc
