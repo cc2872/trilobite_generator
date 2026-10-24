@@ -79,7 +79,7 @@ def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0
     """A tapered spine along a circular arc: `bend_deg` is the total turn of the tangent from root to tip (0 = straight,
     180 = a half circle, tip pointing back at the root), `roll_deg` the plane it bends in about the spine's own axis
     (0 up, 90 toward +x, -90 toward -x, 180 down). Root at `at`, leaving along (yaw, pitch) as spine_solid does.
-    Built as n frustums joined by spheres, one closed solid. bend_deg = 0 returns spine_solid().
+    Built as one swept tube (sweep_tube). bend_deg = 0 returns spine_solid().
     flare (24 Oct 2026): a root collar, `flare` x base_r wide at the root narrowing to base_r over the first 0.12 of the
     length, so a horn grows out of the shield instead of standing on it (0 = none, as every spine was)."""
     if abs(bend_deg) < 1e-9 and flare <= 1.0: return spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg)
@@ -92,21 +92,40 @@ def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0
     Mrot = R(math.radians(-yaw_deg), (0, 0, 1)) @ R(math.radians(pitch_deg), (1, 0, 0)) @ R(math.radians(roll_deg), (0, 1, 0))
     W = (np.c_[pts, np.ones(n + 1)] @ Mrot.T)[:, :3] + np.asarray(at, float)
     radii = base_r + (tip_r - base_r) * ts
-    solids = []
-    for k in range(n):
-        a, b = W[k], W[k + 1]; d = b - a; L = float(np.linalg.norm(d))
-        if L < 1e-6: continue
-        seg = M.frustum(radii[k], radii[k + 1], L)                       # along +z from the origin
-        z = d / L; x = np.cross([0, 0, 1.0], z)
-        if np.linalg.norm(x) < 1e-9: T = np.eye(4) if z[2] > 0 else R(math.pi, (1, 0, 0))
-        else:
-            x = x / np.linalg.norm(x); T = R(math.acos(float(np.clip(z[2], -1, 1))), x)
-        seg.apply_transform(T); seg.apply_translation(a); solids.append(seg)
-        if k == 0 and flare > 1.0:                                       # the collar: over the first 0.12 of the length, flare x base_r -> base_r
-            Lc = max(0.12 * length, 1.0); c = M.frustum(flare * base_r, base_r, Lc); c.apply_transform(T); c.apply_translation(a); solids.append(c)
-        if k < n - 1:
-            j = trimesh.creation.icosphere(subdivisions=2, radius=float(radii[k + 1])); j.apply_translation(b); solids.append(j)
-    return M.union(*solids) if len(solids) > 1 else solids[0]
+    if flare > 1.0:                                                       # the collar: flare x base_r at the root -> base_r at 0.12 of the length
+        c = np.clip(ts / 0.12, 0, 1); radii = np.maximum(radii, base_r * (flare - (flare - 1.0) * (3 * c ** 2 - 2 * c ** 3)))
+    return sweep_tube(W, radii)
+
+def sweep_tube(path, radii, sections=32):
+    """One closed surface along a polyline: a ring of `sections` points at every path point (radius radii[i]), frames
+    carried by parallel transport so the rings never twist, flat caps at both ends. Replaces the frustum-and-sphere
+    chain (24 Oct 2026): that was one solid per segment with a seam at every joint, a visibly ribbed horn at print size."""
+    import trimesh
+    P = np.asarray(path, float); r = np.asarray(radii, float); m = len(P)
+    T = np.gradient(P, axis=0); T /= np.maximum(np.linalg.norm(T, axis=1), 1e-12)[:, None]
+    N = np.cross(T[0], [1.0, 0, 0]);
+    if np.linalg.norm(N) < 1e-6: N = np.cross(T[0], [0, 1.0, 0])
+    N /= np.linalg.norm(N); frames = [N]
+    for i in range(1, m):                                                 # parallel transport of N along the tangent
+        b = np.cross(T[i - 1], T[i]); sb = np.linalg.norm(b)
+        if sb > 1e-9:
+            b /= sb; th = math.atan2(sb, float(np.dot(T[i - 1], T[i])))
+            N = N * math.cos(th) + np.cross(b, N) * math.sin(th) + b * np.dot(b, N) * (1 - math.cos(th))
+        N = N - T[i] * np.dot(N, T[i]); N /= max(np.linalg.norm(N), 1e-12); frames.append(N)
+    th = np.linspace(0, 2 * np.pi, sections, endpoint=False); V = []
+    for i in range(m):
+        Bv = np.cross(T[i], frames[i]); V.append(P[i] + r[i] * (np.cos(th)[:, None] * frames[i] + np.sin(th)[:, None] * Bv))
+    V = np.vstack(V); F = []
+    for i in range(m - 1):
+        for j in range(sections):
+            a, b = i * sections + j, i * sections + (j + 1) % sections; c, d = a + sections, b + sections
+            F += [[a, b, d], [a, d, c]]
+    c0, c1 = len(V), len(V) + 1; V = np.vstack([V, P[0], P[-1]])
+    for j in range(sections):
+        F.append([c0, (j + 1) % sections, j]); F.append([c1, (m - 1) * sections + j, (m - 1) * sections + (j + 1) % sections])
+    mesh = trimesh.Trimesh(V, np.asarray(F), process=True)
+    if mesh.volume < 0: mesh.invert()
+    return mesh
 
 def spine_tip(length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0, roll_deg=0.0):
     """Where curved_spine()'s tip lands (for clearances and the sheet)."""
