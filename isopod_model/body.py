@@ -445,17 +445,93 @@ def isopod_head(P, plans, J, PV, K, step=0.25, face=None, _grid=False):
 SKIPPED = []
 
 
-def free_spine_solid(sd, mesh, P):
+def _tops(mesh, xs, ys):
+    """Top surface heights at many (x, y) at once (nan where the ray misses the mesh)."""
+    xs, ys = np.atleast_1d(xs).astype(float), np.atleast_1d(ys).astype(float)
+    org = np.c_[xs, ys, np.full(len(xs), 1e3)]; dirs = np.tile([0.0, 0.0, -1.0], (len(xs), 1))
+    loc, idx, _ = mesh.ray.intersects_location(org, dirs)
+    out = np.full(len(xs), np.nan)
+    for p_, i in zip(np.asarray(loc).reshape(-1, 3), np.asarray(idx).ravel()):
+        if not (out[i] >= p_[2]): out[i] = p_[2]
+    return out
+
+
+def free_spine_root(sd, mesh, P, zone=None):
+    """Where a free spine stands on the built `mesh` (24 Oct 2026): its root moved onto the plate where the collar's
+    footprint would hang over a joint, a pleural notch or the margin (rows.snap_root, the same rule the studio draws
+    with), and the root height: below the LOWEST plate top under the collar (so the whole collar is buried on a sloping
+    pleura), yet no deeper than 1.5 mm under the top at the root (the plate over a lip is WALL = 2 mm thick).
+    Returns (x, y, top, lowest top under the collar, highest underside under it, cover, thickness factor) or None when
+    nothing is under it within reach."""
+    import rows as RW
+    x, y = float(sd["x"]), float(sd["y"]); rc = RW.FREE_COLLAR * RW.free_root_radius(P)
+    zone = zone or (lambda xs, ys: np.ones(np.shape(xs), bool))
+    on_plate = RW.one_surface(lambda xs, ys: _tops(mesh, xs, ys), zone)
+    if not np.isfinite(_tops(mesh, [x], [y])[0]) and _surface_z(mesh, x, y, search=2.0) is None: return None
+    x1, y1, cov, fac = RW.fit_free_root(on_plate, x, y, RW.free_root_radius(P), axis=abs(x) < 0.75)
+    rc *= fac; ang = np.linspace(0, 2 * np.pi, 16, endpoint=False)
+    xs, ys = np.r_[x1, x1 + rc * np.cos(ang)], np.r_[y1, y1 + rc * np.sin(ang)]
+    tops = _tops(mesh, xs, ys)
+    if not np.isfinite(tops[0]): return None
+    under = []                                                               # the plate's underside over the collar's footprint (0 = solid to the bed)
+    for px, py in zip(xs, ys):
+        hits = mesh.ray.intersects_location([(px, py, -1e3)], [(0.0, 0.0, 1.0)])[0]
+        under.append(float(np.asarray(hits).reshape(-1, 3)[:, 2].min()) if len(hits) else 0.0)
+    return x1, y1, float(tops[0]), float(np.nanmin(tops)), float(max(under)), cov, fac
+
+
+def _spine_clear(h, plate, others):
+    """Does a free spine solid stay out of what it must not enter: the hollow under its own plate (its vertices outside
+    the plate yet below the plate's top where the plate exists -- the belly of the tube through a 2 mm lip plate into
+    the joint) and every other part at rest? Returns (ok, why)."""
+    V = h.vertices
+    out = ~plate.contains(V)
+    if out.any():
+        tops = _tops(plate, V[out, 0], V[out, 1]); below = np.isfinite(tops) & (V[out, 2] < tops - 0.05)
+        if below.any(): return False, f"{int(below.sum())} points through its plate, {float(np.nanmax(tops[below] - V[out][below, 2])):.1f} mm deep"
+    lo, hi = h.bounds
+    for name, m in others:
+        b0, b1 = m.bounds
+        if (hi < b0).any() or (lo > b1).any(): continue
+        inter = M.intersection(h, m); v = M.volume(inter) if len(inter.faces) else 0.0
+        if v > 0.5: return False, f"into {name} by {v:.0f} mm3"
+    return True, ""
+
+
+def free_spine_solid(sd, mesh, P, others=(), zone=None):
     """One free spine (and its mirror unless on the axis) as solids standing on `mesh` at the spine's (x, y): a curved
-    tube (anatomy.common.curved_spine) with a collar, rooted half a millimetre into the surface. [] if nothing is under it."""
-    x, y, L = float(sd["x"]), float(sd["y"]), float(sd["len"])
+    tube (anatomy.common.curved_spine) with a collar, its root placed and sunk by free_spine_root, leaving at
+    rows.free_spine_angles. The tube must not pass through its own plate into the joint below nor into another part
+    (`others`: [(name, mesh)]): if it does, it leaves steeper (+15, +30, +45 degrees) and then thinner (x0.7, x0.5) until
+    it is clear; what was changed is noted in ROWS_INFO['free_notes']. [] if nothing is under it."""
+    import rows as RW
+    L = float(sd["len"])
     if L < 0.5: return []
-    z = _surface_z(mesh, x, y, search=2.0)
-    if z is None: return []
-    r0 = 0.45 * float(P["marginHeight"]) * float(P["relief"]) + 0.5
-    h = curved_spine(r0, 0.45, L, (x, y, z - 0.5), yaw_deg=float(sd.get("yaw", 0.0)), pitch_deg=float(sd.get("rise", 45.0)) * 0.35,
-                     bend_deg=float(sd.get("rise", 45.0)) * 0.65, roll_deg=float(sd.get("roll", 0.0)), flare=1.4)   # a third of the rise at the root, the rest as the arc
+    rt = free_spine_root(sd, mesh, P, zone)
+    if rt is None: return []
+    x, y, top, low, z_under, cov, fit = rt
+    r0 = RW.free_root_radius(P); pitch0, bend0 = RW.free_spine_angles(sd.get("rise", 45.0)); rise = pitch0 + bend0
+    tried = None
+    if fit < 1.0 or cov < 1.0: ROWS_INFO.setdefault("free_notes", []).append(f"spine at ({x:.0f},{y:.0f}): " + (f"{fit:.2f}x as thick, to fit the plate" if fit < 1.0 else "") + ("" if cov >= 1.0 else f"; collar {cov*100:.0f}% on the plate (no room nearby)"))
+    for dp, fac in [(dp, fit * f) for f in (1.0, 0.7, 0.5) for dp in (0, 15, 30, 45)]:
+        rc = RW.FREE_COLLAR * r0 * fac; pitch = pitch0 + dp
+        zr = max(low - 0.3, z_under + 0.3 + rc * abs(np.cos(np.radians(pitch))))   # the whole collar buried (below the lowest top under it, on a sloping
+        if zr > top - 0.3: continue                                                # pleura), yet the root ring -- perpendicular to the leave, so it dips
+                                                                                   # rc cos(pitch) -- above the plate's underside; a ring that would stand
+                                                                                   # proud of the top cannot sit in this plate at this thickness
+        h = curved_spine(r0 * fac, 0.45 * min(1.0, fac + 0.3), L, (x, y, zr), yaw_deg=float(sd.get("yaw", 0.0)), pitch_deg=pitch,
+                         bend_deg=rise - pitch, roll_deg=float(sd.get("roll", 0.0)), flare=1.4)
+        ok, why = _spine_clear(h, mesh, others)
+        if tried is None: tried = why
+        if ok:
+            if dp or fac < fit - 1e-9:
+                ROWS_INFO.setdefault("free_notes", []).append(f"spine at ({x:.0f},{y:.0f}): leaves {dp:.0f} degrees steeper" + (f", {fac:.2f}x as thick" if fac < fit - 1e-9 else "") + (f" (as drawn it went {tried})" if tried else " (as drawn, its root ring would have cut the plate's underside)"))
+            return [h] if abs(x) < 0.75 else [h, M.mirror_x(h)]
+    ROWS_INFO.setdefault("free_notes", []).append(f"spine at ({x:.0f},{y:.0f}): could not be kept clear ({tried or 'no thickness sits in this plate'}); built thinnest and steepest, root at the top")
+    fac = 0.5 * fit; h = curved_spine(r0 * fac, 0.45 * min(1.0, fac + 0.3), L, (x, y, top - 0.3), yaw_deg=float(sd.get("yaw", 0.0)), pitch_deg=pitch0 + 45, bend_deg=rise - pitch0 - 45, roll_deg=float(sd.get("roll", 0.0)), flare=1.4)
     return [h] if abs(x) < 0.75 else [h, M.mirror_x(h)]
+
+
 
 
 def body_ornaments(P, plans, parts, skip=()):
@@ -497,8 +573,20 @@ def body_ornaments(P, plans, parts, skip=()):
                 if k in skip: continue
                 z = _surface_z(parts[k], x, y)
                 if z is not None and (best is None or z > best[1]): best = (k, z)   # the topmost plate owns the point
+            import rows as RW
+            rc = RW.FREE_COLLAR * RW.free_root_radius(P)
+            if best is None or not RW.free_zone(plans, best[0])(x, y)[0]:  # over a joint, a notch, a lip or a rear plate: the part whose open top covers most of the collar
+                cand = None
+                for k in range(1, len(plans)):
+                    if k in skip: continue
+                    zone = RW.free_zone(plans, k)
+                    c = RW.footprint_cover(lambda xs, ys, cx, cy, m=parts[k], zn=zone: np.isfinite(_tops(m, xs, ys)) & zn(xs, ys), x, y, rc)
+                    if c > 0 and (cand is None or c > cand[1]): cand = (k, c)
+                best = cand or best
             if best is None: continue
-            sols = free_spine_solid(sd, parts[best[0]], P)
+            others = [(plans[j][0], parts[j]) for j in range(1, len(plans)) if j != best[0] and j not in skip]
+            import rows as RW
+            sols = free_spine_solid(sd, parts[best[0]], P, others, zone=RW.free_zone(plans, best[0]))
             if sols: parts[best[0]] = M.union(parts[best[0]], *sols)
 
 

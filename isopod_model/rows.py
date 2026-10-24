@@ -538,12 +538,136 @@ def resolve_free_spine(sd, parts, offsets, head_z=None):
             return k, (z if z is not None and np.isfinite(z) and z > 0.05 else None)
     return len(parts) - 1, None
 
+FREE_COLLAR = 1.4                                                            # the collar's radius / the root radius, as body.free_spine_solid builds it
+
+def free_root_radius(P):
+    """The root radius of a free spine (body.free_spine_solid's r0): a function of the preset's relief."""
+    return 0.45 * float(P["marginHeight"]) * float(P["relief"]) + 0.5
+
+def free_spine_angles(rise):
+    """How a free spine of total rise `rise` (degrees, the tip's elevation) leaves the plate and turns (24 Oct 2026): it
+    leaves at least at 30 degrees (or at the full rise when that is less) and bends the rest of the way as an arc, so the
+    tube's underside clears the plate at once instead of lying along it for a collar's length (a shallow leave of a
+    2 mm thick pleura put the tube's belly through the plate into the joint). A drooping spine (rise < 0) leaves at a
+    third of it, as before. The studio draws the same (freeAngles)."""
+    rise = float(rise)
+    pitch = max(0.35 * rise, min(rise, 30.0)) if rise >= 0 else 0.35 * rise
+    return pitch, rise - pitch
+
+def footprint_cover(on_plate, x, y, rc, n_dir=16):
+    """How much of the collar's footprint (a ring of radius rc about (x, y)) is on the plate: on_plate(xs, ys, x, y) -> bools
+    (the root passed too, for one_surface)."""
+    ang = np.linspace(0, 2 * np.pi, n_dir, endpoint=False)
+    return float(np.mean(on_plate(x + rc * np.cos(ang), y + rc * np.sin(ang), x, y)))
+
+def snap_root(on_plate, x, y, rc, axis=False, reach=1.75):
+    """Move a free spine's root (x, y) the shortest way to where its collar's whole footprint is on the plate (24 Oct 2026):
+    a root clicked over a joint, a pleural notch or the edge would otherwise leave half the collar in the air. Rings of
+    candidates out to 1.75 collar radii, nearest first; a median spine (axis=True) only moves fore-aft. Returns (x, y, cover)
+    -- the best found when nothing within reach is fully covered."""
+    c0 = footprint_cover(on_plate, x, y, rc)
+    if c0 >= 1.0: return x, y, 1.0
+    best = (c0, x, y)
+    for r in np.linspace(0.25 * rc, reach * rc, int(round(4 * reach)) + 1):
+        for a in ([0.5 * np.pi, 1.5 * np.pi] if axis else np.linspace(0, 2 * np.pi, 24, endpoint=False)):
+            px, py = x + r * np.cos(a), y + r * np.sin(a); c = footprint_cover(on_plate, px, py, rc)
+            if c > best[0] + 1e-9: best = (c, px, py)
+        if best[0] >= 1.0: break
+    return best[1], best[2], best[0]
+
+FREE_EDGE = 0.3                                                              # the collar keeps this (mm) behind the lip's edge
+FREE_STEP = 3.0                                                              # the plate under the collar is one surface: tops within this (mm) of the root's (a rib's relief passes; a rear plate's fall to the next row does not)
+
+def free_zone(parts, k):
+    """Where a free spine may stand on part k (24 Oct 2026): its top open to the sky -- behind its lip (the front OVERLAP
+    of its length lies under the part ahead's plate; a spine there would pierce that plate). Returns ok(xs, ys) -> bools
+    in the body frame; the head (k < 0) is all open. The rear plate (2 mm over the next part's lip) is allowed: the
+    root ring is kept inside it (body.free_spine_solid)."""
+    if k < 0: return lambda xs, ys: np.ones(np.shape(xs), bool)
+    name, mod, S, off = parts[k]
+    if "edges" in S and "d" in S:
+        ovl = float(S.get("ovl", 0.0))
+        def ok(xs, ys):
+            xs, ys = np.atleast_1d(xs).astype(float), np.atleast_1d(ys).astype(float)
+            yf = np.asarray(S["edges"](np.abs(xs))[0], float).ravel()
+            return (ys - off) >= yf + ovl + FREE_EDGE
+        return ok
+    ovl_prev = float(parts[k - 1][2].get("ovl", 0.0)) if k > 0 else 0.0
+    return lambda xs, ys: np.atleast_1d(ys).astype(float) - off >= ovl_prev + FREE_EDGE
+
+def one_surface(tops_fn, zone):
+    """An on_plate predicate for snap_root from a height function tops_fn(xs, ys) -> z (nan off the plate) and a zone:
+    on_plate(xs, ys, cx, cy) -- on the plate, in the zone, and within FREE_STEP of the height at the root (cx, cy), so
+    the collar never straddles a step (a lip drop, a rear plate's fall to the next row)."""
+    def on(xs, ys, cx, cy):
+        t = np.asarray(tops_fn(np.atleast_1d(xs), np.atleast_1d(ys)), float).ravel(); t0 = np.asarray(tops_fn(np.array([cx]), np.array([cy])), float).ravel()[0]
+        return np.isfinite(t) & zone(xs, ys) & np.isfinite(t0) & (np.abs(t - t0) <= FREE_STEP)
+    return on
+
+FREE_THIN = (1.0, 0.85, 0.7, 0.55, 0.4)                                      # the thicknesses tried, as a factor on the root radius, until the collar fits
+
+def fit_free_root(on_plate, x, y, r0, axis=False):
+    """A free spine's root and thickness that fit the plate (24 Oct 2026): the nearest root whose whole collar stands on
+    one surface of the plate, at the preset's thickness if there is room, else thinner (FREE_THIN) -- a pleura 4 mm
+    long between its lip and its rear edge takes a 2 mm collar, not a 4.4 mm one. Returns (x, y, cover, factor); the
+    best cover found, at the thinnest, when nothing fits."""
+    best = None
+    for fac in FREE_THIN:                                                    # a root that already fits at some thickness stays put (so a snapped root is a fixed point)
+        if footprint_cover(on_plate, x, y, FREE_COLLAR * r0 * fac) >= 1.0: return x, y, 1.0, fac
+    for fac in FREE_THIN:
+        x1, y1, cov = snap_root(on_plate, x, y, FREE_COLLAR * r0 * fac, axis=axis)
+        if best is None or cov > best[2] + 1e-9: best = (x1, y1, cov, fac)
+        if cov >= 1.0: return x1, y1, cov, fac
+    x1, y1, cov = snap_root(on_plate, x, y, FREE_COLLAR * r0 * FREE_THIN[-1], axis=axis, reach=4.0)   # nothing near: look further, thinnest
+    if cov > best[2] + 1e-9: best = (x1, y1, cov, FREE_THIN[-1])
+    return best
+
+def _plan_polygon(S, off, n=121):
+    """A part's plate in plan as a closed polygon (model mm, body frame), from its outline function."""
+    from matplotlib.path import Path
+    us = np.linspace(-1, 1, n)
+    front = [S["outline"](u, 0.0) for u in us]; rear = [S["outline"](u, 1.0) for u in us[::-1]]
+    pts = np.array([(float(p[0]), float(p[1]) + off) for p in front + rear])
+    return Path(pts)
+
+def resolve_free_root(sd, parts, offsets, P):
+    """A free spine's root as the build will place it, from the PLANS (the drawing): the part whose plate is under it
+    (the one covering most of the collar's footprint; the first by y-range when none does), the root moved onto that
+    plate where the collar would hang over a joint or a notch (snap_root), and the surface height there. Returns
+    dict(part, z, root=(x, y), cover, moved)."""
+    x, y = float(sd["x"]), float(sd["y"]); rc = FREE_COLLAR * free_root_radius(P)
+    if y < offsets[0]: return dict(part=-1, z=None, root=(x, y), cover=1.0, moved=0.0, thin=1.0)     # the head: one dome, no notches
+    polys = []
+    for k, (name, mod, S, off) in enumerate(parts):
+        try: polys.append(_plan_polygon(S, off))
+        except Exception: polys.append(None)
+    def tops_k(k):
+        name, mod, S, off = parts[k]
+        def tops(xs, ys):
+            xs, ys = np.atleast_1d(xs).astype(float), np.atleast_1d(ys).astype(float)
+            inside = polys[k].contains_points(np.c_[np.abs(xs), ys]) if polys[k] is not None else np.zeros(len(xs), bool)
+            try: z = np.asarray(S["zfun"](np.abs(xs), ys - off), float).ravel()
+            except Exception: z = np.full(len(xs), np.nan)
+            return np.where(inside & np.isfinite(z) & (z > 0.05), z, np.nan)
+        return tops
+    def on_plate_k(k): return one_surface(tops_k(k), free_zone(parts, k))
+    covers = [footprint_cover(lambda xs, ys, cx, cy, k=k: np.isfinite(tops_k(k)(xs, ys)) & free_zone(parts, k)(xs, ys), x, y, rc) if polys[k] is not None else 0.0 for k in range(len(parts))]
+    k = int(np.argmax(covers)) if max(covers) > 0 else resolve_free_spine(sd, parts, offsets)[0]
+    x1, y1, cov, fac = fit_free_root(on_plate_k(k), x, y, free_root_radius(P), axis=abs(x) < 0.75)
+    name, mod, S, off = parts[k]
+    try: z = float(np.asarray(S["zfun"](np.array([abs(x1)]), np.array([y1 - off]))).ravel()[0])
+    except Exception: z = None
+    if z is not None and not (np.isfinite(z) and z > 0.05): z = None
+    return dict(part=k, z=z, root=(float(x1), float(y1)), cover=float(cov), moved=float(np.hypot(x1 - x, y1 - y)), thin=float(fac))
+
 def _free_info(R, P):
-    """The free spines for the studio: each with the part it stands on and its surface height (None off the animal)."""
+    """The free spines for the studio: each with the part it stands on, the root as the build will place it (snapped onto
+    the plate), how far that moved it, and its surface height (None off the animal)."""
     out = []
     for sd in R.get("free_spines", []):
-        k, z = resolve_free_spine(sd, R["parts"], R["offsets"])
-        out.append(dict(sd, part=k, z=(round(z, 3) if z is not None else None)))
+        r = resolve_free_root(sd, R["parts"], R["offsets"], P)
+        out.append(dict(sd, part=r["part"], z=(round(r["z"], 3) if r["z"] is not None else None), root=[round(r["root"][0], 3), round(r["root"][1], 3)],
+                        cover=round(r["cover"], 3), moved=round(r["moved"], 3), thin=r["thin"]))
     return out
 
 def _tail_info(S, y_off, P, spec):

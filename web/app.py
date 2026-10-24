@@ -149,6 +149,7 @@ def _build_isopod(P, folder, head=None, body_spec=None):
     cut = {k: v for k, v in dropped.items() if v > 20.0}                  # more than debris: the clearances severed anatomy (parts overlapped)
     checks = dict(print_valid=all(p["watertight"] and p["bodies"] == 1 for p in out) and not touching and not cut,
                   notes=[f"{t['a']} and {t['b']} touch at rest: {t['mm3']} mm3" for t in touching]
+                        + [f"free {n}" for n in (getattr(IBODY, "ROWS_INFO", {}) or {}).get("free_notes", [])]
                         + [f"{k}: {v:.0f} mm3 cut away by the clearances (it overlapped the part ahead; a forward sweep or a long overlap?)" for k, v in cut.items()]
                         + ([f"debris dropped (mm3): {dropped}"] if dropped and not cut else []),
                   touching=touching, debris_mm3=dropped)
