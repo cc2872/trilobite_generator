@@ -83,7 +83,9 @@ def plan(P, i):
         return z
     return dict(outline=outline, zfun=zfun, edges=edges, t=t, w=w, a=a, d=d, ovl=ovl, margin=margin, rise=rise, h=h,
                 X_tip=X_tip, u_a=a / X_tip, last=(i == int(P["segCount"]) - 1), i=i, n=int(P["segCount"]),
-                axial=dict(L=float(P["axialSpine"]) * h, pitch=float(P.get("axialPitch", 60.0)), bend=float(P.get("axialBend", 0.0)), grad=float(P.get("axialGrad", 0.0))))   # the row's own P reaches ornaments() this way (rows model: _P_row)
+                axial=dict(L=float(P["axialSpine"]) * h, pitch=float(P.get("axialPitch", 60.0)), bend=float(P.get("axialBend", 0.0)), grad=float(P.get("axialGrad", 0.0))),   # the row's own P reaches ornaments() this way (rows model: _P_row)
+                horn=dict(L=float(P.get("pleuralHorn", 0.0)) * w, turn=float(P.get("pleuralHornPitch", 45.0)) + float(P.get("pleuralHornBend", 0.0)),
+                          roll=float(P.get("pleuralHornRoll", 0.0)), yaw_off=float(P.get("_hornYaw", 0.0)), grad=float(P.get("pleuralHornGrad", 0.0))))
 
 def _doublure(seg, S, P):
     """Vertical rim + inward lip along the blade margin, only on broad square-tipped pleurae (as in the BREP builder)."""
@@ -117,8 +119,10 @@ def ornaments(P, S):
         r = 0.45 * S["margin"]; L = A["L"] * (1.0 + A["grad"] * frac)
         out.append(("axialSpine", curved_spine(0.6 * r + 0.6, 0.5, L, (0, S["ovl"] + 0.45 * (S["d"] - S["ovl"]), S["h"] + S["rise"] - 1.0), 0,
                                                pitch_deg=A["pitch"], bend_deg=A["bend"], roll_deg=0.0)))   # 24 Oct 2026: a curve; defaults = the 60 deg rod
-    if float(P.get("pleuralHorn", 0.0)) > 0.02 and "X_tip" in S:              # 24 Oct 2026: a horn continuing each pleural blade (Koneprusia)
-        L = P["pleuralHorn"] * S["w"] * (1.0 + float(P.get("pleuralHornGrad", 0.0)) * frac)
+    Hn = S.get("horn") or dict(L=float(P.get("pleuralHorn", 0.0)) * S["w"], turn=float(P.get("pleuralHornPitch", 45.0)) + float(P.get("pleuralHornBend", 0.0)),
+                               roll=float(P.get("pleuralHornRoll", 0.0)), yaw_off=0.0, grad=float(P.get("pleuralHornGrad", 0.0)))
+    if Hn["L"] > 0.02 * S["w"] and "X_tip" in S:                           # 24 Oct 2026: a horn continuing each pleural blade (Koneprusia)
+        L = Hn["L"] * (1.0 + Hn["grad"] * frac)
         # The horn leaves the plate with the section the blade has at its tip (chord across, height up) and tapers from
         # there; while its centreline is still over the plate its section IS the blade's, so nothing of the blade runs
         # on underneath. The root is 2.5 mm inboard of the tip, at the blade's mid-height, sloping as the blade does.
@@ -133,8 +137,8 @@ def ornaments(P, S):
             ra2 = np.where(inside, np.maximum(np.interp(x, xs, 0.5 * chord), 0.35), ra)
             rb2 = np.where(inside, np.maximum(np.interp(x, xs, zmid) + 0.15, 0.35), rb)   # +0.15: the crest stands proud of the blade (flush was a tangent meeting: sliver faces)
             return ra2, rb2
-        h = curved_spine(r_leave, 0.45, L, (x0, y0, z0), yaw_deg=90.0 - float(P["spineSweep"]), pitch_deg=slope,
-                         bend_deg=float(P.get("pleuralHornPitch", 45.0)) + float(P.get("pleuralHornBend", 0.0)) - slope, roll_deg=float(P.get("pleuralHornRoll", 0.0)),
+        h = curved_spine(r_leave, 0.45, L, (x0, y0, z0), yaw_deg=90.0 - float(P["spineSweep"]) + Hn["yaw_off"], pitch_deg=slope,
+                         bend_deg=Hn["turn"] - slope, roll_deg=Hn["roll"],
                          flare=1.0, plate=max(2.0 * z0, 0.8), profile=blade_section)
         out.append(("pleuralHorns", [h, M.mirror_x(h)], "union"))
     return out

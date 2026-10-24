@@ -64,9 +64,15 @@ ROW_KEYS = dict(
     ax_len=("mm", "this row's axial spine length (with ax_own; 0 = none)"),
     ax_pitch=("deg", "how steeply it leaves the ring (with ax_own)"),
     ax_bend=("deg", "its arc, root to tip (with ax_own; + recurves the tip back)"),
+    # ... and the row's own pleural horn (the plan dots): horn_own 1 = this row's horn_len / horn_rise / horn_roll / horn_yaw
+    horn_own=("0/1", "1 = this row's pleural horn is its own; 0 = the preset's (P.pleuralHorn*)"),
+    horn_len=("mm", "this row's pleural horn length (with horn_own; 0 = none)"),
+    horn_rise=("deg", "its total upward turn from the blade, root to tip (with horn_own)"),
+    horn_roll=("deg", "the plane it bends in: 0 straight up, + leaning outward, - inward (with horn_own)"),
+    horn_yaw=("deg", "its direction in plan, added to the blade's sweep: + more outward (with horn_own)"),
     kind=("", "'thorax' or 'pyg' (which block the preset put it in; a label, not a rule)"),
 )
-ROW_EXTRA = dict(ax_own=0.0, ax_len=0.0, ax_pitch=60.0, ax_bend=0.0)   # optional keys: a row without them gets these (saved bodies predate them)
+ROW_EXTRA = dict(ax_own=0.0, ax_len=0.0, ax_pitch=60.0, ax_bend=0.0, horn_own=0.0, horn_len=0.0, horn_rise=45.0, horn_roll=0.0, horn_yaw=0.0)   # optional keys: a row without them gets these (saved bodies predate them)
 BODY_KEYS = dict(
     model=("", "'thorax': the generator's own segments and tail, as the site already prints them (default); 'slab': the tergite slab"),
     thorax_rows=("n", "number of thoracic rows (the preset's segCount); rows are re-spaced over the thorax length"),
@@ -140,7 +146,8 @@ def boring(P=None, n_thorax=9, n_pyg=6):
 # ceiling on what a build may cost. Outside it the spec is refused (400), never built.
 ROW_RANGE = dict(len=(0.2, 500.0), width=(0.5, 400.0), axis=(0.05, 0.9), relief=(0.5, 200.0), margin=(0.0, 1.0), sweep=(-85.0, 85.0),
                  curve=(-85.0, 85.0), tip=(0.0, 400.0), tip_w=(0.02, 5.0), arch=(0.0, 2.0), fulcrum=(0.02, 0.98), slope=(0.0, 3.0), rear_round=(0.0, 1.0),
-                 ax_own=(0.0, 1.0), ax_len=(0.0, 500.0), ax_pitch=(0.0, 90.0), ax_bend=(-180.0, 180.0))
+                 ax_own=(0.0, 1.0), ax_len=(0.0, 500.0), ax_pitch=(0.0, 90.0), ax_bend=(-180.0, 180.0),
+                 horn_own=(0.0, 1.0), horn_len=(0.0, 500.0), horn_rise=(-180.0, 180.0), horn_roll=(-180.0, 180.0), horn_yaw=(-80.0, 80.0))
 BODY_RANGE = dict(thorax_rows=(1, 80), pyg_rows=(0, 80), thorax_len=(0.5, 2000.0), pyg_len=(0.0, 2000.0), term_spine=(0.0, 500.0),
                   min_joint_mm=(1.0, 100.0), print_scale=(0.1, 20.0))
 MAX_ROWS = 80
@@ -383,6 +390,10 @@ def _P_row(P, row, i, inner=False, n_rows=None):
     if float(row.get("ax_own", 0.0)) >= 0.5:                               # the row's own axial spine (24 Oct 2026)
         Pi["axialSpine"] = float(row.get("ax_len", 0.0)) / max(float(row["relief"]), 1e-6); Pi["axialGrad"] = 0.0
         Pi["axialPitch"] = float(row.get("ax_pitch", 60.0)); Pi["axialBend"] = float(row.get("ax_bend", 0.0))
+    if float(row.get("horn_own", 0.0)) >= 0.5:                             # the row's own pleural horn (24 Oct 2026)
+        Pi["pleuralHorn"] = float(row.get("horn_len", 0.0)) / w; Pi["pleuralHornGrad"] = 0.0
+        Pi["pleuralHornPitch"] = float(row.get("horn_rise", 45.0)); Pi["pleuralHornBend"] = 0.0
+        Pi["pleuralHornRoll"] = float(row.get("horn_roll", 0.0)); Pi["_hornYaw"] = float(row.get("horn_yaw", 0.0))
     if inner: Pi["clearance"] = 0.0; Pi["wall"] = min(P["wall"], 0.6)
     return Pi
 

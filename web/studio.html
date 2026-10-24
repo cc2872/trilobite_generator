@@ -108,9 +108,14 @@ if(EMBED){ document.body.classList.add('embed'); const b=document.getElementById
 
 // ---------- ranges (the page's own; the model files carry units/docs, not ranges) ----------
 const R={len:[1,40], width:[1,80], axis:[0.12,0.5], relief:[3,40], margin:[0.05,0.6], sweep:[-20,70], curve:[-30,60], tip:[0,80], tip_w:[0.1,1.5], arch:[0,0.5], fulcrum:[0.1,0.95], slope:[0,1.2], rear_round:[0,1],
-         ax_len:[0,120], ax_pitch:[0,90], ax_bend:[-180,180]};
+         ax_len:[0,120], ax_pitch:[0,90], ax_bend:[-180,180], horn_len:[0,120], horn_rise:[-180,180], horn_roll:[-180,180], horn_yaw:[-80,80]};
 const ROWKEYS=['len','width','sweep','curve','tip','tip_w','relief','arch','axis','margin','fulcrum','slope','rear_round'];
 const AXKEYS=['ax_len','ax_pitch','ax_bend'];                       // the row's own axial spine (24 Oct 2026): a slider edit or a dot drag makes it its own (ax_own = 1)
+const HNKEYS=['horn_len','horn_rise','horn_roll','horn_yaw'];       // ... and its own pleural horn (horn_own = 1)
+function hornOf(r,i){ const P=S.P||{}; const thx=S.BD.rows.filter(x=>x.row.kind!=='pyg'); const frac=thx.length>1?Math.min(i/(thx.length-1),1):0;
+  if(+r.horn_own>=0.5) return {L:+r.horn_len, turn:+r.horn_rise, roll:+r.horn_roll, yaw:+r.horn_yaw, own:true};
+  return {L:(+P.pleuralHorn||0)*(+r.width)*(1+(+P.pleuralHornGrad||0)*frac), turn:(+P.pleuralHornPitch||45)+(+P.pleuralHornBend||0), roll:(+P.pleuralHornRoll||0), yaw:0, own:false}; }
+function ownHorn(i){ const r=S.spec.list[i]; if(+r.horn_own>=0.5) return; const h=hornOf(r,i); r.horn_own=1; r.horn_len=+h.L.toFixed(3); r.horn_rise=+h.turn.toFixed(1); r.horn_roll=+h.roll.toFixed(1); r.horn_yaw=+h.yaw.toFixed(1); }
 // what a row's axial spine is: its own numbers, or the preset's (P) with the gradient along the thorax
 function axialOf(r,i){ const P=S.P||{}; const rel=+P.relief||17; const thx=S.BD.rows.filter(x=>x.row.kind!=='pyg'); const frac=thx.length>1?Math.min(i/(thx.length-1),1):0;
   if(+r.ax_own>=0.5) return {L:+r.ax_len, pitch:+r.ax_pitch, bend:+r.ax_bend, own:true};
@@ -225,6 +230,9 @@ function renderContext(rebuild=true){ const box=$('context');
     { const hdr=document.createElement('div'); hdr.className='sect'; hdr.innerHTML=`<span>Axial spine - this row</span><span class="mono" style="color:var(--mid);text-transform:none;letter-spacing:0">${+r.ax_own>=0.5?'its own':'the preset\'s - drag its dots or move a slider'}</span>`; box.appendChild(hdr);
       const ax=axialOf(r,i); for(const k of AXKEYS){ const rr=R[k]; const v={ax_len:ax.L,ax_pitch:ax.pitch,ax_bend:ax.bend}[k]; slider(box,k,v,rr[0],rr[1],(rr[1]-rr[0])/300,val=>{ ownAxial(i); setRow(i,k,val); },S.BD.keys[k]?S.BD.keys[k].unit:''); }
       if(+r.ax_own>=0.5){ const b=document.createElement('button'); b.className='btn small'; b.textContent="back to the preset's spine"; b.onclick=()=>{ S.spec.list[i].ax_own=0; sendBody(); renderContext(); }; box.appendChild(b); } }
+    if(r.kind!=='pyg'){ const hdr=document.createElement('div'); hdr.className='sect'; hdr.innerHTML=`<span>Pleural horn - this row</span><span class="mono" style="color:var(--mid);text-transform:none;letter-spacing:0">${+r.horn_own>=0.5?'its own':'the preset\'s - drag its dots in plan or move a slider'}</span>`; box.appendChild(hdr);
+      const hn=hornOf(r,i); for(const k of HNKEYS){ const rr=R[k]; const v={horn_len:hn.L,horn_rise:hn.turn,horn_roll:hn.roll,horn_yaw:hn.yaw}[k]; slider(box,k,v,rr[0],rr[1],(rr[1]-rr[0])/300,val=>{ ownHorn(i); setRow(i,k,val); },S.BD.keys[k]?S.BD.keys[k].unit:''); }
+      if(+r.horn_own>=0.5){ const b=document.createElement('button'); b.className='btn small'; b.textContent="back to the preset's horn"; b.onclick=()=>{ S.spec.list[i].horn_own=0; sendBody(); renderContext(); }; box.appendChild(b); } }
     const pgroup=(title,note,ps)=>{ if(!S.P||!ps.length) return; const hdr=document.createElement('div'); hdr.className='sect'; hdr.innerHTML=`<span>${title}</span><span class="mono" style="color:var(--mid);text-transform:none;letter-spacing:0">${note}</span>`; box.appendChild(hdr);
       for(const p of ps){ const v=(S.P[p.key]!=null?S.P[p.key]:p.default); slider(box,p.key,v,p.lo,p.hi,p.step||((p.hi-p.lo)/200),val=>setEyeParam(p.key,val),p.unit||''); } };
     if(r.kind==='pyg') pgroup('Tail','whole tail - drawn in plan, built on Build',S.tailParams);                      // 24 Oct 2026: the tail's ribs, furrows and spines
@@ -232,7 +240,8 @@ function renderContext(rebuild=true){ const box=$('context');
     $('ctxtools').innerHTML=`<select id="kind" style="width:auto;padding:2px 0;font-size:10px"><option value="thorax">thorax</option><option value="pyg">pyg</option></select>`;
     $('kind').value=r.kind; $('kind').onchange=e=>{ S.spec.list[i].kind=e.target.value; sendBody(); }; }
   else { for(const k of ROWKEYS){ const s=$('s_'+k); if(s&&document.activeElement!==s){ s.value=r[k]; $('v_'+k).textContent=fmt(r[k]); } }
-    { const ax=axialOf(r,i); for(const [k,v] of [['ax_len',ax.L],['ax_pitch',ax.pitch],['ax_bend',ax.bend]]){ const s=$('s_'+k); if(s&&document.activeElement!==s){ s.value=v; $('v_'+k).textContent=fmt(v); } } }
+    { const ax=axialOf(r,i); for(const [k,v] of [['ax_len',ax.L],['ax_pitch',ax.pitch],['ax_bend',ax.bend]]){ const s=$('s_'+k); if(s&&document.activeElement!==s){ s.value=v; $('v_'+k).textContent=fmt(v); } }
+      const hn=hornOf(r,i); for(const [k,v] of [['horn_len',hn.L],['horn_rise',hn.turn],['horn_roll',hn.roll],['horn_yaw',hn.yaw]]){ const s=$('s_'+k); if(s&&document.activeElement!==s){ s.value=v; $('v_'+k).textContent=fmt(v); } } }
     if(S.P) for(const p of [...S.spineParams,...S.tailParams]){ const s=$('s_'+p.key); if(s&&document.activeElement!==s){ s.value=S.P[p.key]; $('v_'+p.key).textContent=fmt(S.P[p.key]); } } }
 }
 function renderTable(){ const e=$('rowtable'); const L=S.spec.list; const D=S.BD; if(!L) return;
@@ -360,10 +369,12 @@ new p5(s=>{
           if(on) orange(1.3); else if(ax.own) hair(255,1.2); else hair(200,1.0); s.beginShape(); for(const q of pts) s.vertex(zS(q[2]),Y(q[1])); s.endShape();   // side view only: it stands on the axis
           const tip=pts[16], mid=pts[8]; for(const [k,q] of [['ax_tip',tip],['ax_mid',mid]]){ const sx=zS(q[2]), sy=Y(q[1]); s.stroke(on?s.color(246,112,79):s.color(255,200)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):0); s.circle(sx,sy,on?7:4.5); HP.push({kind:'ax',i,k,sx,sy,root}); }
           if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`axial ${ax.L.toFixed(1)} mm - ${Math.round(ax.pitch)}° - bend ${Math.round(ax.bend)}°${ax.own?'':' (preset)'}`, zS(tip[2])+9, Y(tip[1])-6); } } }
-      if((+P.pleuralHorn||0)>0.02){ const L=(+P.pleuralHorn)*r.row.width*(1+(+P.pleuralHornGrad||0)*frac); const tip=r.handles.tip&&r.row.tip>0.05?r.handles.tip:r.handles.edge; const rise=(+P.pleuralHornPitch||45), bend=(+P.pleuralHornBend||0);
-        const pts=arcPts([tip[0]-1.5,tip[1],0.15*rel],L,90-(+P.spineSweep||50),0,rise+bend,(+P.pleuralHornRoll||0),16);
-        hair(230,1.1); for(const m of [1,-1]){ s.beginShape(); for(const q of pts) s.vertex(X(m*q[0]),Y(q[1])); s.endShape(); }                 // plan
-        hair(150,1); s.beginShape(); for(const q of pts) s.vertex(zS(q[2]),Y(q[1])); s.endShape(); } });                                     // side
+      { const hn=hornOf(r.row,i); if(hn.L>0.5){ const tip=r.handles.tip&&r.row.tip>0.05?r.handles.tip:r.handles.edge; const root=[tip[0]-1.5,tip[1],0.15*rel];
+          const pts=arcPts(root,hn.L,90-(+P.spineSweep||50)+(+r.row.curve||0)+hn.yaw,0,hn.turn,hn.roll,16); const on=S.sel&&S.sel.type==='row'&&S.sel.i===i;
+          if(on) orange(1.3); else if(hn.own) hair(255,1.2); else hair(200,1.0); for(const m of [1,-1]){ s.beginShape(); for(const q of pts) s.vertex(X(m*q[0]),Y(q[1])); s.endShape(); }   // plan
+          hair(150,1); s.beginShape(); for(const q of pts) s.vertex(zS(q[2]),Y(q[1])); s.endShape();                                                                        // side
+          const tp=pts[16], md=pts[8]; for(const [k,q] of [['ph_tip',tp],['ph_mid',md]]){ const sx=X(q[0]), sy=Y(q[1]); s.stroke(on?s.color(246,112,79):s.color(255,200)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):0); s.circle(sx,sy,on?7:4.5); HP.push({kind:'ph',i,k,sx,sy,root}); }
+          if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`horn ${hn.L.toFixed(1)} mm - rise ${Math.round(hn.turn)}° - roll ${Math.round(hn.roll)}° - yaw ${Math.round(hn.yaw)}°${hn.own?'':' (preset)'}`, X(tp[0])+9, Y(tp[1])-6); } } } });
     // the tail's spines, in plan, from the last row's margin (an approximation of tail.py's margin_pt)
     const last=D.rows[n-1]; if(!last) return; const pyg=D.rows.filter(r=>r.row.kind==='pyg'); const Lp=Math.max(pyg.length?pyg.reduce((a,r)=>a+(+r.row.len),0):(+last.row.len), 4);
     const wp=(pyg[0]||last).row.width, yb=last.handles.rear[1]; const grow=+P.pygSpineGrow||0, rise=+P.pygSpineRise||0, bend=+P.pygSpineBend||0;
@@ -407,9 +418,10 @@ new p5(s=>{
     else if(h&&h.kind==='eye'){ S.sel={type:'head'}; S.eyeSel=h.k; S.drag={kind:'eye',k:h.k,d:h}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='horn'){ S.sel={type:'head'}; S.headSel=h.k; S.drag={kind:'horn',k:h.k}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='ax'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; ownAxial(h.i); S.drag={kind:'ax',i:h.i,k:h.k,root:h.root}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
+    else if(h&&h.kind==='ph'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; ownHorn(h.i); S.drag={kind:'ph',i:h.i,k:h.k,root:h.root}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='head'){ S.sel={type:'head'}; S.headSel=h.k; S.drag={kind:'head',k:h.k,elev:!!h.elev,x0:s.mouseX,y0:s.mouseY,start:headSnapshot()}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else { S.sel=null; S.drag=null; renderContext(); renderTable(); } };
-  s.mouseReleased=()=>{ if(S.drag){ if(S.drag.kind==='ax') sendBody(); S.drag=null; stage.style.cursor='grab'; } };
+  s.mouseReleased=()=>{ if(S.drag){ if(S.drag.kind==='ax'||S.drag.kind==='ph') sendBody(); S.drag=null; stage.style.cursor='grab'; } };
   s.mouseDragged=()=>{ if(!S.drag) return;
     if(S.drag.kind==='row'){ const d=S.drag, st=d.start, i=d.i; const dx=(s.mouseX-d.x0)/px, dy=(s.mouseY-d.y0)/px;
       switch(d.k){
@@ -423,6 +435,14 @@ new p5(s=>{
         S.P.eyeStalk=Math.max(0,Math.min(4,+dist.toFixed(2))); S.P.eyeLean=Math.max(0,Math.min(90,Math.round(lean))); }
       else if(S.drag.k==='height'){ const proj=((mx-d.bx)*d.dx+(my-d.by)*d.dy)/d.er; S.P.eyeHeight=Math.max(0.2,Math.min(1.6,+proj.toFixed(2))); }
       S.edited=true; renderContext(false); return; }
+    if(S.drag.kind==='ph'){ const d=S.drag, row=S.spec.list[d.i], r=S.BD.rows[d.i]; const P=S.P||{}; const mx=Math.abs((s.mouseX-ox)/px), my=(s.mouseY-oy)/px;   // mouse in model mm (plan, right side)
+      const hn=hornOf(row,d.i); const yaw0=90-(+P.spineSweep||50)+(+r.row.curve||0); const cur=arcPts(d.root,hn.L,yaw0+hn.yaw,0,hn.turn,hn.roll,16);
+      const vx=mx-d.root[0], vy=my-d.root[1];
+      if(d.k==='ph_tip'){ const tx=cur[16][0]-d.root[0], ty=cur[16][1]-d.root[1]; const c0=Math.hypot(tx,ty)||1e-6, c1=Math.hypot(vx,vy);     // the plan footprint scales with L; its direction is the yaw
+        row.horn_len=+Math.max(0,Math.min(120,hn.L*c1/c0)).toFixed(2); const dA=(Math.atan2(vx,vy)-Math.atan2(tx,ty))*180/Math.PI; row.horn_yaw=+Math.max(-80,Math.min(80,hn.yaw+dA)).toFixed(1); }
+      else { const tx=cur[16][0]-d.root[0], ty=cur[16][1]-d.root[1]; const cl=Math.hypot(tx,ty)||1e-6; const sag=(vx*ty-vy*tx)/cl;            // the plan sagitta of the mid: the arc's plane rolled sideways
+        const th=Math.abs(hn.turn)*Math.PI/180; const sagV=th>1e-3?(hn.L/th)*(1-Math.cos(th/2)):0; if(sagV>1e-6){ const rl=Math.asin(Math.max(-1,Math.min(1,sag/sagV)))*180/Math.PI; row.horn_roll=+Math.max(-180,Math.min(180,Math.round(rl/5)*5)).toFixed(1); } }
+      S.edited=true; invalidateBuild(); renderContext(false); return; }
     if(S.drag.kind==='ax'){ const d=S.drag, row=S.spec.list[d.i]; const my=(s.mouseY-oy)/px, mz=(s.mouseX-oxE)/(ZX*px);   // mouse in model mm: y along, z up (side view)
       const dy=my-d.root[1], dz=mz-d.root[2]; const c=Math.hypot(dy,dz)||1e-6; const phi=(+row.ax_bend||0)*Math.PI/180;
       if(d.k==='ax_tip'){ const L=Math.abs(phi)<1e-6?c:c*(Math.abs(phi)/2)/Math.sin(Math.min(Math.abs(phi)/2,1.5)); const chordAng=Math.atan2(dz,dy)*180/Math.PI;   // the arc from its chord: L = c (phi/2)/sin(phi/2), tangent at the root = chord - phi/2
