@@ -39,7 +39,7 @@ OUTLINE = dict(
     genal_tip=0.12,    # tip width / root width (1 = a parallel band with a round end; 0.1 = drawn to a point)
     genal_spread=4.0,  # it leaves at this angle outward from straight back, deg
     genal_curve=0.0,   # and turns by this much along its length, deg (+ outward, - back inward)
-    notch=0.08,        # the rear margin between the spines: 0 straight across, 1 a U as deep as the spine is long
+    notch=0.048,       # the rear margin bows back between the genal angles: depth / axial length (0 straight across)
     notch_exp=2.0,     # 2 = an elliptical U; higher = straight across, then a late bend
     dome_fill=0.82,    # the vaulted part / the whole (0.6 leaves a broad flat brim: Harpetida)
     horn_h=0.32,       # the spine's ridge height / relief (a flat prolongation ~0.18)
@@ -58,7 +58,7 @@ OUTLINE = dict(
     brim_pits=0,       # rows of pits on it
 )
 # the crescent print piece's own silhouette (head3d: R 20, arm 4 x 20, the U notch), as it was the default until 20 Oct 2026
-CRESCENT_OUTLINE = dict(OUTLINE, length=1.08, front_exp=2.0, widest=0.08, genal=0.77, genal_w=0.167, genal_tip=1.0, genal_spread=0.0, notch=0.9)
+CRESCENT_OUTLINE = dict(OUTLINE, length=1.08, front_exp=2.0, widest=0.08, genal=0.77, genal_w=0.167, genal_tip=1.0, genal_spread=0.0, notch=0.693)   # notch: 0.9 x the band length 0.77 (24 Oct: / axial length)
 TRACE_MAX = 400     # points a traced outline may carry
 
 OUTLINE_RANGE = dict(   # what the silhouette is drawn for (11 Oct 2026: a 0.2-long head crashed in interp, a 3 x 3 x genal-3 one printed 2.7 m)
@@ -140,8 +140,12 @@ class Shape:
             yrb = np.maximum(yrb, yfb + 0.5)
         else:
             yfb = yw - Lf * np.clip(1 - a2 ** nF, 0, 1) ** (1 / nF)
-            y_n = yg + (o["notch"] * Lh if corner_horn else 0.0); q = o["notch_exp"]
-            yrb = np.full(nb, yg); inb = axb <= x_in
+            # 24 Oct 2026: the notch is the HEAD's rear margin bowing back (depth / axial length), no longer a fraction of the
+            # spine's length (which made every lengthening of the spine deepen the notch), and it runs out to the genal
+            # angle: the columns between the spine's inner edge and the angle sat at yg, a wall of notch x Lh wherever the
+            # spine did not run straight back over them (the "stub" at the genal corner, studio, 23 Oct).
+            y_n = yg + o["notch"] * L1; q = o["notch_exp"]
+            yrb = np.full(nb, y_n); inb = axb <= x_in
             yrb[inb] = y_n * (1 - np.clip(1 - (axb[inb] / max(x_in, 1e-6)) ** q, 0, 1) ** (1 / q))
             sidec = axb > xg                                       # a side that tapers back from the widest line
             if sidec.any(): yrb[sidec] = yw + (yg - yw) * np.sqrt(np.clip((RO - axb[sidec]) / max(RO - xg, 1e-6), 0, 1))

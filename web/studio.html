@@ -366,7 +366,7 @@ new p5(s=>{
       case 'widest':   v.widest=st.widest-along/L; v.width=st.width+across; break;
       case 'angle':    v.side=st.side+along/L; v.rear_taper=st.rear_taper-across; break;
       case 'root':     v.genal_at=st.genal_at-across; break;
-      case 'notch':    v.notch=st.notch-along/Math.max(0.2,st.genal*L); v.notch_exp=st.notch_exp+across*4; break;
+      case 'notch':    v.notch=st.notch-along/L; v.notch_exp=st.notch_exp+across*4; break;
       case 'glabella': v.glab_len=st.glab_len-along/L; v.glab_inflate=st.glab_inflate+across*1.5; break;
       case 'eye':      v.eye_pos=st.eye_pos-along/L; v.eye_lat=st.eye_lat+across; break;
       case 'brim':     v.brim_w=st.brim_w-across/0.7; break;

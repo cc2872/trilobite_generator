@@ -106,40 +106,42 @@ STYLES["bristolia"] = dict(p=52, doc="Olenelloidea: the olenellid face, with the
                        face=dict(STYLES["olenellus"]["face"]), params=dict(STYLES["olenellus"]["params"]))
 
 # ---- the silhouette of each style (shaped_head.OUTLINE keys; 2 Oct 2026). The major head types of the guide:
-SP = dict(genal_w=0.10, genal_tip=0.12, notch=0.08, widest=0.03)              # a slim genal spine on a straight rear margin
+SP = dict(genal_w=0.10, genal_tip=0.12, notch=0.048, widest=0.03)              # a slim genal spine on a straight rear margin
 OUTLINES = {
     "olenellus":    dict(SP, length=0.95, genal=0.75, width=1.22),                                   # wide semicircle, genal spines
     "paradoxides":  dict(SP, length=0.90, genal=1.6, genal_w=0.12, genal_spread=4, width=1.22),      # ... very long ones
-    "agnostus":     dict(length=1.25, front_exp=2.2, widest=0.45, side=0.35, rear_taper=0.14, genal=0, corner=0.2, width=1.02),   # parabolic shield, widest forward
+    "agnostus":     dict(length=1.25, front_exp=2.2, widest=0.45, side=0.35, rear_taper=0.14, genal=0, notch=0, corner=0.2, width=1.02),   # parabolic shield, widest forward
     "olenoides":    dict(SP, length=0.90, genal=0.7, width=1.2),
-    "bumastus":     dict(length=1.0, front_exp=2.3, genal=0, corner=0.3, widest=0.3, side=0.2, dome_fill=0.97, width=1.05, height=1.15),  # a smooth half-dome
-    "lichas":       dict(length=0.8, front_exp=2.4, genal=0.5, genal_w=0.16, genal_tip=0.2, genal_spread=10, notch=0.1, widest=0.03, width=1.2),
+    "bumastus":     dict(length=1.0, front_exp=2.3, genal=0, notch=0, corner=0.3, widest=0.3, side=0.2, dome_fill=0.97, width=1.05, height=1.15),  # a smooth half-dome
+    "lichas":       dict(length=0.8, front_exp=2.4, genal=0.5, genal_w=0.16, genal_tip=0.2, genal_spread=10, notch=0.05, widest=0.03, width=1.2),
     "odontopleura": dict(length=0.7, front_exp=2.6, genal=1.0, genal_w=0.10, genal_tip=0.15, genal_spread=40, genal_curve=-45, notch=0.05, widest=0.05, width=1.15),  # short, transverse, spines flung out
-    "modocia":      dict(SP, length=0.9, genal=0.55, notch=0.1, dome_fill=0.78, width=1.2),          # the generalized ptychoparioid
-    "triarthrus":   dict(length=0.8, front_exp=2.5, genal=0, corner=0.2, widest=0.1, side=0.1, dome_fill=0.92, width=1.05),      # short, rounded genal angles
-    "harpes":       dict(length=1.25, genal=1.3, genal_w=0.30, genal_tip=0.55, genal_curve=-6, notch=0.55, widest=0.1, horn_h=0.2, width=1.5,
+    "modocia":      dict(SP, length=0.9, genal=0.55, notch=0.055, dome_fill=0.78, width=1.2),          # the generalized ptychoparioid
+    "triarthrus":   dict(length=0.8, front_exp=2.5, genal=0, notch=0, corner=0.2, widest=0.1, side=0.1, dome_fill=0.92, width=1.05),      # short, rounded genal angles
+    "harpes":       dict(length=1.25, genal=1.3, genal_w=0.30, genal_tip=0.55, genal_curve=-6, notch=0.715, widest=0.1, horn_h=0.2, width=1.5,
                          brim_w=0.34, brim_rise=0.10, brim_curve=0.4, brim_roll=0.07, brim_pits=3),  # the horseshoe
-    "phacops":      dict(length=0.95, front_exp=2.4, genal=0, corner=0.25, widest=0.2, side=0.12, dome_fill=0.95, width=1.05),    # rounded shield, no spines
-    "dalmanites":   dict(SP, length=1.05, front_exp=1.7, front_point=0.22, point_w=0.07, genal=0.7, genal_w=0.11, notch=0.1, width=1.2),      # ogival, an anterior point
-    "encrinurus":   dict(length=0.85, front_exp=2.3, genal=0.35, genal_w=0.10, genal_tip=0.15, genal_spread=8, notch=0.08, widest=0.03, width=1.15),
-    "deiphon":      dict(length=0.8, genal=1.1, genal_w=0.13, genal_tip=0.1, genal_spread=35, genal_curve=-35, notch=0.02, widest=0.03, dome_fill=0.7, width=1.1),  # cheeks reduced to spines
-    "isotelus":     dict(length=1.1, front_exp=1.8, genal=0.3, genal_w=0.12, genal_tip=0.15, notch=0.1, widest=0.03, dome_fill=0.95, width=1.15),  # a subtriangular shovel
-    "neoasaphus":   dict(length=0.95, front_exp=2.1, genal=0, corner=0.3, widest=0.25, side=0.15, dome_fill=0.95, width=1.05),
-    "cryptolithus": dict(length=0.85, genal=2.6, genal_w=0.07, genal_tip=0.3, genal_spread=3, notch=0.03, widest=0.03, width=1.25,
+    "phacops":      dict(length=0.95, front_exp=2.4, genal=0, notch=0, corner=0.25, widest=0.2, side=0.12, dome_fill=0.95, width=1.05),    # rounded shield, no spines
+    "dalmanites":   dict(SP, length=1.05, front_exp=1.7, front_point=0.22, point_w=0.07, genal=0.7, genal_w=0.11, notch=0.07, width=1.2),      # ogival, an anterior point
+    "encrinurus":   dict(length=0.85, front_exp=2.3, genal=0.35, genal_w=0.10, genal_tip=0.15, genal_spread=8, notch=0.028, widest=0.03, width=1.15),
+    "deiphon":      dict(length=0.8, genal=1.1, genal_w=0.13, genal_tip=0.1, genal_spread=35, genal_curve=-35, notch=0.022, widest=0.03, dome_fill=0.7, width=1.1),  # cheeks reduced to spines
+    "isotelus":     dict(length=1.1, front_exp=1.8, genal=0.3, genal_w=0.12, genal_tip=0.15, notch=0.03, widest=0.03, dome_fill=0.95, width=1.15),  # a subtriangular shovel
+    "neoasaphus":   dict(length=0.95, front_exp=2.1, genal=0, notch=0, corner=0.3, widest=0.25, side=0.15, dome_fill=0.95, width=1.05),
+    "cryptolithus": dict(length=0.85, genal=2.6, genal_w=0.07, genal_tip=0.3, genal_spread=3, notch=0.078, widest=0.03, width=1.25,
                          brim_w=0.27, brim_rise=0.26, brim_curve=0.6, brim_pits=4),   # needles three heads long
-    "cyclopyge":    dict(length=1.5, front_exp=2.2, genal=0, corner=0.3, widest=0.35, side=0.3, rear_taper=0.05, width=0.95),         # long and narrow
-    "walliserops":  dict(SP, length=1.0, front_exp=1.9, genal=0.6, genal_spread=5, notch=0.1, width=1.2),
-    "ceraurus":     dict(length=0.75, front_exp=2.6, genal=1.2, genal_w=0.12, genal_tip=0.1, genal_spread=22, genal_curve=28, notch=0.03, widest=0.03, width=1.15),  # spines sweeping out
-    "ampyx":        dict(length=0.8, genal=2.4, genal_w=0.06, genal_tip=0.3, notch=0.03, widest=0.03, front_point=1.2, point_w=0.045, width=1.2),   # three needles
+    "cyclopyge":    dict(length=1.5, front_exp=2.2, genal=0, notch=0, corner=0.3, widest=0.35, side=0.3, rear_taper=0.05, width=0.95),         # long and narrow
+    "walliserops":  dict(SP, length=1.0, front_exp=1.9, genal=0.6, genal_spread=5, notch=0.06, width=1.2),
+    "ceraurus":     dict(length=0.75, front_exp=2.6, genal=1.2, genal_w=0.12, genal_tip=0.1, genal_spread=22, genal_curve=28, notch=0.036, widest=0.03, width=1.15),  # spines sweeping out
+    "ampyx":        dict(length=0.8, genal=2.4, genal_w=0.06, genal_tip=0.3, notch=0.072, widest=0.03, front_point=1.2, point_w=0.045, width=1.2),   # three needles
     "dikelocephalus": dict(SP, length=0.8, front_flat=0.4, genal=0.45, width=1.2),                    # truncate front
-    "bristolia":    dict(SP, length=0.9, genal=0.9, genal_at=-0.5, genal_spread=28, genal_curve=-22, corner=0.15, width=1.15),   # genal spines advanced up the side
+    "bristolia":    dict(SP, length=0.9, genal=0.9, genal_at=-0.5, genal_spread=28, genal_curve=-22, corner=0.15, notch=0, width=1.15),   # genal spines advanced up the side
     "all_on":       dict(),                                                                          # the crescent's own silhouette
     "plain":        dict(),                                                                          # = shaped_head.OUTLINE, the new default
 }
+# 24 Oct 2026: notch is now depth / axial length (shaped_head.py): every style's value is its old one x its spine length, and
+# a style whose spine does not leave the genal angle (none, or genal_at != 0) has notch=0, as the old notch did nothing there.
 # 20 Oct 2026: shaped_head.OUTLINE's defaults changed (anatomical, pointed). Every style keeps the silhouette it was drawn with:
 # the keys a style did not set take the OLD defaults, written out here once; "crescent" is the print kit's silhouette itself.
 import shaped_head as _SH
-_OLD = dict(length=1.08, front_exp=2.0, widest=0.08, genal=0.77, genal_w=0.167, genal_tip=1.0, genal_spread=0.0, notch=0.9)
+_OLD = dict(length=1.08, front_exp=2.0, widest=0.08, genal=0.77, genal_w=0.167, genal_tip=1.0, genal_spread=0.0, notch=0.693)
 for _n, _o in OUTLINES.items():
     if _n != "plain":
         for _k, _v in _OLD.items(): _o.setdefault(_k, _v)
@@ -213,7 +215,7 @@ def macro(P, outline, face=None, params=None):
     if "genal_curve" in o: out["genalCurve"] = -o["genal_curve"]            # the outline's + is outward; the schema's + is the inward curl
     if "front_exp" in o: out["headOutlineExp"] = o["front_exp"]
     if "dome_fill" in o: out["headDomeFill"] = o["dome_fill"]
-    if "notch" in o and "genal" in o: out["headRearArc"] = 0.35 * o["notch"] * min(o["genal"], 1.0)   # the U between the spines, as the crescent's bowed rear
+    if "notch" in o and "genal" in o: out["headRearArc"] = 0.35 * o["notch"] * min(1.0, 1.0 / max(o["genal"], 1e-6))   # the U between the spines, as the crescent's bowed rear
     if "length" in o and "width" in o:
         Lc = o["length"] * o["width"] * seg_halfwidth(P, 0); rest = P["length"] * (1.0 - P["cephFrac"])
         out["length"] = Lc + rest; out["cephFrac"] = Lc / (Lc + rest)

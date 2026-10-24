@@ -12,7 +12,7 @@ def test_default_is_anatomical_not_the_kit():
     o = SH.OUTLINE
     assert o["front_exp"] < 2.0 and o["genal_tip"] < 0.3 and o["notch"] < 0.2 and o["genal_w"] < 0.15       # pointed, tapered spine, straight rear
     k = SH.CRESCENT_OUTLINE
-    assert k["notch"] == 0.9 and k["genal_tip"] == 1.0 and k["front_exp"] == 2.0                             # the kit silhouette, kept
+    assert abs(k["notch"] - 0.693) < 1e-9 and k["genal_tip"] == 1.0 and k["front_exp"] == 2.0                             # the kit silhouette, kept
     assert HS.outline("crescent") == k and HS.outline("plain") == {} and "plain" in HS.STYLES
 
 
