@@ -97,25 +97,36 @@ def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0
     radii = base_r + (tip_r - base_r) * ts; ra = radii.copy()
     if flare > 1.0:                                                       # the collar: flare x base_r at the root -> base_r at 0.12 of the length (in the plane only)
         c = np.clip(ts / 0.12, 0, 1); ra = np.maximum(ra, base_r * (flare - (flare - 1.0) * (3 * c ** 2 - 2 * c ** 3)))
-    if plate is None: return sweep_tube(W, ra)
+    # the tip (24 Oct 2026): a spine ends in a point, not a sawn-off 1 mm cap -- the last fifth tapers to 0.4 x tip_r and the cap is rounded
+    tp = np.clip((ts - 0.8) / 0.2, 0, 1); tp = 3 * tp ** 2 - 2 * tp ** 3; ra = ra * (1 - 0.6 * tp); radii = radii * (1 - 0.6 * tp)
+    if plate is None: return sweep_tube(W, ra, round_tip=True)
     c = np.clip(ts / 0.35, 0, 1); c = 3 * c ** 2 - 2 * c ** 3                # the vertical half-thickness: the plate's at the root -> round by 0.35
     rb = np.minimum(radii, 0.5 * float(plate)) * (1 - c) + radii * c
-    return sweep_tube(W, ra, rb=rb)
+    return sweep_tube(W, ra, rb=rb, round_tip=True)
 
-def sweep_tube(path, radii, rb=None, sections=32):
+def sweep_tube(path, radii, rb=None, sections=32, round_tip=False):
     """One closed surface along a polyline: a ring of `sections` points at every path point (radius radii[i]), frames
     carried by parallel transport so the rings never twist, flat caps at both ends. Replaces the frustum-and-sphere
     chain (24 Oct 2026): that was one solid per segment with a seam at every joint, a visibly ribbed horn at print size.
     rb: a second radius per point for an elliptical section -- radii[i] across the HORIZONTAL (in-plane) axis, rb[i] up
     the vertical one; the frames are then horizontal-anchored (no transport) so "vertical" stays vertical."""
     import trimesh
-    P = np.asarray(path, float); r = np.asarray(radii, float); m = len(P)
+    P = np.asarray(path, float); r = np.asarray(radii, float)
+    if rb is not None: rb = np.asarray(rb, float)
+    if round_tip:                                                         # a hemispherical cap: three more rings along the final tangent, shrinking as cos
+        t_end = P[-1] - P[-2]; t_end /= max(np.linalg.norm(t_end), 1e-12); rt = float(r[-1]); rbt = float(rb[-1]) if rb is not None else rt
+        for a in (30.0, 60.0, 82.0):
+            P = np.vstack([P, P[-1] + t_end * (rt * (math.sin(math.radians(a)) - (math.sin(math.radians(a - 30)) if a > 30 else 0.0)))])
+            r = np.r_[r, rt * math.cos(math.radians(a))]
+            if rb is not None: rb = np.r_[rb, rbt * math.cos(math.radians(a))]
+    m = len(P)
     T = np.gradient(P, axis=0); T /= np.maximum(np.linalg.norm(T, axis=1), 1e-12)[:, None]
     if rb is not None:                                                    # horizontal-anchored frames: N = T x z (the in-plane direction)
-        rb = np.asarray(rb, float); frames = []; prev = None
+        frames = []; prev = None
         for i in range(m):
             N = np.cross(T[i], [0, 0, 1.0]); nn = np.linalg.norm(N)
             N = N / nn if nn > 0.1 else (prev if prev is not None else np.array([1.0, 0, 0]))
+            if prev is not None and np.dot(N, prev) < 0: N = -N          # past the vertical T x z reverses: keep the ring's vertex order (a flip pinched the tube)
             N = N - T[i] * np.dot(N, T[i]); N /= max(np.linalg.norm(N), 1e-12); frames.append(N); prev = N
     else:
         N = np.cross(T[0], [1.0, 0, 0]);
