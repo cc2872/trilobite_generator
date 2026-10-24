@@ -96,7 +96,7 @@ const $=id=>document.getElementById(id);
 const S={ preset:'textured', head:'plain', savedBody:null, savedHead:null,
           spec:{list:null, model:'thorax'}, headOutline:{}, headFace:{}, headBaseOutline:{}, headBaseFace:{}, headMeta:null,
           BD:null, HD:null, presets:[], savedBodies:[], savedHeads:[],
-          sel:null, pinned:null, hover:null, drag:null, pendingB:false, pendingH:false, edited:false, built:null, P:null, eyeParams:[], prongParams:[], hornParams:[] };
+          sel:null, pinned:null, hover:null, drag:null, pendingB:false, pendingH:false, edited:false, built:null, P:null, eyeParams:[], prongParams:[], hornParams:[], spineParams:[], tailParams:[] };
 const fmt=v=>Number.isInteger(v)?String(v):(+v).toFixed(Math.abs(v)<1?3:(Math.abs(v)<10?2:1));
 function status(t,bad){ $('status').textContent=t||''; $('status').classList.toggle('busy',!!bad); }
 // a build (STL download + the 3D embed) belongs to one exact animal; any edit after it makes both stale, so drop them (13 Oct 2026)
@@ -215,9 +215,14 @@ function renderContext(rebuild=true){ const box=$('context');
   const r=rowOf(i); const dr=S.BD&&S.BD.rows[i]; $('ctxname').textContent=`Row ${i} - ${r.kind}${dr&&dr.small?' - fused':''}`;
   if(rebuild||box.dataset.k!=='row'+i){ box.innerHTML=''; box.dataset.k='row'+i;
     for(const k of ROWKEYS){ const rr=R[k]; slider(box,k,r[k],rr[0],rr[1],(rr[1]-rr[0])/300,val=>setRow(i,k,val),S.BD.keys[k].unit, S.BD.model!=='slab'&&/slab model only/.test(S.BD.keys[k].doc)); }
+    const pgroup=(title,note,ps)=>{ if(!S.P||!ps.length) return; const hdr=document.createElement('div'); hdr.className='sect'; hdr.innerHTML=`<span>${title}</span><span class="mono" style="color:var(--mid);text-transform:none;letter-spacing:0">${note}</span>`; box.appendChild(hdr);
+      for(const p of ps){ const v=(S.P[p.key]!=null?S.P[p.key]:p.default); slider(box,p.key,v,p.lo,p.hi,p.step||((p.hi-p.lo)/200),val=>setEyeParam(p.key,val),p.unit||''); } };
+    if(r.kind==='pyg') pgroup('Tail','whole tail - drawn in plan, built on Build',S.tailParams);                      // 24 Oct 2026: the tail's ribs, furrows and spines
+    pgroup('Spines','every row - drawn live, built on Build',S.spineParams);                                           // 24 Oct 2026: axial spines and pleural horns
     $('ctxtools').innerHTML=`<select id="kind" style="width:auto;padding:2px 0;font-size:10px"><option value="thorax">thorax</option><option value="pyg">pyg</option></select>`;
     $('kind').value=r.kind; $('kind').onchange=e=>{ S.spec.list[i].kind=e.target.value; sendBody(); }; }
-  else for(const k of ROWKEYS){ const s=$('s_'+k); if(s&&document.activeElement!==s){ s.value=r[k]; $('v_'+k).textContent=fmt(r[k]); } }
+  else { for(const k of ROWKEYS){ const s=$('s_'+k); if(s&&document.activeElement!==s){ s.value=r[k]; $('v_'+k).textContent=fmt(r[k]); } }
+    if(S.P) for(const p of [...S.spineParams,...S.tailParams]){ const s=$('s_'+p.key); if(s&&document.activeElement!==s){ s.value=S.P[p.key]; $('v_'+p.key).textContent=fmt(S.P[p.key]); } } }
 }
 function renderTable(){ const e=$('rowtable'); const L=S.spec.list; const D=S.BD; if(!L) return;
   e.innerHTML=L.map((r,i)=>{ const dr=D&&D.rows[i]; const on=S.sel&&S.sel.type==='row'&&i===S.sel.i; return `<div data-i="${i}" style="cursor:pointer;${on?'color:var(--accent)':''}"><b${on?' style="color:var(--accent)"':''}>${String(i).padStart(2,' ')}</b> ${r.kind==='pyg'?'pyg ':'thx '}len ${fmt(r.len)} - w ${fmt(r.width)}${dr&&dr.small?' <span style="color:var(--accent)">fused</span>':''}</div>`; }).join('');
@@ -313,6 +318,7 @@ new p5(s=>{
     // the P-eye side editor: drawn from P with draggable stalk / lean / height handles (these drive the BUILT eye)
     if(headOn && S.P) drawEye();
     drawHorn(headOn);                                                                // the genal horn (P.genalHorn*), drawn live from P, with its handles
+    drawBodySpines();                                                                // axial spines, pleural horns, tail spines: live from P (24 Oct 2026)
     s.noStroke(); s.fill(255,90); s.textAlign(s.RIGHT,s.BOTTOM); s.text(((inflightB||inflightH)?'drawing…':'')+' ', W-12, H-10);
     window.__hp=HP;                                                                  // the handles this frame (for scripted tests)
   };
@@ -329,6 +335,28 @@ new p5(s=>{
       out.push([root[0]+x3, root[1]+y3, z2]); }
     return out; }
   function hornRoot(){ const H=S.HD.diagram.handles||{}; const a=H.angle||[1,0]; return [0.92*a[0], a[1]]; }
+  // ---- the body's spines (24 Oct 2026), drawn live from P: the same arc as anatomy/common.curved_spine, in model mm.
+  // root [x,y,z]; the spine leaves along +y (rear) yawed toward +x, pitched up, bending by `bend` in a plane rolled about its own axis.
+  function arcPts(root,L,yaw,pit,bend,roll,n){ const phi=bend*Math.PI/180, R=roll*Math.PI/180, P_=pit*Math.PI/180, Yw=yaw*Math.PI/180; const out=[];
+    for(let i=0;i<=n;i++){ const t=i/n; let x=0,y,z; if(Math.abs(phi)<1e-6){ y=t*L; z=0; } else { const rad=L/Math.abs(phi), a=t*phi; y=rad*Math.sin(Math.abs(a)); z=Math.sign(phi)*rad*(1-Math.cos(a)); }
+      const x1=x*Math.cos(R)+z*Math.sin(R), z1=-x*Math.sin(R)+z*Math.cos(R); const y2=y*Math.cos(P_)-z1*Math.sin(P_), z2=y*Math.sin(P_)+z1*Math.cos(P_);
+      out.push([root[0]+x1*Math.cos(Yw)+y2*Math.sin(Yw), root[1]-x1*Math.sin(Yw)+y2*Math.cos(Yw), root[2]+z2]); } return out; }
+  function drawBodySpines(){ const P=S.P, D=S.BD; if(!P||!D) return; const rel=+P.relief||17; const n=D.rows.length; const nThx=D.rows.filter(r=>r.row.kind!=='pyg').length||n;
+    const zS=z=>oxE+z*ZX*px;                                                                           // side view x from model z
+    D.rows.forEach((r,i)=>{ if(r.row.kind==='pyg') return; const frac=nThx>1?i/(nThx-1):0; const pc=D.side.find(p=>p.rows.includes(i)); const yr=r.handles.rear[1], ye=(r.handles.edge[1]);
+      if((+P.axialSpine||0)>0.02){ const L=(+P.axialSpine)*rel*(1+(+P.axialGrad||0)*frac); const ym=0.5*(yr+ye); const zt=pc?Math.max(...pc.top.filter(q=>Math.abs(q[0]-ym)<1.5).map(q=>q[1]),0):rel*0.6;
+        const pts=arcPts([0,ym,zt-1],L,0,(+P.axialPitch||60),(+P.axialBend||0),0,16); hair(230,1.1); s.beginShape(); for(const q of pts) s.vertex(zS(q[2]),Y(q[1])); s.endShape(); }   // side view only: it stands on the axis
+      if((+P.pleuralHorn||0)>0.02){ const L=(+P.pleuralHorn)*r.row.width*(1+(+P.pleuralHornGrad||0)*frac); const tip=r.handles.tip&&r.row.tip>0.05?r.handles.tip:r.handles.edge; const rise=(+P.pleuralHornPitch||45), bend=(+P.pleuralHornBend||0);
+        const pts=arcPts([tip[0]-1.5,tip[1],0.15*rel],L,90-(+P.spineSweep||50),0,rise+bend,(+P.pleuralHornRoll||0),16);
+        hair(230,1.1); for(const m of [1,-1]){ s.beginShape(); for(const q of pts) s.vertex(X(m*q[0]),Y(q[1])); s.endShape(); }                 // plan
+        hair(150,1); s.beginShape(); for(const q of pts) s.vertex(zS(q[2]),Y(q[1])); s.endShape(); } });                                     // side
+    // the tail's spines, in plan, from the last row's margin (an approximation of tail.py's margin_pt)
+    const last=D.rows[n-1]; if(!last) return; const pyg=D.rows.filter(r=>r.row.kind==='pyg'); const Lp=Math.max(pyg.length?pyg.reduce((a,r)=>a+(+r.row.len),0):(+last.row.len), 4);
+    const wp=(pyg[0]||last).row.width, yb=last.handles.rear[1]; const grow=+P.pygSpineGrow||0, rise=+P.pygSpineRise||0, bend=+P.pygSpineBend||0;
+    const spine=(phi,Lk)=>{ const x0=wp*Math.cos(phi), y0=yb-Lp+Lp*Math.sin(phi); const yaw=Math.atan2(x0,y0-(yb-Lp))*180/Math.PI; const pts=arcPts([x0,y0,0.6],Lk+grow*Lp,yaw,0,rise+bend,0,16);
+      hair(230,1.1); for(const m of [1,-1]){ s.beginShape(); for(const q of pts) s.vertex(X(m*q[0]),Y(q[1])); s.endShape(); } };
+    if((+P.pygSpine||0)>0.05){ const sp=(+P.pygSplay||20)*Math.PI/180; spine(Math.atan(wp/Lp*Math.tan(Math.PI/2-sp)), (+P.pygSpine)*Lp); }
+    const nm=Math.round(+P.pygMarginal||0); for(let k=0;k<nm;k++){ const phi=(50+80*(k+0.5)/nm)*Math.PI/180; if(phi<=Math.PI/2) spine(phi,(+P.pygMarginalLen||0.5)*Lp); } }
   function drawHorn(headOn){ const P=S.P; if(!P||!S.HD) return; const pts=hornPts(P,hornRoot(),24); if(!pts) return;
     for(const m of [1,-1]){ if(headOn) orange(1.3); else hair(255,1.1); s.beginShape(); for(const q of pts) s.vertex(headSX([m*q[0],q[1]]), headSY(q)); s.endShape(); }
     if(!headOn) return;
@@ -414,7 +442,10 @@ function headKeysFor(h){ const ks=((S.headMeta&&S.headMeta.handles[h])||[]).map(
 // ---------- start ----------
 (async()=>{ const u=new URLSearchParams(location.search); S.head=u.get('head')||'plain';
   try{ const sc=await (await fetch('/api/schema')).json(); const EK=new Set(['eyeSize','eyeArc','eyePos','eyeLat','eyeHeight','eyeProfile','eyeStalk','eyeStalkR','eyeStalkBend','eyeLean','eyeSphere','lensD','lensGap']);
-       S.eyeParams=(sc.params||[]).filter(p=>EK.has(p.key)); S.prongParams=(sc.params||[]).filter(p=>p.group==='Prongs'); S.hornParams=(sc.params||[]).filter(p=>p.key.startsWith('genalHorn')); }catch(_){ S.eyeParams=[]; S.prongParams=[]; S.hornParams=[]; }   // the eye and prong params -> their panel sliders
+       S.eyeParams=(sc.params||[]).filter(p=>EK.has(p.key)); S.prongParams=(sc.params||[]).filter(p=>p.group==='Prongs'); S.hornParams=(sc.params||[]).filter(p=>p.key.startsWith('genalHorn'));
+       const SK=['axialSpine','axialPitch','axialBend','axialGrad','pleuralHorn','pleuralHornPitch','pleuralHornBend','pleuralHornRoll','pleuralHornGrad','spineBase','spineGrad','spineSweep','tipTaper'];
+       const TK=['pygRings','pygRibRelief','pygFurrowScale','pygSpine','pygSplay','pygMarginal','pygMarginalLen','pygSpineRise','pygSpineBend','pygSpineGrow','pygSpineBlade','termSpine','termBend','tailOutlineExp','pygBorderWidth'];
+       const by=k=>(sc.params||[]).find(p=>p.key===k); S.spineParams=SK.map(by).filter(Boolean); S.tailParams=TK.map(by).filter(Boolean); }catch(_){ S.eyeParams=[]; S.prongParams=[]; S.hornParams=[]; S.spineParams=[]; S.tailParams=[]; }   // the eye and prong params -> their panel sliders
   const body=u.get('body'); if(body){ const b=(await (await fetch('/api/bodies')).json()).find(x=>x.name===body); if(b){ if(b.head) S.head=b.head; await loadAll(b.preset, body); return; } }
   if(u.get('preset')) await loadAll(u.get('preset')); else await loadAll('textured', null, 'plain'); })();
 </script>
