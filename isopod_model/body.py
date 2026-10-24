@@ -591,7 +591,8 @@ def _head_sig():
     global _HEAD_SIG
     if _HEAD_SIG is None:
         import hashlib; h = hashlib.sha1(); here = os.path.dirname(os.path.abspath(__file__))
-        for f in ("body.py", "shaped_head.py", "crescent_head.py", "head_styles.py", "../anatomy/head_crescent.py", "../anatomy/head.py", "../mesh.py", "../fields.py"):
+        for f in ("body.py", "shaped_head.py", "crescent_head.py", "head_styles.py", "../anatomy/head_crescent.py", "../anatomy/head.py", "../mesh.py", "../fields.py",
+                  "../anatomy/common.py"):                                  # 24 Oct 2026: the spines' builder was missing -- a spine change served stale heads
             try: h.update(open(os.path.join(here, f), "rb").read())
             except OSError: pass
         _HEAD_SIG = h.hexdigest()[:10]
