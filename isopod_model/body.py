@@ -689,14 +689,21 @@ def shaped_head(P, plans, PV, K, J, outline, face):
 ROWS_INFO = {}
 
 
-def build(P, head="isopod", face=None, outline=None, rows=None):
+DEFAULT_HEAD = "diagram"   # 25 Oct 2026: build()'s default head -- the head style 'diagram' (the crescent on the isopod head piece is head="isopod")
+
+def build(P, head=None, face=None, outline=None, rows=None):
     """head: 'isopod' (the crescent head made on the isopod's head piece, crescent_head.py; the default), 'shaped'
     (a parametric outline, shaped_head.py, with `outline` and `face`), or 'generator' (the classic anatomy head).
     rows (10 Oct 2026): a body spec for the rows model (isopod_model/rows.py: per-row length / width / trajectory,
     fused groups, its own print scale). None = the preset's thorax and tail as before. The spec's "model" picks the
     surface: "thorax" (default) = the generator's own segment and tail plans with the rows' numbers, built exactly
     as the preset is (solid to the bed, plate over lip, the isopod's middle) -- an unedited spec is the preset's
-    build; "slab" = the tergite slab, a WALL-thick shell on the joint strip."""
+    build; "slab" = the tergite slab, a WALL-thick shell on the joint strip.
+    head=None (25 Oct 2026): DEFAULT_HEAD; any head-style name is drawn on its own outline (face and outline from head_styles)."""
+    if head is None or head not in ("isopod", "shaped", "generator"):
+        import head_styles as HS
+        st = DEFAULT_HEAD if head is None else head
+        face = HS.style(st)[0] if face is None else face; outline = HS.outline(st) if outline is None else outline; head = "shaped"
     if rows is not None:
         import rows as RW
         R = RW.plans(P, rows); s = 1.0 / R["scale"]

@@ -17,7 +17,7 @@ import schema
 
 
 def names():
-    return ["textured"] + [os.path.basename(f)[:-5] for f in sorted(glob.glob(os.path.join(ROOT, "presets", "*.json")))
+    return ["diagram", "textured"] + [os.path.basename(f)[:-5] for f in sorted(glob.glob(os.path.join(ROOT, "presets", "*.json")))
                            if not os.path.basename(f).startswith("_")]
 
 

@@ -164,7 +164,7 @@ def apply(P, name):
 
 def outline(name): return dict(OUTLINES.get(name, {}))
 
-def shaped_head_of(name, base="textured"):
+def shaped_head_of(name, base="diagram"):
     """The head alone on its own silhouette (print mm): shaped_head's outline + this style's face, eyes, spines."""
     import body as BODY, presets as PR
     from joints import ball as BALL
@@ -172,7 +172,7 @@ def shaped_head_of(name, base="textured"):
     J, *_ = BALL.geometry(P); K = BODY.iso_kit(P); PV = BODY.pivots(plans, J, K)
     H = BODY.shaped_head(P, plans, PV, K, J, outline(name), face); H.apply_scale(1.0 / K["s"]); return H, P
 
-def head_of(name, base="textured"):
+def head_of(name, base="diagram"):
     """The finished head alone (print mm): isopod head piece + crescent band + this style's face, eyes, spines."""
     import body as BODY, presets as PR
     from joints import ball as BALL

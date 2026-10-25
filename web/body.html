@@ -86,7 +86,7 @@
 
 <script>
 const $=id=>document.getElementById(id);
-const S={preset:'textured', head:'crescent', spec:{list:null}, D:null, H:null, meta:null, pinned:null, hover:null, drag:null, pendingSend:false, savedName:null, presets:[], saved:[], edited:false};
+const S={preset:'diagram', head:'diagram', spec:{list:null}, D:null, H:null, meta:null, pinned:null, hover:null, drag:null, pendingSend:false, savedName:null, presets:[], saved:[], edited:false};
 let inflight=null;
 // back to the generator, carrying the live body so its build reflects these edits (sessionStorage; only when actually edited)
 function goHome(){
@@ -150,7 +150,7 @@ function renderTable(){ const e=$('rowtable'); const L=S.spec.list; const D=S.D;
   e.innerHTML=L.map((r,i)=>{ const dr=D&&D.rows[i]; const on=i===S.pinned; return `<div data-i="${i}" style="cursor:pointer;${on?'color:var(--accent)':''}"><b${on?' style="color:var(--accent)"':''}>${String(i).padStart(2,' ')}</b> ${r.kind==='pyg'?'pyg ':'thx '}len ${fmt(r.len)} - w ${fmt(r.width)} - tip ${fmt(r.tip)} - sw ${fmt(r.sweep)}°${dr&&dr.small?' <span style="color:var(--accent)">fused</span>':''}</div>`; }).join('');
   e.querySelectorAll('div[data-i]').forEach(x=>x.onclick=ev=>{ const i=+x.dataset.i; if(ev.shiftKey&&S.pinned!=null&&S.pinned!==i){ ramp(S.pinned,i); return; } S.pinned=i; renderSliders(); renderTable(); });
   $('copyfrom').max=L.length-1; }
-$('reset').onclick=()=>load('textured', null, 'plain');
+$('reset').onclick=()=>load('diagram');
 $('plus').onclick=()=>{ const at=S.pinned!=null?S.pinned+1:S.spec.list.length; insertRow(at, at-1); status(`row ${at} added as a copy of row ${at-1}`); };
 $('minus').onclick=()=>{ const i=S.pinned!=null?S.pinned:S.spec.list.length-1; removeRow(i); status(`row ${i} removed`); };
 $('copyrow').onclick=()=>{ const src=Math.max(0,Math.min(S.spec.list.length-1,+$('copyfrom').value||0)); const at=S.pinned!=null?S.pinned+1:S.spec.list.length; insertRow(at, src); status(`row ${at} added as a copy of row ${src}`); };
@@ -238,7 +238,7 @@ new p5(s=>{
 (async()=>{ const u=new URLSearchParams(location.search); S.head=u.get('head')||'crescent';
   const hs=await (await fetch('/api/head_styles')).json(); $('head').innerHTML=hs.map(h=>`<option value="${h.name}">${h.name}${h.saved?' - saved':''}</option>`).join(''); $('head').value=S.head;
   const body=u.get('body'); if(body){ const b=(await (await fetch('/api/bodies')).json()).find(x=>x.name===body); if(b){ await load(b.preset, body); return; } }
-  if(u.get('preset')) await load(u.get('preset')); else await load('textured', null, 'plain'); })();
+  if(u.get('preset')) await load(u.get('preset')); else await load('diagram'); })();
 </script>
 </body>
 </html>

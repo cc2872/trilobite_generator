@@ -63,7 +63,9 @@ def _head_style(name):
     custom shaped head and is returned resolved (see _head_custom)."""
     if isinstance(name, dict): return _head_custom(name)
     if name and name in _saved_heads(): return _head_custom({"style": name})
-    return name if name and name != "crescent" and name in _head_styles().STYLES else None
+    if name == "crescent": return None                                    # the crescent on the isopod head piece, by name
+    if not name: name = _isopod_body().DEFAULT_HEAD                          # 25 Oct 2026: no head given = the default head style ('diagram')
+    return name if name in _head_styles().STYLES else None
 
 # ---- saved heads: the head editor's "save". One JSON per head in web/heads/ (git-ignored, like records/): the guide
 # style it started from and the outline / face edits on top. A saved head is addressed by its name wherever a style

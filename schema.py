@@ -412,7 +412,7 @@ PRESETS["diagram"] = dict(PRESETS["textured"],                 # 25 Oct 2026: th
     pygSpine=0.4, pygSplay=18, pygMarginal=3, pygMarginalLen=0.45, pygSpineBlade=1.0, pygSpineWidth=0.55, pygSpineRise=0, pygRings=4, pygWidth=1.0, tailOutlineExp=2.0,   # the fringe: flat triangular lobes of the shield
     furrowDepth=1.2, effacement=0.0, glabRise=0.18, glabLobes=3, glabInflate=1.3, borderWidth=0.08, eyeHeight=0.4, eyePos=0.3, eyeLat=0.0, eyeSize=0.16,   # the default lens eye beside the glabella
     genalSpine=0.0, genalHorn=0.0)   # the genal spines are the head's own surface (head style 'diagram'), not a rod unioned on   # the genal spines as round tapering HORNS continuing the border, not flat bands
-DEFAULT_PRESET = "textured"
+DEFAULT_PRESET = "diagram"   # 25 Oct 2026: the textbook trilobite is the generator's default (was "textured")
 
 def table_defaults():
     """The raw per-parameter defaults from the table (no preset applied)."""
