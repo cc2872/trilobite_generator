@@ -49,14 +49,14 @@
    "bodies": 1,
    "bounds": [
     [
-     -91.22,
-     -147.38,
+     -90.4,
+     -68.72,
      0.0
     ],
     [
-     91.22,
-     56.28,
-     77.16
+     90.4,
+     38.59,
+     82.31
     ]
    ]
   },
@@ -238,7 +238,7 @@
    [
     "head",
     "tail",
-    1431.64
+    3.519
    ]
   ]
  },
@@ -251,29 +251,29 @@
     "joint": 0,
     "ball_radius": 5.75,
     "ball_height": 7.5001,
-    "socket_side_max_dev_mm": 1.3356,
-    "ball_side_max_dev_mm": 0.0006
+    "socket_side_max_dev_mm": 1.3596,
+    "ball_side_max_dev_mm": 0.0002
    },
    {
     "joint": 1,
     "ball_radius": 5.75,
     "ball_height": 7.5001,
     "socket_side_max_dev_mm": 0.0007,
-    "ball_side_max_dev_mm": 0.0001
+    "ball_side_max_dev_mm": 0.0008
    },
    {
     "joint": 2,
     "ball_radius": 5.75,
     "ball_height": 7.5001,
     "socket_side_max_dev_mm": 0.0007,
-    "ball_side_max_dev_mm": 0.0021
+    "ball_side_max_dev_mm": 0.0005
    },
    {
     "joint": 3,
     "ball_radius": 5.75,
     "ball_height": 7.5001,
     "socket_side_max_dev_mm": 0.0007,
-    "ball_side_max_dev_mm": 0.001
+    "ball_side_max_dev_mm": 0.0012
    },
    {
     "joint": 4,
@@ -287,28 +287,28 @@
     "ball_radius": 5.75,
     "ball_height": 7.5001,
     "socket_side_max_dev_mm": 0.0007,
-    "ball_side_max_dev_mm": 0.0004
+    "ball_side_max_dev_mm": 0.0001
    },
    {
     "joint": 6,
     "ball_radius": 5.75,
     "ball_height": 7.5001,
     "socket_side_max_dev_mm": 0.0007,
-    "ball_side_max_dev_mm": 0.002
+    "ball_side_max_dev_mm": 0.0001
    },
    {
     "joint": 7,
     "ball_radius": 5.75,
     "ball_height": 7.5001,
     "socket_side_max_dev_mm": 0.0007,
-    "ball_side_max_dev_mm": 0.0013
+    "ball_side_max_dev_mm": 0.0006
    },
    {
     "joint": 8,
     "ball_radius": 5.75,
     "ball_height": 7.5001,
     "socket_side_max_dev_mm": 0.0007,
-    "ball_side_max_dev_mm": 0.0022
+    "ball_side_max_dev_mm": 0.0012
    },
    {
     "joint": 9,
