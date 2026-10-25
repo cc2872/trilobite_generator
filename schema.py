@@ -173,6 +173,8 @@ PARAMS = [
     Param("genalHornBend", "Genal horn bend", 0, -180, 180, 5, "Spines", "The genal horns' arc, root to tip", unit="deg"),
     Param("genalHornRoll", "Genal horn roll", 0, -180, 180, 5, "Spines", "Plane the genal horns bend in (0 up/back, 90 outward, 180 down)", unit="deg"),
     Param("genalHornYaw", "Genal horn yaw", 10, -60, 90, 5, "Spines", "Direction the genal horns leave in plan: 0 straight back, + outward (was fixed at 10)", unit="deg"),
+    Param("genalHornWidth", "Genal horn base width", 1.0, 0.4, 3.0, 0.05, "Spines", "The horn's root radius, x the built one (0.55 margin + 0.4 mm); 2 = a broad-based spine continuing the border"),
+    Param("genalHornFlare", "Genal horn collar", 1.8, 1.0, 3.0, 0.05, "Spines", "The root collar's width / the root radius (1.8 as built; 1 = no collar: the horn leaves the border at its own width)"),
     Param("termBend", "Terminal spine bend", 0, -180, 180, 5, "Spines", "The terminal spine's arc (0 straight; positive lifts the tip)", unit="deg"),
     Param("frontSpine", "Frontal spine", 0.0, 0.0, 2.0, 0.05, "Spines", "A single median spine from the front of the head / head length (0 = none; Pagetia, Odontocephalus)"),
     Param("frontSpineBend", "Frontal spine bend", 0, -180, 180, 5, "Spines", "The frontal spine's arc (positive lifts the tip)", unit="deg"),
@@ -264,7 +266,7 @@ CELLS = {
                      "eyeStalk", "eyeStalkR", "eyeLean", "eyeStalkBend", "eyeSphere", "eyeAxial", "eyeTall", "eyeSink", "eyeCollar",
                      "borderWidth", "genalSweep", "genalCurve", "genalPath", "genalWidth", "genalWidthMM", "genalTaper", "headRearExp",
                      "headProngs", "headProngLen", "headProngSplay", "headProngStem", "headProngCenter", "headProngWidth", "headProngCurl", "headProngBend",
-                     "genalHorn", "genalHornPitch", "genalHornBend", "genalHornRoll", "genalHornYaw",
+                     "genalHorn", "genalHornPitch", "genalHornBend", "genalHornRoll", "genalHornYaw", "genalHornWidth", "genalHornFlare",
                      "sutureEnd", "sutureDepth", "eyeRidge"]),
     "b2": dict(label="Axial rings", doc="the ring chain over the hinges", primary=["axisFrac", "axisRise", "furrowDepth"],
                more=["effacement", "axisSigma", "ringArch", "tent", "vaultRound", "axialSpine", "axialPitch", "axialBend", "axialGrad"]),
@@ -409,7 +411,7 @@ PRESETS["diagram"] = dict(PRESETS["textured"],                 # 25 Oct 2026: th
     tipSweep=0.4, tipTaper=0.72, bladeChord=1.3, spineBase=0.0, spineSweep=55, pleuralSlope=0.6, bladeCamber=0.3,        # rounded pleurae; the pleura itself ends in a broad rounded point: no needle (it would snap)
     pygSpine=0.4, pygSplay=18, pygMarginal=3, pygMarginalLen=0.45, pygSpineBlade=1.0, pygSpineWidth=0.55, pygSpineRise=0, pygRings=4, pygWidth=1.0, tailOutlineExp=2.0,   # the fringe: flat triangular lobes of the shield
     furrowDepth=1.2, effacement=0.0, glabRise=0.18, glabLobes=3, glabInflate=1.3, borderWidth=0.08, eyeHeight=0.4,   # the default lens eye, low (no stalk look)
-    genalSpine=0.0, genalHorn=0.55, genalHornPitch=8, genalHornBend=0, genalHornRoll=0, genalHornYaw=4)   # the genal spines as round tapering HORNS continuing the border, not flat bands
+    genalSpine=0.0, genalHorn=0.55, genalHornPitch=6, genalHornBend=0, genalHornRoll=0, genalHornYaw=3, genalHornWidth=2.0, genalHornFlare=1.0)   # broad-based, no collar: the border running on into a point   # the genal spines as round tapering HORNS continuing the border, not flat bands
 DEFAULT_PRESET = "textured"
 
 def table_defaults():
