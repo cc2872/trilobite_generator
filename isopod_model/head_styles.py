@@ -111,7 +111,7 @@ STYLES["bristolia"] = dict(p=52, doc="Olenelloidea: the olenellid face, with the
 # ---- the silhouette of each style (shaped_head.OUTLINE keys; 2 Oct 2026). The major head types of the guide:
 SP = dict(genal_w=0.10, genal_tip=0.12, notch=0.048, widest=0.03)              # a slim genal spine on a straight rear margin
 OUTLINES = {
-    "diagram":      dict(SP, length=1.0, front_exp=2.0, genal=0.55, genal_w=0.14, genal_tip=0.12, genal_spread=2, notch=0.0, corner=0.0, width=1.0),   # 25 Oct 2026: the textbook diagram's head
+    "diagram":      dict(SP, length=1.0, front_exp=2.0, genal=0.0, notch=0.0, corner=0.04, width=1.0),   # no band: the genal spines are the horns (P.genalHorn*)   # 25 Oct 2026: the textbook diagram's head
     "olenellus":    dict(SP, length=0.95, genal=0.75, width=1.22),                                   # wide semicircle, genal spines
     "paradoxides":  dict(SP, length=0.90, genal=1.6, genal_w=0.12, genal_spread=4, width=1.22),      # ... very long ones
     "agnostus":     dict(length=1.25, front_exp=2.2, widest=0.45, side=0.35, rear_taper=0.14, genal=0, notch=0, corner=0.2, width=1.02),   # parabolic shield, widest forward

@@ -651,8 +651,8 @@ def shaped_head(P, plans, PV, K, J, outline, face):
     # occipital (tines, bend), prong (bend), frontal spine, genal horns. The genal angle is the shape's own (xg, yg).
     yo = y_rear - 0.07 * Lc; xg_, yg_ = k * sh.xg, S["flap"] + off + k * sh.yg
     z_occ = zt(0.0, yo) - 1.0 + 0.4                                        # the occipital root, 0.6 under the crown
-    spines = lambda P_, yo=yo, z_occ=z_occ: HEAD.spine_ornaments(P_, Lc=Lc, margin=margin, wh=xg_, y_front=y_front, y_rear=y_rear + (yo - (y_rear - 0.07 * Lc)),
-                                                                 z_occ=z_occ, z_genal=lambda x, y: zt(x, y), yr_genal=yg_ + 1.5)
+    spines = lambda P_, yo=yo, z_occ=z_occ, dyg=0.0: HEAD.spine_ornaments(P_, Lc=Lc, margin=margin, wh=xg_, y_front=y_front, y_rear=y_rear + (yo - (y_rear - 0.07 * Lc)),
+                                                                          z_occ=z_occ, z_genal=lambda x, y: zt(x, y), yr_genal=yg_ + 1.5 - dyg)
     BEND_OF = dict(occipitalSpine="occipitalBend", headProngs="headProngBend", frontSpine="frontSpineBend", genalHorns="genalHornBend")
     for nm, solids, how in spines(P):
         # a spine whose root ring or recurved tip comes down under the head's own flap (the 2 mm plate over segment 0's
@@ -667,6 +667,11 @@ def shaped_head(P, plans, PV, K, J, outline, face):
                 cand = [e for e in spines(P, yo2, z2 - 0.6) if e[0] == nm]
                 if cand and all(_spine_clear(s_, head, [])[0] for s_ in cand[0][1]):
                     solids = cand[0][1]; ROWS_INFO.setdefault("free_notes", []).append(f"head {nm}: root moved {shift:.1f} mm forward, off the flap onto the solid crown ({bad[0]})"); bad = []; break
+        if bad and nm == "genalHorns":                                     # the horn's root sits at the genal angle, on the flap behind the rear joint
+            for shift in np.arange(0.5, 6.01, 0.5):                         # plane: its collar can dip under the 2 mm plate -- move the root forward
+                cand = [e for e in spines(P, dyg=float(shift)) if e[0] == nm]
+                if cand and all(_spine_clear(s_, head, [])[0] for s_ in cand[0][1]):
+                    solids = cand[0][1]; ROWS_INFO.setdefault("free_notes", []).append(f"head {nm}: roots moved {shift:.1f} mm forward, off the flap ({bad[0]})"); bad = []; break
         key = BEND_OF.get(nm)
         if bad and key and abs(float(P.get(key, 0.0))) > 1e-9:
             b0 = float(P[key]); step = -10.0 if b0 > 0 else 10.0

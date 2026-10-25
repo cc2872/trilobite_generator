@@ -404,11 +404,12 @@ PRESETS["phacopid"] = dict(PRESETS["textured"],
     glabRise=0.12, genalSpine=0.0, pygSpine=0.0, pygRings=7, spineBase=0.0, headDomeExp=1.9, widthTail=0.6,
     tipTaper=0.6, bladeChord=1.0)
 PRESETS["diagram"] = dict(PRESETS["textured"],                 # 25 Oct 2026: the textbook trilobite, measured off its diagram (cephalon / thorax / pygidium figure)
-    length=130, width=82, relief=17.1, segCount=14, cephFrac=0.32, pygFrac=0.165, widthMaxPos=0.33, widthHeadFront=0.79,
-    widthThoraxFront=0.94, widthThoraxRear=0.68, widthTail=0.52, axisFrac=0.28, genalSpine=0.47, genalSweep=0.3, genalCurve=6,
-    tipSweep=0.4, tipTaper=0.72, bladeChord=1.3, spineBase=0.0, spineSweep=55, pleuralSlope=0.6, bladeCamber=0.14,       # the pleura itself ends in a broad rounded point: no needle (it would snap)
+    length=130, width=82, relief=17.1, segCount=14, cephFrac=0.32, pygFrac=0.165, widthMaxPos=0.33, widthHeadFront=0.79, overlap=0.25, ringArch=0.4,   # 17:57: pleurae that touch (less lip under the plate ahead), a rounder axis
+    widthThoraxFront=0.94, widthThoraxRear=0.68, widthTail=0.52, axisFrac=0.28, genalSweep=0.3, genalCurve=6,
+    tipSweep=0.4, tipTaper=0.72, bladeChord=1.3, spineBase=0.0, spineSweep=55, pleuralSlope=0.6, bladeCamber=0.3,        # rounded pleurae; the pleura itself ends in a broad rounded point: no needle (it would snap)
     pygSpine=0.4, pygSplay=18, pygMarginal=3, pygMarginalLen=0.45, pygSpineBlade=1.0, pygSpineWidth=0.55, pygSpineRise=0, pygRings=4, pygWidth=1.0, tailOutlineExp=2.0,   # the fringe: flat triangular lobes of the shield
-    furrowDepth=1.2, effacement=0.0, glabRise=0.18, glabLobes=3, glabInflate=1.3, borderWidth=0.08)   # the eyes: the generator's default (the textured preset's solid lens eye)
+    furrowDepth=1.2, effacement=0.0, glabRise=0.18, glabLobes=3, glabInflate=1.3, borderWidth=0.08, eyeHeight=0.4,   # the default lens eye, low (no stalk look)
+    genalSpine=0.0, genalHorn=0.55, genalHornPitch=8, genalHornBend=0, genalHornRoll=0, genalHornYaw=4)   # the genal spines as round tapering HORNS continuing the border, not flat bands
 DEFAULT_PRESET = "textured"
 
 def table_defaults():
