@@ -55,8 +55,12 @@ def pleura_lengths(P, i):
     return inner, blade, bend
 
 # ---------------------------------------------------------------- solids other than the shell
+MIN_R = 0.0   # 25 Oct 2026: the thinnest spine radius allowed, model mm -- body.build sets it from the print scale (PRINT_MIN_R
+              # at print size) so no spine, tine or tip comes out thinner than prints and survives handling; 0 = no floor
+
 def spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg=0):
     """Tapered spine from `at`, pointing +y (rear); yaw about z (+ toward +x), pitch up. trilobite.spine's frames."""
+    base_r, tip_r = max(base_r, MIN_R), max(tip_r, MIN_R)
     s = M.frustum(base_r, tip_r, length)
     R = __import__("trimesh").transformations.rotation_matrix
     s.apply_transform(R(math.radians(-90), (1, 0, 0)))
@@ -109,6 +113,7 @@ def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0
                                                                            # bead: it met the plate at a right angle, a knob on the shield)
     # the tip (24 Oct 2026): a spine ends in a point, not a sawn-off 1 mm cap -- the last fifth tapers to 0.4 x tip_r and the cap is rounded
     tp = np.clip((ts - 0.8) / 0.2, 0, 1); tp = 3 * tp ** 2 - 2 * tp ** 3; ra = ra * (1 - 0.6 * tp); radii = radii * (1 - 0.6 * tp)
+    if MIN_R > 0: ra = np.maximum(ra, MIN_R); radii = np.maximum(radii, MIN_R)   # the print floor (25 Oct 2026): no needle that snaps off
     if plate is None and profile is None: return sweep_tube(W, ra, round_tip=True)
     c = np.clip(ts / 0.35, 0, 1); c = 3 * c ** 2 - 2 * c ** 3                # the vertical half-thickness: the plate's at the root -> round by 0.35
     rb = np.minimum(radii, 0.5 * float(plate)) * (1 - c) + radii * c if plate is not None else radii.copy()

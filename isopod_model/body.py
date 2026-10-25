@@ -689,6 +689,7 @@ def shaped_head(P, plans, PV, K, J, outline, face):
 ROWS_INFO = {}
 
 
+PRINT_MIN_R = 0.6   # 25 Oct 2026: the thinnest spine radius at print size, mm (a 1.2 mm round spine prints and survives handling in PLA)
 DEFAULT_HEAD = "diagram"   # 25 Oct 2026: build()'s default head -- the head style 'diagram' (the crescent on the isopod head piece is head="isopod")
 
 def build(P, head=None, face=None, outline=None, rows=None):
@@ -893,6 +894,7 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
     def lap(name): STAGE_SECONDS[name] = round(_t.time() - t0 - sum(STAGE_SECONDS.values()), 1)
     U = None; H = None; n = len(plans); _progress(0, 0, n)
     LAST_ORNAMENTS.clear(); LAST_AUDIT.clear()
+    import anatomy.common as _C; _C.MIN_R = PRINT_MIN_R * float(K["s"])     # model mm (print = model / s)
     if head in ("isopod", "shaped"): H, U = _head_cached(P, head, face, outline, plans, J, K, PV)
     if H is not None and ROWS_INFO.get("free_spines"):                      # free spines standing on the head (24 Oct 2026): rooted on its built surface
         hs = [free_spine_solid(sd, H, P) for sd in ROWS_INFO["free_spines"] if float(sd["y"]) < plans[1][3]]
@@ -1008,6 +1010,7 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
     global LAST_DROPPED; LAST_DROPPED = dict(J["_dropped"])                # flakes cut off by the clearances (model mm3)
     for k, v in clean_parts(parts, plans).items(): LAST_DROPPED[k] = LAST_DROPPED.get(k, 0.0) + v   # debris after the paste (11 Oct 2026)
     validate_parts(parts, plans)                                          # raises MeshError: nothing invalid leaves here
+    audit_intact(parts, plans, K["s"]); lap("spine intact")
     lap("clean + validate"); gc.collect()
     return parts, plans, PV, K
 
@@ -1074,6 +1077,20 @@ def _underside(mesh, x, y):
     """The part's lowest surface at (x, y) (0.0 where it is solid to the bed, nan where the ray misses)."""
     hits = mesh.ray.intersects_location([(x, y, -1e3)], [(0.0, 0.0, 1.0)])[0]
     return float(np.asarray(hits).reshape(-1, 3)[:, 2].min()) if len(hits) else float("nan")
+
+
+def audit_intact(parts, plans, s=1.0, tol=0.02):
+    """Is every spine still WHOLE in the finished part (25 Oct 2026)? The clearances, the middle paste and the head-joint
+    relief come after the ornaments and can cut a groove through a spine that sits in a neighbour's sweep (the genal horn,
+    25 Oct). A spine missing more than `tol` of its volume and 1 mm3 at print size is reported in LAST_AUDIT."""
+    names = [p[0] for p in plans]
+    for rec in LAST_ORNAMENTS:
+        k, h = rec["part"], rec["solid"]
+        try:
+            gone = M.difference(h, parts[k]); v = M.volume(gone) if len(gone.faces) else 0.0; tot = M.volume(h)
+        except Exception: continue
+        if v > tol * tot and v / s ** 3 > 1.0:
+            LAST_AUDIT.append(f"{names[k]} {rec['name']}: {100 * v / tot:.0f}% of it cut away after it was placed (a joint clearance or the head relief runs through it: move or shorten it)")
 
 
 def audit_ornaments(parts, plans, min_buried=0.5):
