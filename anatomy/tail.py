@@ -41,9 +41,10 @@ def plan(P):
     Lf = Lf_full * cut; Lm = Lm_full * cut
     sp = math.radians(P["pygSplay"])
     phi_f = math.atan(wp / Lp * math.tan(math.pi / 2 - sp)) if Lf_full > 0.5 else None
-    hphi_f = math.radians(13)
+    wk = float(P.get("pygSpineWidth", 1.0))                      # 25 Oct 2026: the lobes' width at the root, 1 = as built
+    hphi_f = math.radians(13) * wk
     phi_m = [math.radians(50 + 80 * (k + 0.5) / n_m) for k in range(n_m)]
-    hphi_m = math.radians(80 / max(n_m, 1)) * 0.5 * 1.3
+    hphi_m = math.radians(80 / max(n_m, 1)) * 0.5 * 1.3 * wk
     # the margin spines as ONE list (24 Oct 2026): each dict(phi, Lk = the flat bump's length in the plan, L_full = the whole
     # spine, hh, e, rise, roll) -- the preset's pair + marginals, or the body's own `_tailSpines` list (the studio's dots:
     # phi deg, len mm, rise, roll, blade), right side only (phi <= 90), mirrored here. rise / roll None = P's.

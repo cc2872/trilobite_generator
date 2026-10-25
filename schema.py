@@ -161,6 +161,7 @@ PARAMS = [
     Param("pygSpineBend", "Tail spine bend", 0, -180, 180, 5, "Spines", "Their arc, root to tip", unit="deg"),
     Param("pygSpineGrow", "Tail spine extra length", 0.0, 0.0, 2.0, 0.05, "Spines", "Each margin spine runs on as a solid spine this much further / shield length (0 = the flat bump as built)"),
     Param("pygSpineBlade", "Tail spine blade fraction", 1.0, 0.0, 1.0, 0.05, "Spines", "How much of each margin spine is the flat blade of the shield (1 = all, as built; 0 = a round spine straight from the margin; 0.6 = a lichid lobe with a spine tip). Only with rise / bend / extra length."),
+    Param("pygSpineWidth", "Tail spine width", 1.0, 0.3, 2.0, 0.05, "Spines", "Width of each margin lobe / spine at its root, as a factor on the built one (1 = as built; 0.5 slim triangles; 1.5 broad lobes)."),
     # ---- curved spines (23 Oct 2026, schema 6.5): every grafted spine may follow a circular arc. bend = the tangent's total
     #      turn root to tip (0 = straight, as before); roll = the plane it bends in about the spine's own axis (0 up, 90 out
     #      toward the side, 180 down). Defaults 0, so every preset and reading is unchanged.
@@ -226,7 +227,7 @@ UI = {
         # termSpine/macroIndex/macroAmp/pygMarginalLen, not editable individually at all (only blendable via
         # the "Spines" dial, or for the last three, not reachable from the UI whatsoever).
         "Spines": ["genalSpine", "occipitalSpine", "axialSpine", "axialPitch", "axialBend", "axialGrad", "pleuralHorn", "pleuralHornPitch", "pleuralHornBend", "pleuralHornRoll", "pleuralHornGrad", "spineBase", "spineGrad", "spineSweep",
-                   "macroIndex", "macroAmp", "pygSpine", "pygSplay", "termSpine", "pygMarginal", "pygMarginalLen", "pygSpineRise", "pygSpineBend", "pygSpineGrow", "pygSpineBlade"],
+                   "macroIndex", "macroAmp", "pygSpine", "pygSplay", "termSpine", "pygMarginal", "pygMarginalLen", "pygSpineRise", "pygSpineBend", "pygSpineGrow", "pygSpineBlade", "pygSpineWidth"],
     },
     "ruler": ["maxAngle", "clearance", "boreDia", "barrelR", "nKnuckles"],
     "arm": {"path": "genalPath", "curve": "genalCurve", "taper": "genalTaper"},
@@ -273,7 +274,7 @@ CELLS = {
     "b3": dict(label="Tail axis", doc="the pygidial axis and its rings", primary=["pygRings", "tailRelief", "tailDomeExp"],
                more=["pygRibRelief", "pygFurrowScale", "pygAxisLen", "pygAxisFrac", "tailWall", "termSpine", "termBend"]),
     "a3": dict(label="Tail field + margin", doc="the pleural field, border, forks and marginal spines", primary=["pygWidth", "pygSpine", "pygMarginal"],
-               more=["tailOutlineExp", "pygBorderWidth", "pygSplay", "pygMarginalLen", "pygSpineRise", "pygSpineBend", "pygSpineGrow", "pygSpineBlade", "tailProngs", "tailProngLen", "tailProngSplay", "tailProngStem", "tailProngCenter", "tailProngWidth", "tailProngCurl", "tailProngBend"]),
+               more=["tailOutlineExp", "pygBorderWidth", "pygSplay", "pygMarginalLen", "pygSpineRise", "pygSpineBend", "pygSpineGrow", "pygSpineBlade", "pygSpineWidth", "tailProngs", "tailProngLen", "tailProngSplay", "tailProngStem", "tailProngCenter", "tailProngWidth", "tailProngCurl", "tailProngBend"]),
     "ruler": dict(label="Print + hinge", doc="manufacturing, not morphology", primary=["maxAngle", "clearance", "nKnuckles"], more=["boreDia", "barrelR"]),
 }
 VERTICAL_SPINES = ["occipitalSpine", "axialSpine", "termSpine"]     # their own family (10 Sep verdict): dorsal, not a cell prong
@@ -406,7 +407,7 @@ PRESETS["diagram"] = dict(PRESETS["textured"],                 # 25 Oct 2026: th
     length=130, width=82, relief=17.1, segCount=14, cephFrac=0.32, pygFrac=0.165, widthMaxPos=0.33, widthHeadFront=0.79,
     widthThoraxFront=0.94, widthThoraxRear=0.68, widthTail=0.52, axisFrac=0.28, genalSpine=0.47, genalSweep=0.3, genalCurve=6,
     tipSweep=0.4, tipTaper=0.72, bladeChord=1.3, spineBase=0.0, spineSweep=55, pleuralSlope=0.6, bladeCamber=0.14,       # the pleura itself ends in a broad rounded point: no needle (it would snap)
-    pygSpine=0.4, pygSplay=18, pygMarginal=3, pygMarginalLen=0.45, pygSpineBlade=1.0, pygSpineRise=0, pygRings=4, pygWidth=1.0, tailOutlineExp=2.0,   # the fringe: flat triangular lobes of the shield
+    pygSpine=0.4, pygSplay=18, pygMarginal=3, pygMarginalLen=0.45, pygSpineBlade=1.0, pygSpineWidth=0.55, pygSpineRise=0, pygRings=4, pygWidth=1.0, tailOutlineExp=2.0,   # the fringe: flat triangular lobes of the shield
     furrowDepth=1.2, effacement=0.0, glabRise=0.18, glabLobes=3, glabInflate=1.3, eyeSize=0.0, borderWidth=0.08)
 DEFAULT_PRESET = "textured"
 
