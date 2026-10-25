@@ -31,9 +31,9 @@ STYLES = {
     "olenellus":   dict(p=54, doc="Redlichiida: round frontal boss, long crescent eyes joined to it by eye ridges, furrows crossing the glabella",
                         face=dict(glab_boss=0.20, boss_rise=0.22, glab_round=0.7, furrow_cross=0.7, eye_len=2.3, glab_len=1.05, eye_ridge=1.0, border_w=0.05),
                         params=dict(LOBE, glabInflate=0.9, glabRise=0.14, glabLobes=3, eyeSize=0.12, eyePos=0.55, eyeHeight=2.4)),
-    "diagram":     dict(p=0, doc="the textbook trilobite (the cephalon / thorax / pygidium diagram): a round shield, a long furrowed glabella to the front border, no eyes, slim genal spines half the head's length",
-                        face=dict(glab_len=1.0, furrow_cross=1.0, glab_bulge=0.05, glab_round=0.4, eye_len=1.0),
-                        params=dict(LOBE, glabInflate=1.3, glabRise=0.18, glabLobes=3, eyeSize=0.0)),
+    "diagram":     dict(p=0, doc="the textbook trilobite (the cephalon / thorax / pygidium diagram): a round shield, a long furrowed glabella to the front border, the default eyes, slim genal spines half the head's length",
+                        face=dict(glab_len=1.0, furrow_cross=1.0, glab_bulge=0.05, glab_round=0.4),
+                        params=dict(glabInflate=1.3, glabRise=0.18, glabLobes=3)),                           # the default eyes (the solid lens eye)
     "paradoxides": dict(p=55, doc="Redlichiida: glabella swelling forward to the border, transglabellar furrows, long eye lobes",
                         face=dict(glab_len=1.06, furrow_cross=1.0, eye_len=1.9, glab_bulge=0.0, glab_round=0.6),
                         params=dict(LOBE, glabInflate=1.9, glabRise=0.2, glabLobes=2, eyeSize=0.12, eyePos=0.45, eyeHeight=2.2)),
