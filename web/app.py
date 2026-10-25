@@ -151,6 +151,7 @@ def _build_isopod(P, folder, head=None, body_spec=None):
                   notes=[f"{t['a']} and {t['b']} touch at rest: {t['mm3']} mm3" for t in touching]
                         + [f"free {n}" for n in (getattr(IBODY, "ROWS_INFO", {}) or {}).get("free_notes", [])]
                         + [f"spine audit: {n}" for n in getattr(IBODY, "LAST_AUDIT", [])]
+                        + (lambda r: [] if not r[1] else [f"enrolment: the pieces collide before the tail tucks under the head -- {r[1][0][0]} hits {r[1][0][1]} ({r[1][0][2]} mm3); it enrols to {r[0]:.0f} of 180 deg"])(IBODY.enrol_check(parts, [(nm,) for nm in names], PV, s))
                         + [f"{k}: {v:.0f} mm3 cut away by the clearances (it overlapped the part ahead; a forward sweep or a long overlap?)" for k, v in cut.items()]
                         + ([f"debris dropped (mm3): {dropped}"] if dropped and not cut else []),
                   touching=touching, debris_mm3=dropped)

@@ -1138,6 +1138,27 @@ def pose(PV, angles):
     return T
 
 
+def enrol_check(parts, plans, PV, s=1.0, target=180.0, tol_mm3=0.5):
+    """Does the animal ENROL without its pieces overlapping (25 Oct 2026)? The Esteve profile (kinematics.angles, the head
+    joint most) scaled to `target` degrees in all -- the tail tucked under the head. Returns (degrees reached, collisions at
+    the target as [(a, b, mm3)]): the target if clean, else the most closed collision-free pose (bisection)."""
+    import kinematics as KIN
+    n = len(PV); W0 = [M.to_manifold(p) for p in parts]
+    def hits(ang):
+        T = pose(PV, list(ang)); W = [W0[k].transform(T[k][:3, :]) for k in range(len(parts))]; out = []
+        for k in range(len(parts)):
+            for j in range(k + 1, len(parts)):
+                v = float((W[k] ^ W[j]).volume())
+                if v > tol_mm3 * s ** 3: out.append((plans[k][0], plans[j][0], round(v / s ** 3, 1)))
+        return out
+    ang = KIN.angles(n, KIN.HEAD_DEG * target / KIN.total(n, KIN.HEAD_DEG)); bad = hits(ang)
+    if not bad: return target, []
+    lo, hi = 0.0, 1.0
+    for _ in range(8):
+        mid = 0.5 * (lo + hi); (lo, hi) = (mid, hi) if not hits([mid * a for a in ang]) else (lo, mid)
+    return lo * target, bad
+
+
 def curl_check(parts, PV, angles):
     """Largest overlap between any part and its two neighbours behind, every joint curled by each angle, mm^3."""
     out = []
