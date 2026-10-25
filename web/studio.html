@@ -95,7 +95,7 @@
 
 <script>
 const $=id=>document.getElementById(id);
-const S={ preset:'textured', head:'plain', savedBody:null, savedHead:null,
+const S={ preset:'diagram', head:'diagram', savedBody:null, savedHead:null,
           spec:{list:null, model:'thorax'}, headOutline:{}, headFace:{}, headBaseOutline:{}, headBaseFace:{}, headMeta:null,
           BD:null, HD:null, presets:[], savedBodies:[], savedHeads:[],
           sel:null, pinned:null, hover:null, drag:null, pendingB:false, pendingH:false, edited:false, built:null, P:null, eyeParams:[], prongParams:[], hornParams:[], spineParams:[], tailParams:[] };
@@ -214,7 +214,7 @@ function fillPickers(){ const ps=$('preset'); ps.innerHTML=`<option value="plain
 $('preset').onchange=e=>{ const v=e.target.value; if(v==='plain') loadAll('textured',null,'plain'); else if(v.startsWith('saved:')){ const b=S.savedBodies.find(x=>x.name===v.slice(6)); loadAll(b.preset,b.name); } else loadAll(v); };
 $('headstyle').onchange=e=>{ S.head=e.target.value; loadAll(S.preset, S.savedBody, S.start==='plain'?'plain':null); };
 $('model').onchange=e=>{ setBodyModel(e.target.value); };
-$('reset').onclick=()=>loadAll('textured',null,'plain');
+$('reset').onclick=()=>{ S.head='diagram'; loadAll('diagram'); };
 $('plus').onclick=()=>{ const at=(S.sel&&S.sel.type==='row')?S.sel.i+1:S.spec.list.length; insertRow(at, at-1); status(`row ${at} added`); };
 $('minus').onclick=()=>{ const i=(S.sel&&S.sel.type==='row')?S.sel.i:S.spec.list.length-1; removeRow(i); status(`row ${i} removed`); };
 
@@ -577,7 +577,7 @@ function headKeysFor(h){ const ks=((S.headMeta&&S.headMeta.handles[h])||[]).map(
        const TK=['pygRings','pygRibRelief','pygFurrowScale','pygSpine','pygSplay','pygMarginal','pygMarginalLen','pygSpineRise','pygSpineBend','pygSpineGrow','pygSpineBlade','termSpine','termBend','tailOutlineExp','pygBorderWidth'];
        const by=k=>(sc.params||[]).find(p=>p.key===k); S.spineParams=SK.map(by).filter(Boolean); S.tailParams=TK.map(by).filter(Boolean); }catch(_){ S.eyeParams=[]; S.prongParams=[]; S.hornParams=[]; S.spineParams=[]; S.tailParams=[]; }   // the eye and prong params -> their panel sliders
   const body=u.get('body'); if(body){ const b=(await (await fetch('/api/bodies')).json()).find(x=>x.name===body); if(b){ if(b.head) S.head=b.head; await loadAll(b.preset, body); return; } }
-  if(u.get('preset')) await loadAll(u.get('preset')); else await loadAll('textured', null, 'plain'); })();
+  if(u.get('preset')) await loadAll(u.get('preset')); else { S.head='diagram'; await loadAll('diagram'); } })();   // 25 Oct 2026: the studio starts on the textbook trilobite (preset + head 'diagram')
 </script>
 </body>
 </html>

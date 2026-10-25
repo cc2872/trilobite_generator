@@ -402,6 +402,12 @@ PRESETS["phacopid"] = dict(PRESETS["textured"],
     length=205, width=95, segCount=11, cephFrac=0.34, pygFrac=0.22, eyePos=0.75, glabInflate=1.7, eyeLat=0.55, eyeProfile=6.0, eyeSolid=1, eyeSize=0.13, eyeHeight=1.7, eyeSlope=15, eyeArc=110,   # 205 mm: 11 segments need pitch ≥ 8 mm for this hinge
     glabRise=0.12, genalSpine=0.0, pygSpine=0.0, pygRings=7, spineBase=0.0, headDomeExp=1.9, widthTail=0.6,
     tipTaper=0.6, bladeChord=1.0)
+PRESETS["diagram"] = dict(PRESETS["textured"],                 # 25 Oct 2026: the textbook trilobite, measured off its diagram (cephalon / thorax / pygidium figure)
+    length=130, width=82, relief=17.1, segCount=14, cephFrac=0.32, pygFrac=0.165, widthMaxPos=0.33, widthHeadFront=0.79,
+    widthThoraxFront=0.94, widthThoraxRear=0.68, widthTail=0.52, axisFrac=0.28, genalSpine=0.47, genalSweep=0.3, genalCurve=6,
+    tipSweep=0.3, tipTaper=0.75, bladeChord=1.3, spineBase=0.12, spineSweep=55, pleuralSlope=0.6, bladeCamber=0.14,
+    pygSpine=0.45, pygSplay=18, pygMarginal=3, pygMarginalLen=0.55, pygSpineBlade=0.3, pygSpineRise=8, pygRings=4, pygWidth=1.0, tailOutlineExp=2.0,
+    furrowDepth=1.2, effacement=0.0, glabRise=0.18, glabLobes=3, glabInflate=1.3, eyeSize=0.0, borderWidth=0.08)
 DEFAULT_PRESET = "textured"
 
 def table_defaults():

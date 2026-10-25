@@ -18,6 +18,7 @@ import body as BODY, check as CHECK, head_styles as HS
 
 CASES = {
   "default":        ("isopod", None, {}),
+  "diagram":        ("shaped", "diagram", "PRESET"),   # 25 Oct 2026: the textbook trilobite -- the studio's starting animal (schema.PRESETS['diagram'] + head style 'diagram')
   "walliserops":    ("shaped", "walliserops", dict(headProngs=3, headProngLen=0.9, headProngStem=0.5, headProngSplay=40, headProngBend=55, occipitalSpine=0.5)),
   "dicranurus":     ("shaped", "odontopleura", dict(occipitalSpine=1.3, occipitalTines=2, occipitalSplay=60, occipitalBend=160, spineBase=0.6, spineSweep=55)),
   "ceratarges":     ("shaped", "lichas", dict(genalHorn=1.5, genalHornPitch=50, genalHornBend=130, genalHornRoll=-25, occipitalSpine=0.8, occipitalBend=120)),
@@ -44,6 +45,7 @@ def main():
     for name in only:
         kind, style, extra = CASES[name]; t0 = time.time(); rec = dict(kind=kind, style=style, extra=extra)
         try:
+            if extra == "PRESET": extra = dict(schema.PRESETS[name])
             P = schema.coerce(dict(D, **extra))
             if kind == "isopod": parts, plans, PV, K = BODY.build(P, "isopod")
             else:
