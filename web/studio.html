@@ -35,6 +35,7 @@
   .row{display:flex;gap:8px;margin-top:10px}
   .btn{flex:1;background:var(--bg);color:var(--ink);border:1px solid var(--ink);padding:7px 0;font-size:10px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer} .btn:hover{background:var(--soft)} .btn.primary{background:var(--ink);color:var(--bg)} .btn.primary:hover{background:#ddd} .btn[disabled]{opacity:.4;cursor:default}
   .btn.small{flex:0 0 auto;padding:4px 8px;font-size:9px}
+  #addfeature.on{background:var(--soft)} #stage.placing canvas{cursor:url('/static/trilobite-cursor.png') 3 28, crosshair}   /* the little trilobite is the clicker while placing a dot */
   .status{font-size:10px;letter-spacing:.06em;color:var(--mid);margin-top:10px;min-height:14px;white-space:pre-line} .status.busy{color:var(--accent)}
   .links{font-size:11px;line-height:1.7;margin-top:6px} .links a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)} .links a:hover{border-bottom-color:var(--ink)}
   #stage{position:relative;min-width:0;min-height:0} #stage canvas{display:block}
@@ -77,7 +78,7 @@
 
   <div class="sect"><span>Rows</span><span id="reset">reset</span></div>
   <div class="row" style="margin-top:6px"><button class="btn" id="plus" title="add a row after the selected row">+ row</button><button class="btn" id="minus" title="remove the selected row">− row</button></div>
-  <div class="row" style="margin-top:6px"><button class="btn" id="addfeature" title="then click anywhere on the animal in plan: a dot is placed there, and you choose what grows from it (a spine or a prong); drag its dots afterwards">+ add feature</button></div>
+  <div class="row" style="margin-top:6px"><button class="btn" id="addfeature" title="then click anywhere on the animal in plan: a dot is placed there, and you choose what grows from it (a spine or a prong); drag its dots afterwards"><img src="/static/trilobite-icon.png" alt="" style="height:16px;vertical-align:middle;margin-right:6px;margin-top:-3px">add feature</button></div>
   <div class="edits" id="rowtable"></div>
 
   <div class="sect"><span>Save</span><span id="del" style="display:none">delete body</span></div>
@@ -117,7 +118,7 @@ function hornOf(r,i){ const P=S.P||{}; const thx=S.BD.rows.filter(x=>x.row.kind!
   if(+r.horn_own>=0.5) return {L:+r.horn_len, turn:+r.horn_rise, roll:+r.horn_roll, yaw:+r.horn_yaw, own:true};
   return {L:(+P.pleuralHorn||0)*(+r.width)*(1+(+P.pleuralHornGrad||0)*frac), turn:(+P.pleuralHornPitch||45)+(+P.pleuralHornBend||0), roll:(+P.pleuralHornRoll||0), yaw:0, own:false}; }
 const FSKEYS=['x','y','len','rise','roll','yaw','tines','splay','stem','curl']; const FSR={x:[0,120], y:[-80,400], len:[0,200], rise:[-180,180], roll:[-180,180], yaw:[-180,180], tines:[1,5], splay:[0,180], stem:[0,0.9], curl:[-60,60]};
-let addMode=false; $('addfeature').onclick=()=>{ addMode=!addMode; $('addfeature').classList.toggle('on',addMode); if(!addMode){ S.pending=null; renderContext(); } status(addMode?'click on the animal to place a dot there':'' ,false); };
+let addMode=false; $('addfeature').onclick=()=>{ addMode=!addMode; $('addfeature').classList.toggle('on',addMode); $('stage').classList.toggle('placing',addMode); if(!addMode){ S.pending=null; renderContext(); } status(addMode?'click on the animal to place a dot there':'' ,false); };
 // the placed dot, before it is anything (25 Oct 2026): S.pending = {x, y}; the panel asks what grows from it
 function growFeature(kind){ const d=S.pending; if(!d) return; S.spec.spines=S.spec.spines||[]; const rel=(S.P&&+S.P.relief)||17; const prong=kind==='prong';
   S.spec.spines.push(Object.assign({x:d.x, y:d.y, len:+((prong?1.5:1.2)*rel).toFixed(1), rise:45, roll:0, yaw:(d.x<0.75?0:35)}, prong?{tines:2, splay:40, stem:0.4, curl:0}:{}));
@@ -476,7 +477,7 @@ new p5(s=>{
   s.mouseMoved=()=>{ const h=nearest(s.mouseX,s.mouseY); const hi=h&&h.kind==='row'?h.i:null; if(hi!==S.hover){ S.hover=hi; } stage.style.cursor=h?'grab':'default'; };
   s.mousePressed=()=>{ if(s.mouseX<0||s.mouseY<0||s.mouseX>W||s.mouseY>H) return; const h=nearest(s.mouseX,s.mouseY);
     if(addMode&&!(h&&h.kind==='fs')){ const mx=Math.abs((s.mouseX-ox)/px), my=(s.mouseY-oy)/px; if(s.mouseX>oxE-10) return;      // add mode: a click in plan grows a spine there
-      S.pending={x:+(mx<1.5?0:mx).toFixed(2), y:+my.toFixed(2)}; S.sel=null; addMode=false; $('addfeature').classList.remove('on'); status('dot placed - choose what grows from it (spine or prong) in the panel',false); renderContext(false); return; }
+      S.pending={x:+(mx<1.5?0:mx).toFixed(2), y:+my.toFixed(2)}; S.sel=null; addMode=false; $('addfeature').classList.remove('on'); $('stage').classList.remove('placing'); status('dot placed - choose what grows from it (spine or prong) in the panel',false); renderContext(false); return; }
     if(h&&h.kind==='fs'){ S.sel={type:'free',j:h.j}; S.drag={kind:'fs',j:h.j,k:h.k}; renderContext(); renderTable(); stage.style.cursor='grabbing'; return; }
     if(h&&h.kind==='row'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; S.drag={kind:'row',i:h.i,k:h.k,x0:s.mouseX,y0:s.mouseY,start:Object.assign({},rowOf(h.i))}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='eye'){ S.sel={type:'head'}; S.eyeSel=h.k; S.drag={kind:'eye',k:h.k,d:h}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
