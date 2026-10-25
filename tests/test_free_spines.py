@@ -49,3 +49,13 @@ def test_off_the_animal_is_refused_gracefully():
     P = _P()
     info, R = _info(P, [dict(x=300.0, y=36.0, len=20.5)])
     assert info[0]["cover"] < 1.0 or info[0]["z"] is None                 # nothing to stand on within reach: reported, not crashed
+
+
+def test_prong_keys_validate_and_default():
+    P = _P()
+    info, R = _info(P, [dict(x=12.0, y=38.0, len=30.0, tines=3, splay=95.0, stem=0.46, curl=10.0), dict(x=0.0, y=-14.0, len=20.0)])
+    assert R["free_spines"][0]["tines"] == 3 and R["free_spines"][1]["tines"] == 1       # a plain spine stays a plain spine
+    assert R["free_spines"][1]["splay"] == 40.0 and R["free_spines"][1]["stem"] == 0.4     # defaults filled
+    assert info[0]["cover"] >= 1.0
+    import pytest
+    with pytest.raises(ValueError): RW.validate_free_spines([dict(x=1, y=1, tines=9)])

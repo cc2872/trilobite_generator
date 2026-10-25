@@ -514,16 +514,22 @@ def free_spine_solid(sd, mesh, P, others=(), zone=None):
     if rt is None: return []
     x, y, top, low, z_under, cov, fit = rt
     r0 = RW.free_root_radius(P); pitch0, bend0 = RW.free_spine_angles(sd.get("rise", 45.0)); rise = pitch0 + bend0
+    tines = int(sd.get("tines", 1) or 1)
+    def make(rb, rt_, zr, pitch):                                            # a plain curved spine, or a prong (25 Oct 2026): a shared stem that
+        if tines <= 1:                                                       # splits into `tines` tines fanned by `splay`, lifted by `curl` at the split
+            return curved_spine(rb, rt_, L, (x, y, zr), yaw_deg=float(sd.get("yaw", 0.0)), pitch_deg=pitch, bend_deg=rise - pitch, roll_deg=float(sd.get("roll", 0.0)), flare=1.4)
+        return prong(tines, L, float(sd.get("splay", 40.0)), rb, rt_, (x, y, zr), yaw_deg=float(sd.get("yaw", 0.0)), pitch_deg=pitch, root_r=rb,
+                     stem_frac=float(sd.get("stem", 0.4)), curl_deg=float(sd.get("curl", 0.0)), bend_deg=rise - pitch, roll_deg=float(sd.get("roll", 0.0)))
     tried = None
     if fit < 1.0 or cov < 1.0: ROWS_INFO.setdefault("free_notes", []).append(f"spine at ({x:.0f},{y:.0f}): " + (f"{fit:.2f}x as thick, to fit the plate" if fit < 1.0 else "") + ("" if cov >= 1.0 else f"; collar {cov*100:.0f}% on the plate (no room nearby)"))
     for dp, fac in [(dp, fit * f) for f in (1.0, 0.7, 0.5) for dp in (0, 15, 30, 45)]:
         rc = RW.FREE_COLLAR * r0 * fac; pitch = pitch0 + dp
-        zr = max(low - 0.3, z_under + 0.3 + rc * abs(np.cos(np.radians(pitch))))   # the whole collar buried (below the lowest top under it, on a sloping
+        dip = rc * abs(np.cos(np.radians(pitch))) if tines <= 1 else r0 * fac   # (a prong's root is a sphere of its base radius)
+        zr = max(low - 0.3, z_under + 0.3 + dip)                                   # the whole collar buried (below the lowest top under it, on a sloping
         if zr > top - 0.3: continue                                                # pleura), yet the root ring -- perpendicular to the leave, so it dips
                                                                                    # rc cos(pitch) -- above the plate's underside; a ring that would stand
                                                                                    # proud of the top cannot sit in this plate at this thickness
-        h = curved_spine(r0 * fac, 0.45 * min(1.0, fac + 0.3), L, (x, y, zr), yaw_deg=float(sd.get("yaw", 0.0)), pitch_deg=pitch,
-                         bend_deg=rise - pitch, roll_deg=float(sd.get("roll", 0.0)), flare=1.4)
+        h = make(r0 * fac, 0.45 * min(1.0, fac + 0.3), zr, pitch)
         ok, why = _spine_clear(h, mesh, others)
         if tried is None: tried = why
         if ok:
@@ -531,7 +537,7 @@ def free_spine_solid(sd, mesh, P, others=(), zone=None):
                 ROWS_INFO.setdefault("free_notes", []).append(f"spine at ({x:.0f},{y:.0f}): leaves {dp:.0f} degrees steeper" + (f", {fac:.2f}x as thick" if fac < fit - 1e-9 else "") + (f" (as drawn it went {tried})" if tried else " (as drawn, its root ring would have cut the plate's underside)"))
             return [h] if abs(x) < 0.75 else [h, M.mirror_x(h)]
     ROWS_INFO.setdefault("free_notes", []).append(f"spine at ({x:.0f},{y:.0f}): could not be kept clear ({tried or 'no thickness sits in this plate'}); built thinnest and steepest, root at the top")
-    fac = 0.5 * fit; h = curved_spine(r0 * fac, 0.45 * min(1.0, fac + 0.3), L, (x, y, top - 0.3), yaw_deg=float(sd.get("yaw", 0.0)), pitch_deg=pitch0 + 45, bend_deg=rise - pitch0 - 45, roll_deg=float(sd.get("roll", 0.0)), flare=1.4)
+    fac = 0.5 * fit; h = make(r0 * fac, 0.45 * min(1.0, fac + 0.3), top - 0.3, pitch0 + 45)
     return [h] if abs(x) < 0.75 else [h, M.mirror_x(h)]
 
 

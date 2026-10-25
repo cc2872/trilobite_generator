@@ -1,0 +1,322 @@
+{
+ "asset_md5": "d4790db7a5c913abf040d5435508bcf3",
+ "pivots_mm": [
+  [
+   1.0955898717456711,
+   7.500105142118962
+  ],
+  [
+   19.09558988326927,
+   7.500105141720647
+  ],
+  [
+   37.09558997703876,
+   7.500105145901332
+  ],
+  [
+   55.09558963072677,
+   7.500105058269791
+  ],
+  [
+   73.09559045833248,
+   7.500103790670981
+  ],
+  [
+   91.0955936121428,
+   7.500103699521878
+  ],
+  [
+   109.09559361214279,
+   7.500103699522366
+  ],
+  [
+   127.09559361214286,
+   7.500103699522538
+  ],
+  [
+   145.09559301320067,
+   7.5001048841214955
+  ],
+  [
+   163.0955939933761,
+   7.500105116743699
+  ]
+ ],
+ "pieces": [
+  {
+   "name": "head",
+   "watertight": true,
+   "bodies": 1,
+   "bounds": [
+    [
+     -91.22,
+     -147.38,
+     0.0
+    ],
+    [
+     91.22,
+     56.28,
+     77.16
+    ]
+   ]
+  },
+  {
+   "name": "thorax1",
+   "watertight": true,
+   "bodies": 1,
+   "bounds": [
+    [
+     -75.33,
+     -4.63,
+     0.0
+    ],
+    [
+     75.33,
+     25.92,
+     46.17
+    ]
+   ]
+  },
+  {
+   "name": "thorax2",
+   "watertight": true,
+   "bodies": 1,
+   "bounds": [
+    [
+     -72.51,
+     13.37,
+     0.0
+    ],
+    [
+     72.51,
+     43.92,
+     46.17
+    ]
+   ]
+  },
+  {
+   "name": "thorax3",
+   "watertight": true,
+   "bodies": 1,
+   "bounds": [
+    [
+     -69.47,
+     31.37,
+     0.0
+    ],
+    [
+     69.47,
+     61.92,
+     46.17
+    ]
+   ]
+  },
+  {
+   "name": "thorax4",
+   "watertight": true,
+   "bodies": 1,
+   "bounds": [
+    [
+     -66.28,
+     49.37,
+     0.0
+    ],
+    [
+     66.28,
+     79.92,
+     46.17
+    ]
+   ]
+  },
+  {
+   "name": "thorax5",
+   "watertight": true,
+   "bodies": 1,
+   "bounds": [
+    [
+     -63.04,
+     67.37,
+     0.0
+    ],
+    [
+     63.04,
+     97.92,
+     46.17
+    ]
+   ]
+  },
+  {
+   "name": "thorax6",
+   "watertight": true,
+   "bodies": 1,
+   "bounds": [
+    [
+     -59.84,
+     85.37,
+     0.0
+    ],
+    [
+     59.84,
+     115.92,
+     46.17
+    ]
+   ]
+  },
+  {
+   "name": "thorax7",
+   "watertight": true,
+   "bodies": 1,
+   "bounds": [
+    [
+     -56.77,
+     103.37,
+     0.0
+    ],
+    [
+     56.77,
+     133.92,
+     46.17
+    ]
+   ]
+  },
+  {
+   "name": "thorax8",
+   "watertight": true,
+   "bodies": 1,
+   "bounds": [
+    [
+     -53.91,
+     121.37,
+     0.0
+    ],
+    [
+     53.91,
+     151.92,
+     46.17
+    ]
+   ]
+  },
+  {
+   "name": "thorax9",
+   "watertight": true,
+   "bodies": 1,
+   "bounds": [
+    [
+     -51.36,
+     139.37,
+     0.0
+    ],
+    [
+     51.36,
+     169.92,
+     46.17
+    ]
+   ]
+  },
+  {
+   "name": "tail",
+   "watertight": true,
+   "bodies": 1,
+   "bounds": [
+    [
+     -40.99,
+     157.37,
+     0.0
+    ],
+    [
+     40.99,
+     252.82,
+     36.64
+    ]
+   ]
+  }
+ ],
+ "rest_contacts": [],
+ "first_contact": {
+  "angle_deg": 24.0,
+  "pairs": [
+   [
+    "head",
+    "tail",
+    1431.64
+   ]
+  ]
+ },
+ "curl_clean_to_deg": 23.0,
+ "joints_vs_isopod": {
+  "isopod_ball_radius": 5.7499,
+  "isopod_ball_height": 7.5001,
+  "joints": [
+   {
+    "joint": 0,
+    "ball_radius": 5.75,
+    "ball_height": 7.5001,
+    "socket_side_max_dev_mm": 1.3356,
+    "ball_side_max_dev_mm": 0.0006
+   },
+   {
+    "joint": 1,
+    "ball_radius": 5.75,
+    "ball_height": 7.5001,
+    "socket_side_max_dev_mm": 0.0007,
+    "ball_side_max_dev_mm": 0.0001
+   },
+   {
+    "joint": 2,
+    "ball_radius": 5.75,
+    "ball_height": 7.5001,
+    "socket_side_max_dev_mm": 0.0007,
+    "ball_side_max_dev_mm": 0.0021
+   },
+   {
+    "joint": 3,
+    "ball_radius": 5.75,
+    "ball_height": 7.5001,
+    "socket_side_max_dev_mm": 0.0007,
+    "ball_side_max_dev_mm": 0.001
+   },
+   {
+    "joint": 4,
+    "ball_radius": 5.75,
+    "ball_height": 7.5001,
+    "socket_side_max_dev_mm": 0.0007,
+    "ball_side_max_dev_mm": 0.0001
+   },
+   {
+    "joint": 5,
+    "ball_radius": 5.75,
+    "ball_height": 7.5001,
+    "socket_side_max_dev_mm": 0.0007,
+    "ball_side_max_dev_mm": 0.0004
+   },
+   {
+    "joint": 6,
+    "ball_radius": 5.75,
+    "ball_height": 7.5001,
+    "socket_side_max_dev_mm": 0.0007,
+    "ball_side_max_dev_mm": 0.002
+   },
+   {
+    "joint": 7,
+    "ball_radius": 5.75,
+    "ball_height": 7.5001,
+    "socket_side_max_dev_mm": 0.0007,
+    "ball_side_max_dev_mm": 0.0013
+   },
+   {
+    "joint": 8,
+    "ball_radius": 5.75,
+    "ball_height": 7.5001,
+    "socket_side_max_dev_mm": 0.0007,
+    "ball_side_max_dev_mm": 0.0022
+   },
+   {
+    "joint": 9,
+    "ball_radius": 5.75,
+    "ball_height": 7.5001,
+    "socket_side_max_dev_mm": 0.0007,
+    "ball_side_max_dev_mm": 0.0013
+   }
+  ]
+ }
+}

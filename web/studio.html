@@ -77,7 +77,7 @@
 
   <div class="sect"><span>Rows</span><span id="reset">reset</span></div>
   <div class="row" style="margin-top:6px"><button class="btn" id="plus" title="add a row after the selected row">+ row</button><button class="btn" id="minus" title="remove the selected row">− row</button></div>
-  <div class="row" style="margin-top:6px"><button class="btn" id="addspine" title="then click anywhere on the animal in plan: a spine grows there (mirrored unless on the axis); drag its dots">+ spine anywhere</button></div>
+  <div class="row" style="margin-top:6px"><button class="btn" id="addspine" title="then click anywhere on the animal in plan: a spine grows there (mirrored unless on the axis); drag its dots">+ spine anywhere</button> <button class="btn" id="addprong" title="then click anywhere on the animal in plan: a forked spine grows there; drag its fork and splay dots">+ prong anywhere</button></div>
   <div class="edits" id="rowtable"></div>
 
   <div class="sect"><span>Save</span><span id="del" style="display:none">delete body</span></div>
@@ -116,8 +116,9 @@ const HNKEYS=['horn_len','horn_rise','horn_roll','horn_yaw'];       // ... and i
 function hornOf(r,i){ const P=S.P||{}; const thx=S.BD.rows.filter(x=>x.row.kind!=='pyg'); const frac=thx.length>1?Math.min(i/(thx.length-1),1):0;
   if(+r.horn_own>=0.5) return {L:+r.horn_len, turn:+r.horn_rise, roll:+r.horn_roll, yaw:+r.horn_yaw, own:true};
   return {L:(+P.pleuralHorn||0)*(+r.width)*(1+(+P.pleuralHornGrad||0)*frac), turn:(+P.pleuralHornPitch||45)+(+P.pleuralHornBend||0), roll:(+P.pleuralHornRoll||0), yaw:0, own:false}; }
-const FSKEYS=['x','y','len','rise','roll','yaw']; const FSR={x:[0,120], y:[-80,400], len:[0,200], rise:[-180,180], roll:[-180,180], yaw:[-180,180]};
-let addMode=false; $('addspine').onclick=()=>{ addMode=!addMode; $('addspine').classList.toggle('on',addMode); status(addMode?'click on the animal to grow a spine there':'' ,false); };
+const FSKEYS=['x','y','len','rise','roll','yaw','tines','splay','stem','curl']; const FSR={x:[0,120], y:[-80,400], len:[0,200], rise:[-180,180], roll:[-180,180], yaw:[-180,180], tines:[1,5], splay:[0,180], stem:[0,0.9], curl:[-60,60]};
+let addMode=false; $('addspine').onclick=()=>{ addMode=addMode==='spine'?false:'spine'; $('addspine').classList.toggle('on',addMode==='spine'); $('addprong').classList.remove('on'); status(addMode?'click on the animal to grow a spine there':'' ,false); };
+$('addprong').onclick=()=>{ addMode=addMode==='prong'?false:'prong'; $('addprong').classList.toggle('on',addMode==='prong'); $('addspine').classList.remove('on'); status(addMode?'click on the animal to grow a prong there':'' ,false); };
 function freeList(){ const D=S.BD; const L=S.spec.spines||[]; const info=(D&&D.free)||[]; return L.map((q,j)=>{ const f=info[j]; const rt=(f&&f.root&&!(S.drag&&S.drag.kind==='fs'&&S.drag.j===j))?f.root:[q.x,q.y];   // the root as the build places it (snapped onto the plate); while its dot is dragged, the mouse
   return Object.assign({}, q, {x:rt[0], y:rt[1], z:(f&&f.z!=null)?f.z:((S.P&&+S.P.relief)||17)*0.6, part:f?f.part:null, moved:f?f.moved:0, cover:f?f.cover:1, thin:(f&&f.thin!=null)?f.thin:1}); }); }
 function freeAngles(rise){ rise=+rise||0; const p=rise>=0?Math.max(0.35*rise,Math.min(rise,30)):0.35*rise; return [p, rise-p]; }   // = rows.free_spine_angles: leave at >= 30 degrees, bend the rest
@@ -232,9 +233,9 @@ function renderContext(rebuild=true){ const box=$('context');
       if(S.P) for(const p of [...S.eyeParams,...S.hornParams]){ const s=$('s_'+p.key); if(s&&document.activeElement!==s){ s.value=S.P[p.key]; $('v_'+p.key).textContent=fmt(S.P[p.key]); } } }
     return; }
   if(S.sel.type==='free'){ const j=S.sel.j; const L=S.spec.spines||[]; if(j>=L.length){ S.sel=null; return renderContext(); } const q=L[j];
-    $('ctxname').textContent=`Spine ${j}${q.x<0.75?' - on the axis':' - mirrored'}`; $('ctxtools').innerHTML='';
+    $('ctxname').textContent=`${(q.tines||1)>1?'Prong':'Spine'} ${j}${q.x<0.75?' - on the axis':' - mirrored'}`; $('ctxtools').innerHTML='';
     if(rebuild||box.dataset.k!=='fs'+j){ box.innerHTML=''; box.dataset.k='fs'+j;
-      for(const k of FSKEYS){ const rr=FSR[k]; slider(box,k,q[k],rr[0],rr[1],(rr[1]-rr[0])/300,val=>{ q[k]=+(+val).toFixed(3); sendBody(); },{x:'mm across',y:'mm along (- = head)',len:'mm',rise:'deg',roll:'deg',yaw:'deg, + outward'}[k]); }
+      for(const k of FSKEYS){ const rr=FSR[k]; slider(box,k,q[k],rr[0],rr[1],(rr[1]-rr[0])/300,val=>{ q[k]=+(+val).toFixed(3); sendBody(); },{x:'mm across',y:'mm along (- = head)',len:'mm',rise:'deg',roll:'deg',yaw:'deg, + outward',tines:'1 = a plain spine; 2 = a fork; 3 = a trident',splay:'deg, the fan of the tines',stem:'the shared stem, as a share of the length',curl:'deg, the tines lift (or dip) at the split'}[k]); }
       const row=document.createElement('div'); row.className='row'; row.style.marginTop='8px';
       for(const [t,f] of [['duplicate',()=>{ L.splice(j+1,0,Object.assign({},q,{y:q.y+8})); S.sel={type:'free',j:j+1}; sendBody(); renderContext(); }],
                           ['- spine',()=>{ L.splice(j,1); S.sel=L.length?{type:'free',j:Math.min(j,L.length-1)}:null; sendBody(); renderContext(); }]]){ const b=document.createElement('button'); b.className='btn small'; b.textContent=t; b.onclick=f; row.appendChild(b); }
@@ -325,12 +326,16 @@ new p5(s=>{
     for(const q of freeList()){ const pts=arcPts([q.x,q.y,q.z],q.len,q.yaw,freeAngles(q.rise)[0],freeAngles(q.rise)[1],q.roll,8); for(const p_ of pts){ treach=Math.max(treach,p_[1]); txw=Math.max(txw,Math.abs(p_[0])); } }
     px=Math.min((H-80)/(Math.max(L,hreach,treach)+hl+6), (W-150)/(2*Math.max(xw,txw)+ZX*zmax+30)); ox=46+Math.max(xw,txw)*px; oy=40+hl*px; oxE=ox+Math.max(xw,txw)*px+30; }
   function drawFreeSpines(){ const L=freeList(); if(!L.length) return; const zS=z=>oxE+z*ZX*px;
-    L.forEach((q,j)=>{ const on=S.sel&&S.sel.type==='free'&&S.sel.j===j; const pts=arcPts([q.x,q.y,q.z],q.len,q.yaw,freeAngles(q.rise)[0],freeAngles(q.rise)[1],q.roll,16);   // as free_spine_solid builds it
-      if(on) orange(1.3); else hair(255,1.2); for(const m of (q.x<0.75?[1]:[1,-1])){ s.beginShape(); for(const p_ of pts) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); }
-      hair(150,1); s.beginShape(); for(const p_ of pts) s.vertex(zS(p_[2]),Y(p_[1])); s.endShape();                                                     // side view
-      const rt=pts[0], tp=pts[16], md=pts[8];
-      for(const [k,p_,big] of [['fs_root',rt,true],['fs_tip',tp,false],['fs_mid',md,false]]){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):s.color(255,210)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(k==='fs_root'?s.color(255,120):0)); s.circle(sx,sy,on?(big?9:7):(big?6:4.5)); HP.push({kind:'fs',j,k,sx,sy}); }
-      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`spine ${j} - ${q.len.toFixed(1)} mm - rise ${Math.round(q.rise)}° - roll ${Math.round(q.roll)}° - yaw ${Math.round(q.yaw)}°${q.part==null?'':q.part<0?' - on the head':' - on piece '+(q.part+1)}${q.thin<0.999?' - '+Math.round(q.thin*100)+'% thick (the room on the plate)':''}${q.cover<0.999?' - collar '+Math.round(q.cover*100)+'% on the plate':''}`, X(tp[0])+9, Y(tp[1])-6); } }); }
+    L.forEach((q,j)=>{ const on=S.sel&&S.sel.type==='free'&&S.sel.j===j; const tn=Math.max(1,Math.round(q.tines||1));
+      const pts=tn>1?null:arcPts([q.x,q.y,q.z],q.len,q.yaw,freeAngles(q.rise)[0],freeAngles(q.rise)[1],q.roll,16);   // as free_spine_solid builds it
+      const pr=tn>1?prongPts(q,q.z):null; const lines=tn>1?[...(pr.stem?[pr.stem]:[]),...pr.tines]:[pts];
+      if(on) orange(1.3); else hair(255,1.2); for(const m of (q.x<0.75?[1]:[1,-1])) for(const ln of lines){ s.beginShape(); for(const p_ of ln) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); }
+      hair(150,1); for(const ln of lines){ s.beginShape(); for(const p_ of ln) s.vertex(zS(p_[2]),Y(p_[1])); s.endShape(); }                            // side view
+      const rt=tn>1?[q.x,q.y,q.z]:pts[0], tp=tn>1?pr.tines[tn-1][16]:pts[16], md=tn>1?pr.tines[tn-1][8]:pts[8];
+      const dots=[['fs_root',rt,true],['fs_tip',tp,false],['fs_mid',md,false]];
+      if(tn>1){ dots.push(['fs_fork',pr.split,false]); dots.push(['fs_splay',pr.tines[0][16],false]); }   // the fork point (drag along: the stem's share) and the other outer tine's tip (drag: the fan)
+      for(const [k,p_,big] of dots){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):s.color(255,210)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(k==='fs_root'?s.color(255,120):0)); s.circle(sx,sy,on?(big?9:7):(big?6:4.5)); HP.push({kind:'fs',j,k,sx,sy}); }
+      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`spine ${j} - ${q.len.toFixed(1)} mm - rise ${Math.round(q.rise)}° - roll ${Math.round(q.roll)}° - yaw ${Math.round(q.yaw)}°${(q.tines||1)>1?' - '+Math.round(q.tines)+' tines, fan '+Math.round(q.splay)+'°, stem '+Math.round(100*q.stem)+'%':''}${q.part==null?'':q.part<0?' - on the head':' - on piece '+(q.part+1)}${q.thin<0.999?' - '+Math.round(q.thin*100)+'% thick (the room on the plate)':''}${q.cover<0.999?' - collar '+Math.round(q.cover*100)+'% on the plate':''}`, X(tp[0])+9, Y(tp[1])-6); } }); }
   function tailList(){ const D=S.BD, T=D&&D.tail; if(!T||!T.tube) return []; const own=!!S.spec.tail_spines;
     return own?S.spec.tail_spines.map(q=>{ const ph=q.phi*Math.PI/180; const x0=T.wp*Math.cos(ph), y0=T.y0+T.Lp*Math.sin(ph); const r0=Math.hypot(x0,y0-T.y0)||1e-6; return Object.assign({}, q, {root:[x0,y0], dir:[x0/r0,(y0-T.y0)/r0]}); }):T.spines; }
   const X=x=>ox+x*px, Y=y=>oy+y*px;
@@ -404,6 +409,11 @@ new p5(s=>{
     for(let i=0;i<=n;i++){ const t=i/n; let x=0,y,z; if(Math.abs(phi)<1e-6){ y=t*L; z=0; } else { const rad=L/Math.abs(phi), a=t*phi; y=rad*Math.sin(Math.abs(a)); z=Math.sign(phi)*rad*(1-Math.cos(a)); }
       const x1=x*Math.cos(R)+z*Math.sin(R), z1=-x*Math.sin(R)+z*Math.cos(R); const y2=y*Math.cos(P_)-z1*Math.sin(P_), z2=y*Math.sin(P_)+z1*Math.cos(P_);
       out.push([root[0]+x1*Math.cos(Yw)+y2*Math.sin(Yw), root[1]-x1*Math.sin(Yw)+y2*Math.cos(Yw), root[2]+z2]); } return out; }
+  // a prong in plan (25 Oct 2026), as anatomy.common.prong builds it: a stem of stem*len along (yaw, pitch), then `tines` tines fanned by `splay` about it, lifted by `curl`, each arching by the rest of the rise
+  function prongPts(q,z){ const [pit,bend]=freeAngles(q.rise); const tn=Math.max(1,Math.round(q.tines||1)); const st=tn>1?Math.min(q.stem||0,0.9)*q.len:0; const tl=q.len-st;
+    const stem=arcPts([q.x,q.y,z],Math.max(st,1e-6),q.yaw,pit,0,0,4); const split=stem[4]; const tines=[];
+    for(let k=0;k<tn;k++){ const off=tn===1?0:(q.splay||0)*(k/(tn-1)-0.5); tines.push(arcPts(split,tl,q.yaw+off,pit+(q.curl||0),bend,q.roll,16)); }
+    return {stem:st>0.5?stem:null, split, tines}; }
   function drawBodySpines(){ const P=S.P, D=S.BD; if(!P||!D) return; const rel=+P.relief||17; const n=D.rows.length; const nThx=D.rows.filter(r=>r.row.kind!=='pyg').length||n;
     const zS=z=>oxE+z*ZX*px;                                                                           // side view x from model z
     D.rows.forEach((r,i)=>{ if(r.row.kind==='pyg') return; const frac=nThx>1?i/(nThx-1):0; const pc=D.side.find(p=>p.rows.includes(i)); const yr=r.handles.rear[1], ye=(r.handles.edge[1]);
@@ -457,8 +467,9 @@ new p5(s=>{
   s.mouseMoved=()=>{ const h=nearest(s.mouseX,s.mouseY); const hi=h&&h.kind==='row'?h.i:null; if(hi!==S.hover){ S.hover=hi; } stage.style.cursor=h?'grab':'default'; };
   s.mousePressed=()=>{ if(s.mouseX<0||s.mouseY<0||s.mouseX>W||s.mouseY>H) return; const h=nearest(s.mouseX,s.mouseY);
     if(addMode&&!(h&&h.kind==='fs')){ const mx=Math.abs((s.mouseX-ox)/px), my=(s.mouseY-oy)/px; if(s.mouseX>oxE-10) return;      // add mode: a click in plan grows a spine there
-      S.spec.spines=S.spec.spines||[]; const rel=(S.P&&+S.P.relief)||17; S.spec.spines.push({x:+(mx<1.5?0:mx).toFixed(2), y:+my.toFixed(2), len:+(1.2*rel).toFixed(1), rise:45, roll:0, yaw:(mx<1.5?0:35)});
-      S.sel={type:'free',j:S.spec.spines.length-1}; addMode=false; $('addspine').classList.remove('on'); status('spine added - drag its dots (root, mid, tip) or use the sliders',false); sendBody(); renderContext(); renderTable(); return; }
+      S.spec.spines=S.spec.spines||[]; const rel=(S.P&&+S.P.relief)||17; const prong=addMode==='prong';
+      S.spec.spines.push(Object.assign({x:+(mx<1.5?0:mx).toFixed(2), y:+my.toFixed(2), len:+((prong?1.5:1.2)*rel).toFixed(1), rise:45, roll:0, yaw:(mx<1.5?0:35)}, prong?{tines:2, splay:40, stem:0.4, curl:0}:{}));
+      S.sel={type:'free',j:S.spec.spines.length-1}; addMode=false; $('addspine').classList.remove('on'); $('addprong').classList.remove('on'); status(prong?'prong added - drag its dots (root, fork, tips) or use the sliders':'spine added - drag its dots (root, mid, tip) or use the sliders',false); sendBody(); renderContext(); renderTable(); return; }
     if(h&&h.kind==='fs'){ S.sel={type:'free',j:h.j}; S.drag={kind:'fs',j:h.j,k:h.k}; renderContext(); renderTable(); stage.style.cursor='grabbing'; return; }
     if(h&&h.kind==='row'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; S.drag={kind:'row',i:h.i,k:h.k,x0:s.mouseX,y0:s.mouseY,start:Object.assign({},rowOf(h.i))}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='eye'){ S.sel={type:'head'}; S.eyeSel=h.k; S.drag={kind:'eye',k:h.k,d:h}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
@@ -484,8 +495,15 @@ new p5(s=>{
       S.edited=true; renderContext(false); return; }
     if(S.drag.kind==='fs'){ const d=S.drag, q=(S.spec.spines||[])[d.j]; if(!q) return; const mx=Math.abs((s.mouseX-ox)/px), my=(s.mouseY-oy)/px; const z=freeList()[d.j].z;
       if(d.k==='fs_root'){ q.x=+(mx<1.5?0:mx).toFixed(2); q.y=+my.toFixed(2); }
-      else { const cur=arcPts([q.x,q.y,z],Math.max(q.len,1),q.yaw,freeAngles(q.rise)[0],freeAngles(q.rise)[1],0,16); const tx=cur[16][0]-q.x, ty=cur[16][1]-q.y; const cl=Math.hypot(tx,ty)||1e-6; const vx=mx-q.x, vy=my-q.y;
-        if(d.k==='fs_tip'){ const c1=Math.hypot(vx,vy); q.len=+Math.max(0,Math.min(200,Math.max(q.len,1)*c1/cl)).toFixed(2); const dA=(Math.atan2(vx,vy)-Math.atan2(tx,ty))*180/Math.PI; q.yaw=+Math.max(-180,Math.min(180,q.yaw+dA)).toFixed(1); }
+      else if(d.k==='fs_fork'){ const pit=freeAngles(q.rise)[0]*Math.PI/180, yw=q.yaw*Math.PI/180; const ux=Math.sin(yw)*Math.cos(pit), uy=Math.cos(yw)*Math.cos(pit);   // along the stem's plan direction
+        const along=((mx-q.x)*ux+(my-q.y)*uy)/Math.max(Math.cos(pit),0.2); q.stem=+Math.max(0,Math.min(0.9,along/Math.max(q.len,1))).toFixed(3); }
+      else if(d.k==='fs_splay'){ const pr=prongPts(q,z); const sp=pr.split; const a0=Math.atan2(pr.tines[q.tines-1][16][0]-sp[0],pr.tines[q.tines-1][16][1]-sp[1]); const a1=Math.atan2(mx-sp[0],my-sp[1]);   // the fan: the angle between the dragged tine and the other outer one
+        let fan=(a0-a1)*180/Math.PI; fan=((fan%360)+360)%360; if(fan>180) fan=360-fan; q.splay=+Math.max(0,Math.min(180,fan)).toFixed(1); }
+      else { const tn=Math.max(1,Math.round(q.tines||1)); const pr0=tn>1?prongPts(Object.assign({},q,{roll:0}),z):null;
+        const cur=tn>1?null:arcPts([q.x,q.y,z],Math.max(q.len,1),q.yaw,freeAngles(q.rise)[0],freeAngles(q.rise)[1],0,16); const tip0=tn>1?pr0.tines[tn-1][16]:cur[16]; const base=tn>1?pr0.split:[q.x,q.y];
+        const tx=tip0[0]-base[0], ty=tip0[1]-base[1]; const cl=Math.hypot(tx,ty)||1e-6; const vx=mx-base[0], vy=my-base[1];
+        if(d.k==='fs_tip'){ const c1=Math.hypot(vx,vy); const tn_=Math.max(1,Math.round(q.tines||1)); const tl=tn_>1?q.len*(1-Math.min(q.stem||0,0.9)):q.len;
+          const tl2=Math.max(0.5,tl)*c1/cl; q.len=+Math.max(0,Math.min(200,tn_>1?tl2/(1-Math.min(q.stem||0,0.9)):tl2)).toFixed(2); const dA=(Math.atan2(vx,vy)-Math.atan2(tx,ty))*180/Math.PI; q.yaw=+Math.max(-180,Math.min(180,q.yaw+dA)).toFixed(1); }
         else { const sag=(vx*ty-vy*tx)/cl; const th=Math.abs(q.rise)*Math.PI/180; const sagV=th>1e-3?(q.len/th)*(1-Math.cos(th/2)):0; if(sagV>1e-6){ const rl=Math.asin(Math.max(-1,Math.min(1,sag/sagV)))*180/Math.PI; q.roll=+Math.max(-180,Math.min(180,Math.round(rl/5)*5)).toFixed(1); } } }
       S.edited=true; invalidateBuild(); renderContext(false); return; }
     if(S.drag.kind==='ts'){ const d=S.drag, T=S.BD.tail, q=S.spec.tail_spines[d.j]; if(!T||!q) return; const mx=Math.abs((s.mouseX-ox)/px), my=(s.mouseY-oy)/px;   // mouse in model mm (plan, right side)

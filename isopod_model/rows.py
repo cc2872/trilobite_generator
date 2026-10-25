@@ -196,8 +196,9 @@ TAIL_SPINE_RANGE = dict(phi=(0.0, 90.0), len=(0.0, 500.0), rise=(-180.0, 180.0),
 TAIL_SPINE_DEFAULT = dict(phi=70.0, len=20.0, rise=30.0, roll=0.0, blade=0.0)
 MAX_TAIL_SPINES = 24
 
-FREE_SPINE_RANGE = dict(x=(0.0, 400.0), y=(-400.0, 2000.0), len=(0.0, 500.0), rise=(-180.0, 180.0), roll=(-180.0, 180.0), yaw=(-180.0, 180.0))
-FREE_SPINE_DEFAULT = dict(x=0.0, y=0.0, len=15.0, rise=45.0, roll=0.0, yaw=0.0)
+FREE_SPINE_RANGE = dict(x=(0.0, 400.0), y=(-400.0, 2000.0), len=(0.0, 500.0), rise=(-180.0, 180.0), roll=(-180.0, 180.0), yaw=(-180.0, 180.0),
+                        tines=(1, 5), splay=(0.0, 180.0), stem=(0.0, 0.9), curl=(-60.0, 60.0))   # 25 Oct 2026: a prong -- tines (1 = a plain spine), their fan, the shared stem's share, the tines' lift at the split
+FREE_SPINE_DEFAULT = dict(x=0.0, y=0.0, len=15.0, rise=45.0, roll=0.0, yaw=0.0, tines=1, splay=40.0, stem=0.4, curl=0.0)
 MAX_FREE_SPINES = 64
 
 def validate_free_spines(lst):
@@ -211,6 +212,7 @@ def validate_free_spines(lst):
         if bad: raise KeyError(f"spine {j}: unknown keys {sorted(bad)} (have {sorted(FREE_SPINE_RANGE)})")
         row = dict(FREE_SPINE_DEFAULT); row.update(sd)
         for k, (lo, hi) in FREE_SPINE_RANGE.items(): row[k] = _num(row[k], k, lo, hi, f"spine {j}")
+        row["tines"] = int(round(row["tines"]))
         out.append(row)
     return out
 
