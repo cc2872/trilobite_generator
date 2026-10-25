@@ -46,7 +46,7 @@ def test_pointed_tail_builds_one_body():
 
 def test_tail_lobe_width_and_flat_list():
     """25 Oct 2026: a tail spine list carries a per-lobe width; a list of flat lobes (blade 1, no rise) stays a flat margin."""
-    import rows as RW
+    import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "isopod_model")); import rows as RW
     P = _P(pygSpineWidth=0.55, pygMarginal=3)
     S = T.plan(P)
     assert all(abs(s["width"] - 1.0) < 1e-9 for s in S["spines"][:1]) and S["spines"][1]["width"] > 1.0   # the pair in its own units; marginals in the pair's
