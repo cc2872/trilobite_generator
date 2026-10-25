@@ -192,8 +192,8 @@ def validate_list(lst):
     return out
 
 
-TAIL_SPINE_RANGE = dict(phi=(0.0, 90.0), len=(0.0, 500.0), rise=(-180.0, 180.0), roll=(-180.0, 180.0), blade=(0.0, 1.0))
-TAIL_SPINE_DEFAULT = dict(phi=70.0, len=20.0, rise=30.0, roll=0.0, blade=0.0)
+TAIL_SPINE_RANGE = dict(phi=(0.0, 90.0), len=(0.0, 500.0), rise=(-180.0, 180.0), roll=(-180.0, 180.0), blade=(0.0, 1.0), width=(0.3, 2.5))
+TAIL_SPINE_DEFAULT = dict(phi=70.0, len=20.0, rise=30.0, roll=0.0, blade=0.0, width=1.0)   # width (25 Oct 2026): the lobe's root width, x the built one
 MAX_TAIL_SPINES = 24
 
 FREE_SPINE_RANGE = dict(x=(0.0, 400.0), y=(-400.0, 2000.0), len=(0.0, 500.0), rise=(-180.0, 180.0), roll=(-180.0, 180.0), yaw=(-180.0, 180.0),
@@ -687,9 +687,11 @@ def _tail_info(S, y_off, P, spec):
         if sd["phi"] > _m.pi / 2 + 1e-6: continue
         x0, y0 = S["base_pt"](sd["phi"]); r0 = _m.hypot(x0, y0) or 1e-6
         L = sd["L_full"] + (0.0 if sd["rise"] is not None else grow)
+        xa, ya = S["base_pt"](min(sd["phi"] + sd["hh"], _m.pi)); xb, yb = S["base_pt"](max(sd["phi"] - sd["hh"], 0.0))   # the lobe's root corners on the margin
         sp.append(dict(phi=round(_m.degrees(sd["phi"]), 2), root=[round(float(x0), 3), round(float(y0) + y_off, 3)], dir=[round(x0 / r0, 4), round(y0 / r0, 4)],
                        len=round(float(L), 3), rise=round(rise0 if sd["rise"] is None else float(sd["rise"]), 1), roll=round(0.0 if sd["roll"] is None else float(sd["roll"]), 1),
-                       blade=round(float(sd["Lk"] / sd["L_full"]) if sd["L_full"] > 1e-6 else 0.0, 3)))
+                       blade=round(float(sd["Lk"] / sd["L_full"]) if sd["L_full"] > 1e-6 else 0.0, 3), width=round(float(sd.get("width", 1.0)), 3), hh=round(_m.degrees(sd["hh"]), 2),
+                       corners=[[round(float(xa), 3), round(float(ya) + y_off, 3)], [round(float(xb), 3), round(float(yb) + y_off, 3)]]))
     return dict(margin=[list(p) for p in zip(mx, my)], Lp=round(float(S["Lp"]), 3), wp=round(float(S["wp"]), 3), y0=round(float(y_off), 3), own=own, tube=bool(S.get("tube")), spines=sp)
 
 

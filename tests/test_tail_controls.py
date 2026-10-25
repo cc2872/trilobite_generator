@@ -42,3 +42,15 @@ def test_pointed_tail_builds_one_body():
     P = _P(tailOutlineExp=1.0, pygAxisLen=0.6, pygBorderWidth=0.15, pygAxisFrac=0.4)
     sh, env = T.shell(P, T.plan(P))
     assert len(M.bodies(sh)) == 1 and sh.is_watertight
+
+
+def test_tail_lobe_width_and_flat_list():
+    """25 Oct 2026: a tail spine list carries a per-lobe width; a list of flat lobes (blade 1, no rise) stays a flat margin."""
+    import rows as RW
+    P = _P(pygSpineWidth=0.55, pygMarginal=3)
+    S = T.plan(P)
+    assert all(abs(s["width"] - 1.0) < 1e-9 for s in S["spines"][:1]) and S["spines"][1]["width"] > 1.0   # the pair in its own units; marginals in the pair's
+    lst = RW.validate_tail_spines([dict(phi=70, len=10, rise=0, roll=0, blade=1, width=1.5), dict(phi=85, len=9, rise=0, roll=0, blade=1)])
+    assert lst[1]["width"] == 1.0
+    Pt = dict(P, _tailSpines=lst); S2 = T.plan(Pt)
+    assert not S2["tube"] and abs(S2["spines"][0]["hh"] / S2["spines"][1]["hh"] - 1.5) < 1e-6

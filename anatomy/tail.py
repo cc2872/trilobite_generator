@@ -53,11 +53,13 @@ def plan(P):
     if own:
         for sd in own:
             L_full = float(sd.get("len", 0.0)); bl = float(sd.get("blade", 0.0)); phi_k = math.radians(float(sd.get("phi", 90.0)))
-            if L_full > 0.5: spines.append(dict(phi=phi_k, Lk=L_full * bl, L_full=L_full, hh=hphi_f, e=1.5, rise=float(sd.get("rise", 30.0)), roll=float(sd.get("roll", 0.0))))
-        tube = True
+            if L_full > 0.5: spines.append(dict(phi=phi_k, Lk=L_full * bl, L_full=L_full, hh=hphi_f * float(sd.get("width", 1.0)), e=1.5 if bl < 0.999 else 1.2,
+                                                rise=float(sd.get("rise", 30.0)), roll=float(sd.get("roll", 0.0)), width=float(sd.get("width", 1.0))))
+        # 25 Oct 2026: a list of flat lobes (blade 1, no rise) stays a flat margin -- no solid spine runs on top of a lobe
+        tube = any(abs(s_["rise"]) > 1e-6 or abs(s_["roll"]) > 1e-6 or s_["Lk"] < s_["L_full"] - 1e-6 for s_ in spines)
     else:
-        if Lf_full > 0.5: spines.append(dict(phi=phi_f, Lk=Lf, L_full=Lf_full, hh=hphi_f, e=1.5, rise=None, roll=None))
-        for pk in phi_m: spines.append(dict(phi=pk, Lk=Lm, L_full=Lm_full, hh=hphi_m, e=1.2, rise=None, roll=None))
+        if Lf_full > 0.5: spines.append(dict(phi=phi_f, Lk=Lf, L_full=Lf_full, hh=hphi_f, e=1.5, rise=None, roll=None, width=1.0))
+        for pk in phi_m: spines.append(dict(phi=pk, Lk=Lm, L_full=Lm_full, hh=hphi_m, e=1.2, rise=None, roll=None, width=hphi_m / max(hphi_f, 1e-9)))   # width in units of the pair's root (an own copy rebuilds the same lobe)
     def bump(phi, phi_k, hh, e): return np.clip(1 - np.abs(phi - phi_k) / hh, 0, 1) ** e
     def radial_extra(phi):
         ex = np.zeros_like(phi)

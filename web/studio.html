@@ -127,8 +127,11 @@ function freeList(){ const D=S.BD; const L=S.spec.spines||[]; const info=(D&&D.f
   return Object.assign({}, q, {x:rt[0], y:rt[1], z:(f&&f.z!=null)?f.z:((S.P&&+S.P.relief)||17)*0.6, part:f?f.part:null, moved:f?f.moved:0, cover:f?f.cover:1, thin:(f&&f.thin!=null)?f.thin:1}); }); }
 function freeAngles(rise){ rise=+rise||0; const p=rise>=0?Math.max(0.35*rise,Math.min(rise,30)):0.35*rise; return [p, rise-p]; }   // = rows.free_spine_angles: leave at >= 30 degrees, bend the rest
 function snapFreeRoots(){ const info=(S.BD&&S.BD.free)||[]; let n=0; (S.spec.spines||[]).forEach((q,j)=>{ const f=info[j]; if(f&&f.root&&f.moved>0.05){ q.x=+f.root[0].toFixed(2); q.y=+f.root[1].toFixed(2); n++; } }); return n; }   // the spec takes the snapped roots (so the dots sit where the spines will be)
-const TSKEYS=['phi','len','rise','roll','blade']; const TSR={phi:[0,90], len:[0,200], rise:[-180,180], roll:[-180,180], blade:[0,1]};
-function ownTail(){ if(S.spec.tail_spines) return; const T=S.BD&&S.BD.tail; S.spec.tail_spines=(T?T.spines:[]).map(q=>({phi:q.phi, len:q.len, rise:q.rise, roll:q.roll, blade:q.blade})); }   // freeze the preset's spines into the body's own list
+const TSKEYS=['phi','len','width','rise','roll','blade']; const TSR={phi:[0,90], len:[0,200], width:[0.3,2.5], rise:[-180,180], roll:[-180,180], blade:[0,1]};
+function ownTail(){ if(S.spec.tail_spines) return; const T=S.BD&&S.BD.tail; S.spec.tail_spines=(T?T.spines:[]).map(q=>({phi:q.phi, len:q.len, rise:q.rise, roll:q.roll, blade:q.blade, width:(q.width==null?1:q.width)})); }
+// a tail lobe's root corners on the margin (25 Oct 2026): the margin point at phi +/- hh, hh = 13 deg x pygSpineWidth x the lobe's own width
+function tailCorners(T,q){ const wk=(S.P&&+S.P.pygSpineWidth)||1; const hh=13*wk*(q.width==null?1:q.width)*Math.PI/180; const ph=q.phi*Math.PI/180;
+  const pt=a=>{ a=Math.max(0,Math.min(Math.PI,a)); return [T.wp*Math.cos(a), T.y0+T.Lp*Math.sin(a)]; }; return {a:pt(ph+hh), b:pt(ph-hh), hh}; }   // freeze the preset's spines into the body's own list
 function ownHorn(i){ const r=S.spec.list[i]; if(+r.horn_own>=0.5) return; const h=hornOf(r,i); r.horn_own=1; r.horn_len=+h.L.toFixed(3); r.horn_rise=+h.turn.toFixed(1); r.horn_roll=+h.roll.toFixed(1); r.horn_yaw=+h.yaw.toFixed(1); }
 // what a row's axial spine is: its own numbers, or the preset's (P) with the gradient along the thorax
 function axialOf(r,i){ const P=S.P||{}; const rel=+P.relief||17; const thx=S.BD.rows.filter(x=>x.row.kind!=='pyg'); const frac=thx.length>1?Math.min(i/(thx.length-1),1):0;
@@ -253,7 +256,7 @@ function renderContext(rebuild=true){ const box=$('context');
   if(S.sel.type==='tailspine'){ const j=S.sel.j; const L=S.spec.tail_spines||[]; if(j>=L.length){ S.sel=null; return renderContext(); } const q=L[j];
     $('ctxname').textContent=`Tail spine ${j}`; $('ctxtools').innerHTML='';
     if(rebuild||box.dataset.k!=='ts'+j){ box.innerHTML=''; box.dataset.k='ts'+j;
-      for(const k of TSKEYS){ const rr=TSR[k]; slider(box,k,q[k],rr[0],rr[1],(rr[1]-rr[0])/300,val=>{ q[k]=+(+val).toFixed(3); sendBody(); },{phi:'deg along the margin',len:'mm',rise:'deg',roll:'deg',blade:'flat share'}[k]); }
+      for(const k of TSKEYS){ const rr=TSR[k]; slider(box,k,q[k],rr[0],rr[1],(rr[1]-rr[0])/300,val=>{ q[k]=+(+val).toFixed(3); sendBody(); },{phi:'deg along the margin',len:'mm',width:'root width, x the built lobe',rise:'deg',roll:'deg',blade:'flat share'}[k]); }
       const row=document.createElement('div'); row.className='row'; row.style.marginTop='8px';
       for(const [t,f] of [['+ spine',()=>{ L.splice(j+1,0,Object.assign({},q,{phi:Math.max(0,q.phi-8)})); S.sel={type:'tailspine',j:j+1}; sendBody(); renderContext(); }],
                           ['- spine',()=>{ L.splice(j,1); S.sel=L.length?{type:'tailspine',j:Math.min(j,L.length-1)}:null; sendBody(); renderContext(); }],
@@ -346,7 +349,7 @@ new p5(s=>{
       if(tn>1){ dots.push(['fs_fork',pr.split,false]); dots.push(['fs_splay',pr.tines[0][16],false]); }   // the fork point (drag along: the stem's share) and the other outer tine's tip (drag: the fan)
       for(const [k,p_,big] of dots){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):s.color(255,210)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(k==='fs_root'?s.color(255,120):0)); s.circle(sx,sy,on?(big?9:7):(big?6:4.5)); HP.push({kind:'fs',j,k,sx,sy}); }
       if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`spine ${j} - ${q.len.toFixed(1)} mm - rise ${Math.round(q.rise)}° - roll ${Math.round(q.roll)}° - yaw ${Math.round(q.yaw)}°${(q.tines||1)>1?' - '+Math.round(q.tines)+' tines, fan '+Math.round(q.splay)+'°, stem '+Math.round(100*q.stem)+'%':''}${q.part==null?'':q.part<0?' - on the head':' - on piece '+(q.part+1)}${q.thin<0.999?' - '+Math.round(q.thin*100)+'% thick (the room on the plate)':''}${q.cover<0.999?' - collar '+Math.round(q.cover*100)+'% on the plate':''}`, X(tp[0])+9, Y(tp[1])-6); } }); }
-  function tailList(){ const D=S.BD, T=D&&D.tail; if(!T||!T.tube) return []; const own=!!S.spec.tail_spines;
+  function tailList(){ const D=S.BD, T=D&&D.tail; if(!T) return []; const own=!!S.spec.tail_spines;
     return own?S.spec.tail_spines.map(q=>{ const ph=q.phi*Math.PI/180; const x0=T.wp*Math.cos(ph), y0=T.y0+T.Lp*Math.sin(ph); const r0=Math.hypot(x0,y0-T.y0)||1e-6; return Object.assign({}, q, {root:[x0,y0], dir:[x0/r0,(y0-T.y0)/r0]}); }):T.spines; }
   const X=x=>ox+x*px, Y=y=>oy+y*px;
   function hair(a,w=1){ s.stroke(255,a); s.strokeWeight(w); s.noFill(); }
@@ -439,11 +442,14 @@ new p5(s=>{
           const tp=pts[16], md=pts[8]; for(const [k,q] of [['ph_tip',tp],['ph_mid',md]]){ const sx=X(q[0]), sy=Y(q[1]); s.stroke(on?s.color(246,112,79):s.color(255,200)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):0); s.circle(sx,sy,on?7:4.5); HP.push({kind:'ph',i,k,sx,sy,root}); }
           if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`horn ${hn.L.toFixed(1)} mm - rise ${Math.round(hn.turn)}° - roll ${Math.round(hn.roll)}° - yaw ${Math.round(hn.yaw)}°${hn.own?'':' (preset)'}`, X(tp[0])+9, Y(tp[1])-6); } } } });
     // the tail's spines, in plan, from tail.py's own margin (the body diagram's `tail`), with dots (24 Oct 2026)
-    const T=D.tail; if(!T||!T.tube) return; const own=!!S.spec.tail_spines; const list=tailList();
-    list.forEach((q,j)=>{ const yaw=Math.atan2(q.dir[0],q.dir[1])*180/Math.PI; const pts=arcPts([q.root[0],q.root[1],0.6],q.len,yaw,0,q.rise,q.roll,16); const on=S.sel&&S.sel.type==='tailspine'&&S.sel.j===j;
-      if(on) orange(1.3); else if(own) hair(255,1.2); else hair(200,1.0); for(const m of [1,-1]){ s.beginShape(); for(const p_ of pts) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); }
-      const tp=pts[16], md=pts[8]; for(const [k,p_] of [['ts_tip',tp],['ts_mid',md]]){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):s.color(255,200)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):0); s.circle(sx,sy,on?7:4.5); HP.push({kind:'ts',j,k,sx,sy}); }
-      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`tail spine ${j} - ${q.len.toFixed(1)} mm - at ${Math.round(q.phi)}° - rise ${Math.round(q.rise)}° - roll ${Math.round(q.roll)}°`, X(tp[0])+9, Y(tp[1])-6); } }); }
+    const T=D.tail; if(!T) return; const own=!!S.spec.tail_spines; const list=tailList();
+    list.forEach((q,j)=>{ const yaw=Math.atan2(q.dir[0],q.dir[1])*180/Math.PI; const flat=(q.blade>=0.999)&&Math.abs(q.rise)<1e-6;   // a flat lobe of the shield: a triangle in plan; else the arc
+      const pts=arcPts([q.root[0],q.root[1],0.6],q.len,yaw,0,flat?0:q.rise,q.roll,16); const on=S.sel&&S.sel.type==='tailspine'&&S.sel.j===j; const C=tailCorners(T,q);
+      if(on) orange(1.3); else if(own) hair(255,1.2); else hair(200,1.0);
+      for(const m of [1,-1]){ if(flat){ s.beginShape(); for(const p_ of [C.a,pts[16],C.b]) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); } else { s.beginShape(); for(const p_ of pts) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); } }
+      const tp=pts[16], md=pts[8]; const dots=[['ts_tip',tp],['ts_root',q.root],['ts_width',C.a]]; if(!flat) dots.push(['ts_mid',md]);   // tip: length (+ where); root: where on the margin; width: the lobe's root corner
+      for(const [k,p_] of dots){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):s.color(255,200)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(k==='ts_root'?s.color(255,120):0)); s.circle(sx,sy,on?7:4.5); HP.push({kind:'ts',j,k,sx,sy}); }
+      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`tail ${flat?'lobe':'spine'} ${j} - ${q.len.toFixed(1)} mm - at ${Math.round(q.phi)}° - width ${(q.width==null?1:q.width).toFixed(2)}${flat?'':' - rise '+Math.round(q.rise)+'° - roll '+Math.round(q.roll)+'°'}`, X(tp[0])+9, Y(tp[1])-6); } }); }
   function drawHorn(headOn){ const P=S.P; if(!P||!S.HD) return; const pts=hornPts(P,hornRoot(),24); if(!pts) return;
     for(const m of [1,-1]){ if(headOn) orange(1.3); else hair(255,1.1); s.beginShape(); for(const q of pts) s.vertex(headSX([m*q[0],q[1]]), headSY(q)); s.endShape(); }
     if(!headOn) return;
@@ -515,7 +521,10 @@ new p5(s=>{
         else { const sag=(vx*ty-vy*tx)/cl; const th=Math.abs(q.rise)*Math.PI/180; const sagV=th>1e-3?(q.len/th)*(1-Math.cos(th/2)):0; if(sagV>1e-6){ const rl=Math.asin(Math.max(-1,Math.min(1,sag/sagV)))*180/Math.PI; q.roll=+Math.max(-180,Math.min(180,Math.round(rl/5)*5)).toFixed(1); } } }
       S.edited=true; invalidateBuild(); renderContext(false); return; }
     if(S.drag.kind==='ts'){ const d=S.drag, T=S.BD.tail, q=S.spec.tail_spines[d.j]; if(!T||!q) return; const mx=Math.abs((s.mouseX-ox)/px), my=(s.mouseY-oy)/px;   // mouse in model mm (plan, right side)
-      if(d.k==='ts_tip'){ const phi=Math.atan2((my-T.y0)/T.Lp, mx/T.wp)*180/Math.PI; q.phi=+Math.max(0,Math.min(90,phi)).toFixed(2);               // where on the margin: the mouse's angle about the tail's centre
+      if(d.k==='ts_root'){ const phi=Math.atan2((my-T.y0)/T.Lp, mx/T.wp)*180/Math.PI; q.phi=+Math.max(0,Math.min(90,phi)).toFixed(2); }          // the root slides along the margin
+      else if(d.k==='ts_width'){ const phi=Math.atan2((my-T.y0)/T.Lp, mx/T.wp)*180/Math.PI; const wk=(S.P&&+S.P.pygSpineWidth)||1;                    // the root corner: half-angle -> width
+        q.width=+Math.max(0.3,Math.min(2.5,Math.abs(phi-q.phi)/(13*wk))).toFixed(3); }
+      else if(d.k==='ts_tip'){ const phi=Math.atan2((my-T.y0)/T.Lp, mx/T.wp)*180/Math.PI; q.phi=+Math.max(0,Math.min(90,phi)).toFixed(2);               // where on the margin: the mouse's angle about the tail's centre
         const ph=q.phi*Math.PI/180; const x0=T.wp*Math.cos(ph), y0=T.y0+T.Lp*Math.sin(ph); const r0=Math.hypot(x0,y0-T.y0)||1e-6; const yaw=Math.atan2(x0/r0,(y0-T.y0)/r0)*180/Math.PI;
         const cur=arcPts([x0,y0,0.6],Math.max(q.len,1),yaw,0,q.rise,q.roll,16); const c0=Math.hypot(cur[16][0]-x0,cur[16][1]-y0)||1e-6; const c1=Math.hypot(mx-x0,my-y0);   // length: the plan footprint scales with it
         q.len=+Math.max(0,Math.min(200,Math.max(q.len,1)*c1/c0)).toFixed(2); }
