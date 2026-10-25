@@ -128,18 +128,32 @@ def ornaments(P, S):
         # on underneath. The root is 2.5 mm inboard of the tip, at the blade's mid-height, sloping as the blade does.
         # (A root at the tip was a 4.7 mm bulb on a 1.8 mm blade kinked off it at 55 deg -- the junction close-ups, 11:10.)
         xt = float(S["X_tip"]); xs = np.linspace(0.45 * S["w"], xt, 120); yf, yr = S["edges"](xs)
-        chord = np.asarray(yr) - np.asarray(yf); ymid = 0.5 * (np.asarray(yf) + np.asarray(yr)); zs = np.asarray(S["zfun"](xs, ymid)).ravel(); zmid = 0.5 * zs
-        x0 = max(xt - 2.5, 0.45 * S["w"]); y0 = float(np.interp(x0, xs, ymid)); z0 = float(np.interp(x0, xs, zmid))
+        chord = np.asarray(yr) - np.asarray(yf); ymid = 0.5 * (np.asarray(yf) + np.asarray(yr)); zs = np.asarray(S["zfun"](xs, ymid)).ravel()
+        # The blade's MATERIAL along the mid-chord (24 Oct 2026, the spine audit): solid to the bed ahead of the rear joint
+        # plane; behind it (the swept tip usually is) a plate S["t"] thick over the next part's lip. The section is that
+        # material -- centre at its middle, half-height to its faces -- not bed-to-top, which filled the hollow under the
+        # tip plate by 4-5 mm on every Koneprusia segment. The crest stands 0.15 proud; the belly stays on the underside.
+        t_plate = float(S.get("t", 2.0)); d_ = float(S["d"])
+        vs = np.linspace(0.05, 0.97, 7); YV = np.asarray(yf)[:, None] + vs[None, :] * chord[:, None]       # across the chord: the plate rises toward
+        TV = np.asarray(S["zfun"](np.repeat(xs, len(vs)), YV.ravel())).reshape(len(xs), len(vs))          # the rear edge and its underside with it
+        UV = np.where(YV > d_, np.maximum(TV - t_plate, 0.0), 0.0)
+        U = UV.max(axis=1); T = TV.max(axis=1)
+        win = max(1, int(round(2.0 / max(float(xs[1] - xs[0]), 1e-6))))    # the section at one x reaches ~2 mm inboard (the chord lies across the yaw):
+        U = np.array([U[max(0, i - win):i + win + 1].max() for i in range(len(U))])   # take the plate's highest underside over that reach
+        T = np.array([T[max(0, i - win):i + win + 1].max() for i in range(len(T))])
+        bottom = U + 0.5; crest = T + 0.15                                   # the section: 0.5 above the material's highest underside, crest 0.15 proud
+        hb = np.maximum(0.5 * (crest - bottom), 0.3); zc = 0.5 * (crest + bottom)
+        x0 = max(xt - 2.5, 0.45 * S["w"]); y0 = float(np.interp(x0, xs, ymid)); z0 = float(np.interp(x0, xs, zc)); hb0 = float(np.interp(x0, xs, hb))
         r_leave = max(0.5 * float(np.interp(xt - 0.3, xs, chord)), 0.6)   # the blade's half-chord where it ends
-        slope = float(np.degrees(np.arctan2(float(zmid[-1]) - z0, max(xt - x0, 1e-6))))
-        def blade_section(W, ts, ra, rb):                                   # over the plate: the blade's own chord and height
+        slope = float(np.degrees(np.arctan2(float(zc[-1]) - z0, max(xt - x0, 1e-6))))
+        def blade_section(W, ts, ra, rb):                                   # over the plate: the blade's own chord and material height
             x = np.abs(W[:, 0]); inside = (x < xt) & (ts < 0.8)
             ra2 = np.where(inside, np.maximum(np.interp(x, xs, 0.5 * chord), 0.35), ra)
-            rb2 = np.where(inside, np.maximum(np.interp(x, xs, zmid) + 0.15, 0.35), rb)   # +0.15: the crest stands proud of the blade (flush was a tangent meeting: sliver faces)
+            rb2 = np.where(inside, np.maximum(np.interp(x, xs, hb), 0.35), rb)           # crest 0.15 proud of the blade (flush was a tangent meeting: sliver faces), belly above the underside
             return ra2, rb2
         h = curved_spine(r_leave, 0.45, L, (x0, y0, z0), yaw_deg=90.0 - float(P["spineSweep"]) + Hn["yaw_off"], pitch_deg=slope,
                          bend_deg=Hn["turn"] - slope, roll_deg=Hn["roll"],
-                         flare=1.0, plate=max(2.0 * z0, 0.8), profile=blade_section)
+                         flare=1.0, plate=max(2.0 * hb0, 0.8), profile=blade_section)
         out.append(("pleuralHorns", [h, M.mirror_x(h)], "union"))
     return out
 

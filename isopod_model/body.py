@@ -487,8 +487,11 @@ def _spine_clear(h, plate, others):
     V = h.vertices
     out = ~plate.contains(V)
     if out.any():
-        tops = _tops(plate, V[out, 0], V[out, 1]); below = np.isfinite(tops) & (V[out, 2] < tops - 0.05)
-        if below.any(): return False, f"{int(below.sum())} points through its plate, {float(np.nanmax(tops[below] - V[out][below, 2])):.1f} mm deep"
+        tops = _tops(plate, V[out, 0], V[out, 1]); low = V[out][np.isfinite(tops) & (V[out, 2] < tops - 0.05)]
+        if len(low):
+            under = np.array([_underside(plate, p_[0], p_[1]) for p_ in low]); hol = (under > 0.1) & (low[:, 2] < under - 0.1)
+            if hol.any(): return False, f"{int(hol.sum())} points under its plate, {float(np.max(under[hol] - low[hol, 2])):.1f} mm"
+            if (low[:, 2] < -0.1).any(): return False, "below the bed"
     lo, hi = h.bounds
     for name, m in others:
         b0, b1 = m.bounds
@@ -541,7 +544,7 @@ def body_ornaments(P, plans, parts, skip=()):
     along the axis to the first open point and stands on the part's actual top there."""
     for k, (name, mod, S, off) in enumerate(plans):
         if name == "head" or k in skip: continue
-        solids = []
+        solids = []; before = parts[k]
         for entry in mod.ornaments(P, S):
             nm, ss, how = (entry if len(entry) == 3 else (entry[0], [entry[1]], "union"))
             for x in ss:
@@ -559,7 +562,7 @@ def body_ornaments(P, plans, parts, skip=()):
                             x.apply_translation((0, y - y0, mine - 1.0 - z0)); placed = True; break
                     if not placed:                                          # the whole ring is under the plate ahead
                         SKIPPED.append(f"{name}: axial spine (ring covered by the part ahead)"); continue
-                solids.append(x)
+                solids.append(x); LAST_ORNAMENTS.append(dict(part=k, name=nm, solid=x, before=before))
         if solids: parts[k] = M.union(parts[k], *solids)
     # the free spines (24 Oct 2026): each stands on the part whose plate is under its (x, y) -- found on the built parts
     free = ROWS_INFO.get("free_spines") or []
@@ -587,6 +590,7 @@ def body_ornaments(P, plans, parts, skip=()):
             others = [(plans[j][0], parts[j]) for j in range(1, len(plans)) if j != best[0] and j not in skip]
             import rows as RW
             sols = free_spine_solid(sd, parts[best[0]], P, others, zone=RW.free_zone(plans, best[0]))
+            for h in sols: LAST_ORNAMENTS.append(dict(part=best[0], name="free spine", solid=h, before=parts[best[0]]))
             if sols: parts[best[0]] = M.union(parts[best[0]], *sols)
 
 
@@ -640,9 +644,34 @@ def shaped_head(P, plans, PV, K, J, outline, face):
     # the grafted spines, through the same function as the pin head (anatomy.head.spine_ornaments, 23 Oct 2026):
     # occipital (tines, bend), prong (bend), frontal spine, genal horns. The genal angle is the shape's own (xg, yg).
     yo = y_rear - 0.07 * Lc; xg_, yg_ = k * sh.xg, S["flap"] + off + k * sh.yg
-    for nm, solids, how in HEAD.spine_ornaments(P, Lc=Lc, margin=margin, wh=xg_, y_front=y_front, y_rear=y_rear,
-                                                z_occ=zt(0.0, yo) - 1.0 + 0.4, z_genal=lambda x, y: zt(x, y), yr_genal=yg_ + 1.5):
+    z_occ = zt(0.0, yo) - 1.0 + 0.4                                        # the occipital root, 0.6 under the crown
+    spines = lambda P_, yo=yo, z_occ=z_occ: HEAD.spine_ornaments(P_, Lc=Lc, margin=margin, wh=xg_, y_front=y_front, y_rear=y_rear + (yo - (y_rear - 0.07 * Lc)),
+                                                                 z_occ=z_occ, z_genal=lambda x, y: zt(x, y), yr_genal=yg_ + 1.5)
+    BEND_OF = dict(occipitalSpine="occipitalBend", headProngs="headProngBend", frontSpine="frontSpineBend", genalHorns="genalHornBend")
+    for nm, solids, how in spines(P):
+        # a spine whose root ring or recurved tip comes down under the head's own flap (the 2 mm plate over segment 0's
+        # lip, where the crown is a thin shell) would be hit by the body's curl (24 Oct 2026, the spine audit: Koneprusia's
+        # occipital, whose root sat on the flap -- moved forward above). A bend is eased 10 degrees at a time until the
+        # spine clears. The note travels with the build.
+        bad = [why for s_ in solids for ok, why in [_spine_clear(s_, head, [])] if not ok]
+        if bad and nm == "occipitalSpine":                                 # its root sits 0.07 Lc ahead of the rear edge: on the 2 mm flap over segment 0's
+            for shift in np.arange(0.5, 6.01, 0.5):                         # lip, where its base (deeper than the plate) hangs into the joint -- move it forward
+                yo2 = yo - shift; z2 = float(_tops(head, [0.0], [yo2])[0])
+                if not np.isfinite(z2): break
+                cand = [e for e in spines(P, yo2, z2 - 0.6) if e[0] == nm]
+                if cand and all(_spine_clear(s_, head, [])[0] for s_ in cand[0][1]):
+                    solids = cand[0][1]; ROWS_INFO.setdefault("free_notes", []).append(f"head {nm}: root moved {shift:.1f} mm forward, off the flap onto the solid crown ({bad[0]})"); bad = []; break
+        key = BEND_OF.get(nm)
+        if bad and key and abs(float(P.get(key, 0.0))) > 1e-9:
+            b0 = float(P[key]); step = -10.0 if b0 > 0 else 10.0
+            for b in np.arange(b0 + step, 0.0 if b0 > 0 else -1e-9, step):
+                cand = [e for e in spines(dict(P, **{key: float(b)})) if e[0] == nm]
+                if cand and all(_spine_clear(s_, head, [])[0] for s_ in cand[0][1]):
+                    solids = cand[0][1]; ROWS_INFO.setdefault("free_notes", []).append(f"head {nm}: {key} {b0:.0f} -> {b:.0f} so it clears the head's flap ({bad[0]})"); break
+            else: ROWS_INFO.setdefault("free_notes", []).append(f"head {nm}: {bad[0]} (no bend clears it; built as set)")
+        elif bad: ROWS_INFO.setdefault("free_notes", []).append(f"head {nm}: {bad[0]} (built as set)")
         extra += solids
+        for s_ in solids: LAST_ORNAMENTS.append(dict(part=0, name=nm, solid=s_, before=head))
     return M.union(head, *extra) if extra else head
 
 
@@ -845,10 +874,12 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
     import time as _t; t0 = _t.time(); STAGE_SECONDS.clear()
     def lap(name): STAGE_SECONDS[name] = round(_t.time() - t0 - sum(STAGE_SECONDS.values()), 1)
     U = None; H = None; n = len(plans); _progress(0, 0, n)
+    LAST_ORNAMENTS.clear(); LAST_AUDIT.clear()
     if head in ("isopod", "shaped"): H, U = _head_cached(P, head, face, outline, plans, J, K, PV)
     if H is not None and ROWS_INFO.get("free_spines"):                      # free spines standing on the head (24 Oct 2026): rooted on its built surface
         hs = [free_spine_solid(sd, H, P) for sd in ROWS_INFO["free_spines"] if float(sd["y"]) < plans[1][3]]
         hs = [h for pair in hs if pair for h in pair]
+        for h in hs: LAST_ORNAMENTS.append(dict(part=0, name="free spine", solid=h, before=H))
         if hs: H = M.union(H, *hs)
     lap("head")
     parts = []
@@ -945,6 +976,7 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
     SKIPPED.clear(); body_ornaments(P, plans, parts, skip=set(rep))
     for k in rep: copy(k)                                                  # the ornaments of a repeat are its source's
     lap("ornaments")
+    audit_ornaments(parts, plans); lap("spine audit")
     if term_spine > 0.05:                                                 # the rows model's terminal spine, from the tail's tip, along the axis
         name, mod, S, off = plans[-1]; y_tip = off + float(S["outline"](0.0, 1.0)[1]); zt = _surface_z(parts[-1], 0.0, y_tip - 2.0, search=3.0) or S["margin"]
         parts[-1] = M.union(parts[-1], curved_spine(0.6 * S["margin"] + 0.6, 0.5, term_spine, (0, y_tip - 1.5, max(zt - 1.0, 1.2)), 0, 0.0,
@@ -1016,6 +1048,47 @@ def validate_parts(parts, plans):
 
 
 LAST_DROPPED = {}
+LAST_ORNAMENTS = []   # every spine solid the last build placed: dict(part, name, solid, before = the part it was unioned onto, before the union)
+LAST_AUDIT = []       # what the spine audit found wrong with them (strings; empty = every spine connected and clear)
+
+
+def _underside(mesh, x, y):
+    """The part's lowest surface at (x, y) (0.0 where it is solid to the bed, nan where the ray misses)."""
+    hits = mesh.ray.intersects_location([(x, y, -1e3)], [(0.0, 0.0, 1.0)])[0]
+    return float(np.asarray(hits).reshape(-1, 3)[:, 2].min()) if len(hits) else float("nan")
+
+
+def audit_ornaments(parts, plans, min_buried=0.5):
+    """Is every spine of the build connected and clear (24 Oct 2026)? For each solid LAST_ORNAMENTS recorded: (1) its root
+    is buried -- it shares at least `min_buried` mm3 with the part it stands on, as that part was before the union;
+    (2) nothing of it is in the hollow under its own plate (vertices outside the part yet below the part's top where the
+    part exists); (3) it meets no other part at rest. Failures are listed in LAST_AUDIT (and the build's notes)."""
+    names = [p[0] for p in plans]
+    for rec in LAST_ORNAMENTS:
+        k, nm, h, before = rec["part"], rec["name"], rec["solid"], rec["before"]
+        where = f"{names[k]} {nm}"
+        try:
+            inter = M.intersection(h, before); buried = M.volume(inter) if len(inter.faces) else 0.0
+        except Exception: buried = float("nan")
+        rec["buried"] = buried
+        if not buried >= min_buried: LAST_AUDIT.append(f"{where}: root in the air ({buried:.1f} mm3 inside its part)")
+        V = h.vertices; out = ~before.contains(V)
+        if out.any():
+            tops = _tops(before, V[out, 0], V[out, 1]); low = V[out][np.isfinite(tops) & (V[out, 2] < tops - 0.3)]
+            if len(low):                                                     # outside the part yet below its top: beside it (fine), under its plate, or under the bed
+                under = np.array([_underside(before, p_[0], p_[1]) for p_ in low])
+                hol = (under > 0.1) & (low[:, 2] < under - 0.1); bed = low[:, 2] < -0.1
+                if hol.any(): LAST_AUDIT.append(f"{where}: {int(hol.sum())} points in the hollow under its plate, {float(np.max(under[hol] - low[hol, 2])):.1f} mm under it")
+                if bed.any(): LAST_AUDIT.append(f"{where}: {int(bed.sum())} points below the bed, {float(-low[bed, 2].min()):.2f} mm")
+        lo, hi = h.bounds
+        for j, m in enumerate(parts):
+            if j == k: continue
+            b0, b1 = m.bounds
+            if (hi < b0).any() or (lo > b1).any(): continue
+            try:
+                x = M.intersection(h, m); v = M.volume(x) if len(x.faces) else 0.0
+            except Exception: v = 0.0
+            if v > 0.5: LAST_AUDIT.append(f"{where}: into {names[j]} at rest by {v:.0f} mm3")
 LAST_REPEATS = {}    # {part index: the part it was copied from} in the last build
 
 # progress (11 Oct 2026): the site's loading count. _build reports (done, total) in PARTS, total = the number of

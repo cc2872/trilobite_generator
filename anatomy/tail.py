@@ -146,11 +146,11 @@ def ornaments(P, S):
                 if Lk <= 0.5: return ra, rb
                 sdist = ((W[:, 0] - x0) * dx + (W[:, 1] - y0) * dy); frac = sdist / Lk; inside = (frac < 0.97) & (ts < 0.8)
                 hw = np.interp(np.clip(frac, 0, 0.97), fr, half_w); zz = np.asarray(S["zfun"](W[:, 0], W[:, 1])).ravel()
-                return np.where(inside, np.maximum(hw, 0.35), ra), np.where(inside, np.maximum(0.5 * zz + 0.15, 0.35), rb)
+                return np.where(inside, np.maximum(hw, 0.35), ra), np.where(inside, np.maximum(0.5 * zz + 0.075, 0.35), rb)   # crest 0.15 proud, belly on the bed (the path runs 0.075 above the bump's middle)
             L = (1 - s_root) * Lk + (L_full - Lk) + grow_k * S["Lp"] + (0.0 if blade else 1.0)       # to the bump's planned tip, the length cut from the plan, the growth
             r_leave = max(float(half_w[-1]), 0.6) if blade else max(0.45 * S["margin"] + 0.5, 0.6)   # the bump's half-width where the solid takes over; or a spine's own root
-            h = curved_spine(r_leave, 0.45, L, (rx, ry, 0.5 * zr), yaw_deg=yaw, pitch_deg=0.0, bend_deg=turn, roll_deg=roll,
-                             flare=1.0, plate=max(zr, 0.8), profile=bump_section)                   # tangent to the bump, curving up from it
+            h = curved_spine(r_leave, 0.45, L, (rx, ry, 0.5 * zr + 0.075), yaw_deg=yaw, pitch_deg=0.0, bend_deg=turn, roll_deg=roll,
+                             flare=1.0, plate=max(zr + 0.15, 0.8), profile=bump_section)            # tangent to the bump, curving up from it; root ellipse from the bed to 0.15 above the crest
             out.append(("pygSpineHorns", [h, M.mirror_x(h)], "union"))
     if P["termSpine"] > 0.02:
         out.append(("termSpine", curved_spine(0.5 * S["margin"], 0.6, P["termSpine"] * S["Lp"], (0, 0.85 * S["Lp"], 0.5 * S["margin"]), 0, 0.0,
