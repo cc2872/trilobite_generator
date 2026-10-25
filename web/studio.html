@@ -77,7 +77,7 @@
 
   <div class="sect"><span>Rows</span><span id="reset">reset</span></div>
   <div class="row" style="margin-top:6px"><button class="btn" id="plus" title="add a row after the selected row">+ row</button><button class="btn" id="minus" title="remove the selected row">− row</button></div>
-  <div class="row" style="margin-top:6px"><button class="btn" id="addspine" title="then click anywhere on the animal in plan: a spine grows there (mirrored unless on the axis); drag its dots">+ spine anywhere</button> <button class="btn" id="addprong" title="then click anywhere on the animal in plan: a forked spine grows there; drag its fork and splay dots">+ prong anywhere</button></div>
+  <div class="row" style="margin-top:6px"><button class="btn" id="addfeature" title="then click anywhere on the animal in plan: a dot is placed there, and you choose what grows from it (a spine or a prong); drag its dots afterwards">+ add feature</button></div>
   <div class="edits" id="rowtable"></div>
 
   <div class="sect"><span>Save</span><span id="del" style="display:none">delete body</span></div>
@@ -117,8 +117,11 @@ function hornOf(r,i){ const P=S.P||{}; const thx=S.BD.rows.filter(x=>x.row.kind!
   if(+r.horn_own>=0.5) return {L:+r.horn_len, turn:+r.horn_rise, roll:+r.horn_roll, yaw:+r.horn_yaw, own:true};
   return {L:(+P.pleuralHorn||0)*(+r.width)*(1+(+P.pleuralHornGrad||0)*frac), turn:(+P.pleuralHornPitch||45)+(+P.pleuralHornBend||0), roll:(+P.pleuralHornRoll||0), yaw:0, own:false}; }
 const FSKEYS=['x','y','len','rise','roll','yaw','tines','splay','stem','curl']; const FSR={x:[0,120], y:[-80,400], len:[0,200], rise:[-180,180], roll:[-180,180], yaw:[-180,180], tines:[1,5], splay:[0,180], stem:[0,0.9], curl:[-60,60]};
-let addMode=false; $('addspine').onclick=()=>{ addMode=addMode==='spine'?false:'spine'; $('addspine').classList.toggle('on',addMode==='spine'); $('addprong').classList.remove('on'); status(addMode?'click on the animal to grow a spine there':'' ,false); };
-$('addprong').onclick=()=>{ addMode=addMode==='prong'?false:'prong'; $('addprong').classList.toggle('on',addMode==='prong'); $('addspine').classList.remove('on'); status(addMode?'click on the animal to grow a prong there':'' ,false); };
+let addMode=false; $('addfeature').onclick=()=>{ addMode=!addMode; $('addfeature').classList.toggle('on',addMode); if(!addMode){ S.pending=null; renderContext(); } status(addMode?'click on the animal to place a dot there':'' ,false); };
+// the placed dot, before it is anything (25 Oct 2026): S.pending = {x, y}; the panel asks what grows from it
+function growFeature(kind){ const d=S.pending; if(!d) return; S.spec.spines=S.spec.spines||[]; const rel=(S.P&&+S.P.relief)||17; const prong=kind==='prong';
+  S.spec.spines.push(Object.assign({x:d.x, y:d.y, len:+((prong?1.5:1.2)*rel).toFixed(1), rise:45, roll:0, yaw:(d.x<0.75?0:35)}, prong?{tines:2, splay:40, stem:0.4, curl:0}:{}));
+  S.pending=null; S.sel={type:'free',j:S.spec.spines.length-1}; status(prong?'prong added - drag its dots (root, fork, tips) or use the sliders':'spine added - drag its dots (root, mid, tip) or use the sliders',false); sendBody(); renderContext(); renderTable(); }
 function freeList(){ const D=S.BD; const L=S.spec.spines||[]; const info=(D&&D.free)||[]; return L.map((q,j)=>{ const f=info[j]; const rt=(f&&f.root&&!(S.drag&&S.drag.kind==='fs'&&S.drag.j===j))?f.root:[q.x,q.y];   // the root as the build places it (snapped onto the plate); while its dot is dragged, the mouse
   return Object.assign({}, q, {x:rt[0], y:rt[1], z:(f&&f.z!=null)?f.z:((S.P&&+S.P.relief)||17)*0.6, part:f?f.part:null, moved:f?f.moved:0, cover:f?f.cover:1, thin:(f&&f.thin!=null)?f.thin:1}); }); }
 function freeAngles(rise){ rise=+rise||0; const p=rise>=0?Math.max(0.35*rise,Math.min(rise,30)):0.35*rise; return [p, rise-p]; }   // = rows.free_spine_angles: leave at >= 30 degrees, bend the rest
@@ -220,6 +223,10 @@ function slider(box,k,val,lo,hi,step,onin,tag,faint){ const d=document.createEle
   inp.oninput=()=>{ onin(+inp.value); d.querySelector('.val').textContent=fmt(+inp.value); d.querySelector('.val').classList.add('on'); }; return d; }
 
 function renderContext(rebuild=true){ const box=$('context');
+  if(S.pending){ $('ctxname').textContent=`New feature at (${S.pending.x.toFixed(1)}, ${S.pending.y.toFixed(1)})${S.pending.x<0.75?' - on the axis':' - mirrored'}`; $('ctxtools').innerHTML='';
+    box.innerHTML='<div class="hint">What grows from the dot?</div>'; box.dataset.k='pending'; const row=document.createElement('div'); row.className='row'; row.style.marginTop='8px';
+    for(const [t,f,tip] of [['spine',()=>growFeature('spine'),'one curved spine'],['prong',()=>growFeature('prong'),'a forked spine: tines, fan, stem'],['cancel',()=>{ S.pending=null; renderContext(); },'']]){ const b=document.createElement('button'); b.className='btn small'; b.textContent=t; b.title=tip; b.onclick=f; row.appendChild(b); }
+    box.appendChild(row); return; }
   if(!S.sel){ if(rebuild){ box.innerHTML='<div class="hint">Click the head or a row on the drawing to edit it.</div>'; $('ctxname').textContent='Nothing selected'; $('ctxtools').innerHTML=''; } return; }
   if(S.sel.type==='head'){ $('ctxname').textContent='Head - '+(S.savedHead||S.head); $('ctxtools').innerHTML='';
     const keys=[...Object.keys(S.headMeta.outline_defaults),...Object.keys(S.headMeta.face_defaults)];
@@ -325,7 +332,9 @@ new p5(s=>{
     let treach=0, txw=0; for(const q of tailList()){ const yaw=Math.atan2(q.dir[0],q.dir[1])*180/Math.PI; const pts=arcPts([q.root[0],q.root[1],0.6],q.len,yaw,0,q.rise,q.roll,8); for(const p_ of pts){ treach=Math.max(treach,p_[1]); txw=Math.max(txw,Math.abs(p_[0])); } }   // the tail's spines
     for(const q of freeList()){ const pts=arcPts([q.x,q.y,q.z],q.len,q.yaw,freeAngles(q.rise)[0],freeAngles(q.rise)[1],q.roll,8); for(const p_ of pts){ treach=Math.max(treach,p_[1]); txw=Math.max(txw,Math.abs(p_[0])); } }
     px=Math.min((H-80)/(Math.max(L,hreach,treach)+hl+6), (W-150)/(2*Math.max(xw,txw)+ZX*zmax+30)); ox=46+Math.max(xw,txw)*px; oy=40+hl*px; oxE=ox+Math.max(xw,txw)*px+30; }
-  function drawFreeSpines(){ const L=freeList(); if(!L.length) return; const zS=z=>oxE+z*ZX*px;
+  function drawFreeSpines(){ const zS=z=>oxE+z*ZX*px;
+    if(S.pending){ for(const m of (S.pending.x<0.75?[1]:[1,-1])){ const sx=X(m*S.pending.x), sy=Y(S.pending.y); s.stroke(246,112,79); s.strokeWeight(1.5); s.noFill(); s.circle(sx,sy,11); s.fill(246,112,79); s.noStroke(); s.circle(sx,sy,4); } }   // the placed dot, waiting for its kind
+    const L=freeList(); if(!L.length) return;
     L.forEach((q,j)=>{ const on=S.sel&&S.sel.type==='free'&&S.sel.j===j; const tn=Math.max(1,Math.round(q.tines||1));
       const pts=tn>1?null:arcPts([q.x,q.y,q.z],q.len,q.yaw,freeAngles(q.rise)[0],freeAngles(q.rise)[1],q.roll,16);   // as free_spine_solid builds it
       const pr=tn>1?prongPts(q,q.z):null; const lines=tn>1?[...(pr.stem?[pr.stem]:[]),...pr.tines]:[pts];
@@ -467,9 +476,7 @@ new p5(s=>{
   s.mouseMoved=()=>{ const h=nearest(s.mouseX,s.mouseY); const hi=h&&h.kind==='row'?h.i:null; if(hi!==S.hover){ S.hover=hi; } stage.style.cursor=h?'grab':'default'; };
   s.mousePressed=()=>{ if(s.mouseX<0||s.mouseY<0||s.mouseX>W||s.mouseY>H) return; const h=nearest(s.mouseX,s.mouseY);
     if(addMode&&!(h&&h.kind==='fs')){ const mx=Math.abs((s.mouseX-ox)/px), my=(s.mouseY-oy)/px; if(s.mouseX>oxE-10) return;      // add mode: a click in plan grows a spine there
-      S.spec.spines=S.spec.spines||[]; const rel=(S.P&&+S.P.relief)||17; const prong=addMode==='prong';
-      S.spec.spines.push(Object.assign({x:+(mx<1.5?0:mx).toFixed(2), y:+my.toFixed(2), len:+((prong?1.5:1.2)*rel).toFixed(1), rise:45, roll:0, yaw:(mx<1.5?0:35)}, prong?{tines:2, splay:40, stem:0.4, curl:0}:{}));
-      S.sel={type:'free',j:S.spec.spines.length-1}; addMode=false; $('addspine').classList.remove('on'); $('addprong').classList.remove('on'); status(prong?'prong added - drag its dots (root, fork, tips) or use the sliders':'spine added - drag its dots (root, mid, tip) or use the sliders',false); sendBody(); renderContext(); renderTable(); return; }
+      S.pending={x:+(mx<1.5?0:mx).toFixed(2), y:+my.toFixed(2)}; S.sel=null; addMode=false; $('addfeature').classList.remove('on'); status('dot placed - choose what grows from it (spine or prong) in the panel',false); renderContext(false); return; }
     if(h&&h.kind==='fs'){ S.sel={type:'free',j:h.j}; S.drag={kind:'fs',j:h.j,k:h.k}; renderContext(); renderTable(); stage.style.cursor='grabbing'; return; }
     if(h&&h.kind==='row'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; S.drag={kind:'row',i:h.i,k:h.k,x0:s.mouseX,y0:s.mouseY,start:Object.assign({},rowOf(h.i))}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='eye'){ S.sel={type:'head'}; S.eyeSel=h.k; S.drag={kind:'eye',k:h.k,d:h}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
