@@ -410,7 +410,7 @@ PRESETS["diagram"] = dict(PRESETS["textured"],                 # 25 Oct 2026: th
     widthThoraxFront=0.94, widthThoraxRear=0.68, widthTail=0.52, axisFrac=0.28, genalSweep=0.3, genalCurve=6,
     tipSweep=0.4, tipTaper=0.72, bladeChord=1.3, spineBase=0.0, spineSweep=55, pleuralSlope=0.6, bladeCamber=0.3,        # rounded pleurae; the pleura itself ends in a broad rounded point: no needle (it would snap)
     pygSpine=0.4, pygSplay=18, pygMarginal=3, pygMarginalLen=0.45, pygSpineBlade=1.0, pygSpineWidth=0.55, pygSpineRise=0, pygRings=4, pygWidth=1.0, tailOutlineExp=2.0,   # the fringe: flat triangular lobes of the shield
-    furrowDepth=1.2, effacement=0.0, glabRise=0.18, glabLobes=3, glabInflate=1.3, borderWidth=0.08, eyeHeight=0.5, eyePos=0.3, eyeLat=0.0, eyeSize=0.16,   # the default lens eye beside the glabella
+    furrowDepth=1.2, effacement=0.0, glabRise=0.18, glabLobes=3, glabInflate=1.3, borderWidth=0.08, eyeHeight=0.4, eyePos=0.3, eyeLat=0.0, eyeSize=0.16,   # the default lens eye beside the glabella
     genalSpine=0.0, genalHorn=0.0)   # the genal spines are the head's own surface (head style 'diagram'), not a rod unioned on   # the genal spines as round tapering HORNS continuing the border, not flat bands
 DEFAULT_PRESET = "textured"
 
