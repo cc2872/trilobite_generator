@@ -75,7 +75,8 @@ def spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg=0):
 # growth look like in the fossils and is the smallest description that has a tip direction.
 SPINE_SEGMENTS = 24      # 24 Oct 2026: was 10 (a visibly beaded arc at print size); the joints are finer spheres too
 
-def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0, roll_deg=0.0, n=SPINE_SEGMENTS, flare=0.0, plate=None, profile=None):
+def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0, roll_deg=0.0, n=SPINE_SEGMENTS, flare=0.0, plate=None, profile=None,
+                 flare_len=0.12, extend=0.0):
     """A tapered spine along a circular arc: `bend_deg` is the total turn of the tangent from root to tip (0 = straight,
     180 = a half circle, tip pointing back at the root), `roll_deg` the plane it bends in about the spine's own axis
     (0 up, 90 toward +x, -90 toward -x, 180 down). Root at `at`, leaving along (yaw, pitch) as spine_solid does.
@@ -88,8 +89,12 @@ def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0
     profile (24 Oct 2026, later still): profile(W, ts, ra, rb) -> (ra, rb), the caller's say over the section at every
     sample given the world centreline W -- a pleural horn uses it to BE the blade (its chord, its height) while it is
     still over the plate, so nothing of the blade runs on underneath it."""
-    if abs(bend_deg) < 1e-9 and flare <= 1.0 and plate is None and profile is None: return spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg)
+    if abs(bend_deg) < 1e-9 and flare <= 1.0 and plate is None and profile is None and extend <= 0: return spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg)
     import trimesh
+    if extend > 0:                                                        # start the spine `extend` mm BEHIND its root, along its own leave direction, so the
+        R0 = trimesh.transformations.rotation_matrix                        # root ring (and the trumpet's wide end) lie buried in the plate, never a flat cap
+        d0 = (R0(math.radians(-yaw_deg), (0, 0, 1)) @ R0(math.radians(pitch_deg), (1, 0, 0)) @ np.array([0.0, 1.0, 0.0, 1.0]))[:3]   # showing at a margin
+        at = np.asarray(at, float) - extend * d0; length = length + extend
     R = trimesh.transformations.rotation_matrix
     n = max(2, int(n)); phi = math.radians(bend_deg); rad = length / abs(phi) if abs(phi) > 1e-9 else 0.0
     # the arc in its own frame: along +y from the origin, bending toward +z (roll 0); then rolled about y, pitched, yawed
@@ -98,8 +103,10 @@ def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0
     Mrot = R(math.radians(-yaw_deg), (0, 0, 1)) @ R(math.radians(pitch_deg), (1, 0, 0)) @ R(math.radians(roll_deg), (0, 1, 0))
     W = (np.c_[pts, np.ones(n + 1)] @ Mrot.T)[:, :3] + np.asarray(at, float)
     radii = base_r + (tip_r - base_r) * ts; ra = radii.copy()
-    if flare > 1.0:                                                       # the collar: flare x base_r at the root -> base_r at 0.12 of the length (in the plane only)
-        c = np.clip(ts / 0.12, 0, 1); ra = np.maximum(ra, base_r * (flare - (flare - 1.0) * (3 * c ** 2 - 2 * c ** 3)))
+    if flare > 1.0:                                                       # the root blend (25 Oct 2026): a TRUMPET, flare x base_r at the root easing to base_r
+        c = np.clip(ts / max(flare_len, 1e-6), 0, 1)                      # over flare_len of the length with a concave profile -- it meets the plate at a
+        ra = np.maximum(ra, base_r * (1.0 + (flare - 1.0) * (1 - c) ** 2))   # shallow angle and runs tangent into the spine (the old smoothstep collar was a
+                                                                           # bead: it met the plate at a right angle, a knob on the shield)
     # the tip (24 Oct 2026): a spine ends in a point, not a sawn-off 1 mm cap -- the last fifth tapers to 0.4 x tip_r and the cap is rounded
     tp = np.clip((ts - 0.8) / 0.2, 0, 1); tp = 3 * tp ** 2 - 2 * tp ** 3; ra = ra * (1 - 0.6 * tp); radii = radii * (1 - 0.6 * tp)
     if plate is None and profile is None: return sweep_tube(W, ra, round_tip=True)

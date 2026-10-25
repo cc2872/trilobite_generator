@@ -464,8 +464,10 @@ def spine_ornaments(P, Lc, margin, wh, y_front, y_rear, z_occ, z_genal, yr_genal
     if float(P.get("genalHorn", 0.0)) > 0.02:
         L = P["genalHorn"] * Lc; xg = 0.92 * wh; yg = yr_genal - 1.5
         zr = float(z_genal(xg, yg)); at = (xg, yg, 0.5 * zr)                 # root at mid-height of the shield edge, as thick as it
-        h = curved_spine((0.55 * margin + 0.4) * float(P.get("genalHornWidth", 1.0)), 0.45, L, at, yaw_deg=float(P.get("genalHornYaw", 10.0)), pitch_deg=float(P.get("genalHornPitch", 40.0)),
-                         bend_deg=float(P.get("genalHornBend", 0.0)), roll_deg=float(P.get("genalHornRoll", 0.0)), flare=float(P.get("genalHornFlare", 1.8)), plate=max(zr, 0.8))   # 25 Oct: width and collar from P   # 24 Oct: the plate continuing
+        rb_ = (0.55 * margin + 0.4) * float(P.get("genalHornWidth", 1.0)); fl_ = float(P.get("genalHornFlare", 1.8))
+        h = curved_spine(rb_, 0.45, L, at, yaw_deg=float(P.get("genalHornYaw", 10.0)), pitch_deg=float(P.get("genalHornPitch", 40.0)),
+                         bend_deg=float(P.get("genalHornBend", 0.0)), roll_deg=float(P.get("genalHornRoll", 0.0)), flare=fl_, plate=max(zr, 0.8),
+                         )   # 25 Oct: width and collar from P   # 24 Oct: the plate continuing
         out.append(("genalHorns", [h, M.mirror_x(h)], "union"))
     return out
 

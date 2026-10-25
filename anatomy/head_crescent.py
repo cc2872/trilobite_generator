@@ -204,7 +204,11 @@ def _z_base(x, y, face=None, geom=None):
         horn = rim + (0.32 * h - rim) * taper * np.clip(dh / (0.5 * (RO - R)), 0, 1) ** 0.6
     else:
         behind = geom["behind"]
-        horn = rim + (geom["horn_h"] * h - rim) * geom["taper"] * np.clip(dh / np.maximum(geom["hw"], 0.3), 0, 1) ** 0.6
+        # 25 Oct 2026: the spine's cross-section is a ROUNDED ridge -- a quarter-ellipse each side from the shield's own edge
+        # floor (0.6 rim) to the crest -- not a bar with rim-tall walls and a flattened top (^0.6), which read as a flange
+        # bolted to the corner. The crest is horn_h x relief at the root, tapering along the spine.
+        e_ = 0.6 * rim; t_ = np.clip(dh / np.maximum(geom["hw"], 0.3), 0, 1)
+        horn = e_ + (geom["horn_h"] * h * geom["taper"] - e_) * np.sqrt(np.clip(1 - (1 - t_) ** 2, 0, 1))
     z = np.where(behind > 0, np.maximum(z, behind * horn + (1 - behind) * z), z)
     return np.maximum(z, 0.6 * rim)
 
