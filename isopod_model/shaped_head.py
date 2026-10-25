@@ -107,6 +107,35 @@ def _dense(pts, step=0.15):
         n = max(1, int(np.hypot(*(b - a)) / step)); t = np.linspace(0, 1, n + 1)[1:, None]; out.append(a + t * (b - a))
     return np.vstack(out)
 
+def _convex_floor(x, y):
+    """The lower convex envelope of the points (x, y) (x increasing), sampled back at x: y with every concave dip filled."""
+    pts = np.c_[x, y]; hull = []
+    for p_ in pts:
+        while len(hull) >= 2:
+            a, b = hull[-2], hull[-1]
+            if (b[0] - a[0]) * (p_[1] - a[1]) - (b[1] - a[1]) * (p_[0] - a[0]) <= 1e-12: hull.pop()   # b lies above the chord a-p: drop it
+            else: break
+        hull.append(p_)
+    hull = np.array(hull); return np.interp(x, hull[:, 0], hull[:, 1])
+
+
+def _convex_columns(x, yf, yr):
+    """A convex silhouette's columns from the 2-D convex hull of its (mirrored) outline: the front and rear edges meet at
+    the widest column with one tangent, which two separate 1-D envelopes do not give (a corner at the widest point)."""
+    from scipy.spatial import ConvexHull
+    P = np.r_[np.c_[x, yf], np.c_[x, yr], np.c_[-x, yf], np.c_[-x, yr]]
+    try: hv = P[ConvexHull(P).vertices]
+    except Exception: return yf, yr
+    hv = np.vstack([hv, hv[:1]]); lo = np.full(len(x), np.inf); hi = np.full(len(x), -np.inf)
+    for (x0_, y0_), (x1_, y1_) in zip(hv[:-1], hv[1:]):
+        a_, b_ = min(x0_, x1_), max(x0_, x1_); m = (x >= a_ - 1e-9) & (x <= b_ + 1e-9)
+        if b_ - a_ < 1e-9: yy = np.where(m, np.minimum(y0_, y1_), np.inf); lo = np.minimum(lo, yy); hi = np.maximum(hi, np.where(m, max(y0_, y1_), -np.inf)); continue
+        yy = y0_ + (x - x0_) * (y1_ - y0_) / (x1_ - x0_)
+        lo = np.where(m, np.minimum(lo, yy), lo); hi = np.where(m, np.maximum(hi, yy), hi)
+    ok = np.isfinite(lo) & np.isfinite(hi)
+    return np.where(ok, lo, yf), np.where(ok, hi, yr)
+
+
 class Shape:
     def __init__(self, outline=None, n=1601):
         o = self.o = outline_of(outline); tr = o.get("trace"); self.notes = []   # what the silhouette had to refuse (the studio shows them)
@@ -137,6 +166,11 @@ class Shape:
             yfb = np.interp(axb, axb[okc], yfb[okc]); yrb = np.interp(axb, axb[okc], yrb[okc])
             from scipy.ndimage import gaussian_filter1d
             yfb = gaussian_filter1d(yfb, 3, mode="nearest"); yrb = gaussian_filter1d(yrb, 3, mode="nearest")   # the hand's jitter
+            # 25 Oct 2026: a cephalon's front margin is convex everywhere (the frontal point and dent go on below), and the
+            # hand's trace, even smoothed, still turned in and out by up to 0.2 mm with ~10 curvature reversals along it
+            # (head_check). The front edge takes its own lower convex envelope -- the same curve with the wobble gone.
+            front_cols = axb <= xg - 0.5 * o["genal_w"] * RO
+            yfb[front_cols] = _convex_floor(axb[front_cols], yfb[front_cols])
             yrb = np.maximum(yrb, yfb + 0.5)
         else:
             yfb = yw - Lf * np.clip(1 - a2 ** nF, 0, 1) ** (1 / nF)
@@ -168,6 +202,19 @@ class Shape:
                 else: good[i] = False
             yfb[good] = gaussian_filter1d(yfb[good], 4, mode="nearest"); yrb[good] = gaussian_filter1d(yrb[good], 4, mode="nearest")
             mid_b = np.interp(axb, axb[good], 0.5 * (yfb + yrb)[good]); yfb = np.where(good, yfb, mid_b); yrb = np.where(good, yrb, mid_b)
+            # 25 Oct 2026: the opening pulls the widest point in by a little, and the columns past it were filled with the
+            # mid-line -- the front and rear edges pinched to a POINT at the widest column (a cusp on every rounded head:
+            # neoasaphus, triarthrus in head_check). Stretch the opened silhouette back to its full half-width instead.
+            if good.any() and not good[-1]:
+                xm = float(axb[good].max())
+                if xm > 0.5 * RO:
+                    yfb = np.interp(axb, axb[good] * (RO / xm), yfb[good]); yrb = np.interp(axb, axb[good] * (RO / xm), yrb[good])
+            # 25 Oct 2026: the raster (0.1 mm) leaves a ripple of up to 0.2 mm with hundreds of curvature reversals along the
+            # margin (head_check: agnostus, neoasaphus, phacops ...). The rounded outline is convex, so each edge takes its
+            # convex envelope: the front edge its floor; the rear edge its ceiling when the rear margin does not bow
+            # forward (notch 0) -- a bowed rear margin is concave by design and is left as drawn.
+            if o["notch"] <= 1e-9 and not horn: yfb, yrb = _convex_columns(axb, yfb, yrb)   # the whole rounded silhouette is convex: its 2-D hull
+            else: yfb = _convex_floor(axb, yfb)
         # the front's median features go on after the rounding (it would erase anything this narrow)
         if tr is None and o["front_dent"] > 0: yfb = yfb + o["front_dent"] * L1 * np.exp(-(axb / (0.30 * RO)) ** 2)
         if o["front_point"] > 0:
@@ -183,7 +230,19 @@ class Shape:
                 if y0 >= yw: x0 = RO - (RO - xg) * ((y0 - yw) / max(yg - yw, 1e-6)) ** 2
                 else: x0 = RO * (1 - fl) * np.clip(1 - ((yw - y0) / Lf) ** nF, 0, 1) ** (1 / nF) + fl * RO
                 x0 = x0 - 0.3 * w0
-            S = np.linspace(0, 1, 241); th = np.radians(o["genal_spread"] + o["genal_curve"] * S)
+            S = np.linspace(0, 1, 241)
+            # 25 Oct 2026: a genal spine is the lateral border continued -- it leaves TANGENT to the side (straight back)
+            # and bends out to its spread over its first 0.3 (a spine that left at 40 deg from a vertical side put a 40 deg
+            # corner on the outline at the root: odontopleura, deiphon, ceraurus in head_check). A spine moved along the
+            # margin (genal_at) keeps its own leave, since the margin's tangent there is not straight back.
+            ease = 3 * np.clip(S / 0.3, 0, 1) ** 2 - 2 * np.clip(S / 0.3, 0, 1) ** 3
+            if moved:                                                  # the margin's own direction at the root (rearward), outward positive
+                i0 = int(np.clip(np.searchsorted(axb, x0 + 0.3 * w0), 2, nb - 3)); edge = yfb if y0 < np.interp(x0, axb, 0.5 * (yfb + yrb)) else yrb
+                dxdy = (axb[i0 + 2] - axb[i0 - 2]) / (edge[i0 + 2] - edge[i0 - 2] + 1e-9)
+                th0 = float(np.degrees(np.arctan(dxdy))) if abs(edge[i0 + 2] - edge[i0 - 2]) > 1e-6 else 0.0
+                th0 = float(np.clip(th0, 0.0, 85.0))                    # (the band can only run outward of its root)
+            else: th0 = 0.0
+            th = np.radians(th0 + (o["genal_spread"] - th0) * ease + o["genal_curve"] * S)
             dsx, dsy = np.sin(th) * Lh / 240, np.cos(th) * Lh / 240
             xc = x0 + np.r_[0, np.cumsum(dsx[1:])]; yc = y0 + np.r_[0, np.cumsum(dsy[1:])]
             r = 0.5 * w0 * (1 - (1 - o["genal_tip"]) * S); r = np.maximum(r, 0.35)
@@ -214,6 +273,13 @@ class Shape:
             use = has & (hmax > yr)
             rear_is_outer = np.where(use, ax >= xc[j], rear_is_outer)
             yr = np.where(use, hmax, yr); yf = np.where(has, np.minimum(yf, hmin), yf)
+            if moved:                                              # 25 Oct 2026: a spine from the side leaves a V slot between its inner edge and the
+                reg = ax >= x0 - w0                                #  rounded genal corner behind it (a vertical wall in the columns: bristolia, head_check).
+                xr, vr = ax[reg], yr[reg]; kk = np.tan(np.radians(60.0))   # The re-entrant is real (olenellids have it) but open: the rear edge there
+                fin = np.isfinite(vr)                              #  takes its upper envelope at 60 degrees -- a fillet, not a slot.
+                if fin.sum() > 2:
+                    env = (vr[fin][None, :] - kk * np.abs(xr[:, None] - xr[fin][None, :])).max(1)
+                    yr[reg] = np.where(np.isfinite(vr), np.maximum(vr, env), vr)
         ok_c = np.isfinite(yf) & np.isfinite(yr) & (yr > yf)      # empty columns (past the tip) close to a point
         with np.errstate(invalid="ignore"): mid_all = 0.5 * (yf + yr)
         mid_c = np.interp(ax, ax[ok_c], mid_all[ok_c])
