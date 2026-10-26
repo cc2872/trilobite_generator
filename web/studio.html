@@ -35,7 +35,7 @@
   .row{display:flex;gap:8px;margin-top:10px}
   .btn{flex:1;background:var(--bg);color:var(--ink);border:1px solid var(--ink);padding:7px 0;font-size:10px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer} .btn:hover{background:var(--soft)} .btn.primary{background:var(--ink);color:var(--bg)} .btn.primary:hover{background:#ddd} .btn[disabled]{opacity:.4;cursor:default}
   .btn.small{flex:0 0 auto;padding:4px 8px;font-size:9px}
-  #addfeature.on{background:var(--soft)} #stage.placing canvas{cursor:url('/static/trilobite-cursor.png') 3 28, crosshair}   /* the little trilobite is the clicker while placing a dot */
+  #addfeature.on{background:var(--soft)} #stage.placing canvas{cursor:crosshair}   /* a plain crosshair while placing a dot */
   .status{font-size:10px;letter-spacing:.06em;color:var(--mid);margin-top:10px;min-height:14px;white-space:pre-line} .status.busy{color:var(--accent)}
   .links{font-size:11px;line-height:1.7;margin-top:6px} .links a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)} .links a:hover{border-bottom-color:var(--ink)}
   #stage{position:relative;min-width:0;min-height:0} #stage canvas{display:block}
@@ -78,7 +78,7 @@
 
   <div class="sect"><span>Rows</span><span id="reset">reset</span></div>
   <div class="row" style="margin-top:6px"><button class="btn" id="plus" title="add a row after the selected row">+ row</button><button class="btn" id="minus" title="remove the selected row">− row</button></div>
-  <div class="row" style="margin-top:6px"><button class="btn" id="addfeature" title="then click anywhere on the animal in plan: a dot is placed there, and you choose what grows from it (a spine or a prong); drag its dots afterwards"><img src="/static/trilobite-icon.png" alt="" style="height:16px;vertical-align:middle;margin-right:6px;margin-top:-3px">add feature</button></div>
+  <div class="row" style="margin-top:6px"><button class="btn" id="addfeature" title="then click anywhere on the animal in plan: a dot is placed there, and you choose what grows from it (a spine or a prong); drag its dots afterwards">add feature</button></div>
   <div class="edits" id="rowtable"></div>
 
   <div class="sect"><span>Save</span><span id="del" style="display:none">delete body</span></div>

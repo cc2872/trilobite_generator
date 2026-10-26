@@ -94,9 +94,9 @@ def test_thorax_model_is_the_generators_own_build():
     R2 = RW.plans(P, {"rows": {"4": {"width": 40.0, "sweep": 35.0, "tip": 10.0}}})
     S4 = R2["parts"][4][2]; assert S4["w"] == pytest.approx(40.0) and S4["X_tip"] > 40.0 + 5
     assert np.abs(R2["parts"][3][2]["zfun"](np.abs(X), Y) - THORAX.plan(P, 3)["zfun"](np.abs(X), Y)).max() < 1e-9
-    # short rows fuse into one piece whose surface is the generator's segments end to end
+    # 26 Oct 2026: the thorax never fuses -- short rows stay their own pieces (flagged small for the editor); only the pygidium is fused
     R3 = RW.plans(P, {"rows": {"3": {"len": 4.0}, "4": {"len": 4.0}}})
-    assert [3, 4] in R3["groups"] and len(R3["parts"]) == len(R["parts"]) - 1
+    assert [3] in R3["groups"] and [4] in R3["groups"] and len(R3["parts"]) == len(R["parts"])
     D = RW.diagram(P, {"rows": {"3": {"len": 4.0}, "4": {"len": 4.0}}})
     assert D["model"] == "thorax" and [r["i"] for r in D["rows"] if r["small"]] == [3, 4] and len(D["side"]) == len(D["pieces"])
     assert D["side"][0]["bottom"][0][1] == 0.0 and D["side"][0]["bottom"][-1][1] > 0.0        # solid to the bed, a plate at the rear
@@ -140,7 +140,7 @@ def test_rows_model_defaults_and_fusion():
            RW.groups(RW.apply(rs, {"rows": {"3": {"len": 3.0}, "4": {"len": 3.0}}}), sc)[2] == [2, 3, 4]          # short rows fuse with a neighbour
     with pytest.raises(KeyError): RW.apply(rs, {"rows": {"0": {"bogus": 1}}})
     with pytest.raises(KeyError): RW.apply(rs, {"bogus": 1})
-    D = RW.diagram(P, {"model": "slab", "thorax_rows": 11, "pyg_rows": 20, "pyg_len": 95, "term_spine": 12})
+    D = RW.diagram(P, {"model": "slab", "thorax_rows": 11, "pyg_rows": 20, "pyg_len": 95, "term_spine": 12, "print_scale": 1.5})   # a hand-size scale so the short ribs fuse (the slab model still fuses; the thorax model no longer does, 26 Oct)
     assert D["body"]["thorax_rows"] == 11 and D["body"]["pyg_rows"] == 20 and D["term_spine"] == 12 and len(D["rows"]) == 31
     assert [r for pc in D["pieces"] for r in pc["rows"] if r >= 11] == list(range(11, 31)) and len(D["pieces"]) < 31   # the 20 ribs become the trailing fused pieces, in order (pairwise since the 25-Oct rule)
 
@@ -256,8 +256,8 @@ def test_isopod_progress_counts_parts():
     sys.path.insert(0, os.path.join(ROOT, "isopod_model")); import rows as RW
     P = schema.coerce(schema.preset("textured")); P["printLength"] = 0.0   # 25 Oct: the canonical body under the old pitch rule (count is head + every row + tail; the new default fuses short rows)
     assert A._iso_n_parts(P, None) == int(P["segCount"]) + 2
-    b = RW.boring(P); b[3]["len"] = 4.0; b[4]["len"] = 4.0                                              # two rows fuse: one piece fewer
-    assert A._iso_n_parts(P, {"list": b}) == 9 + 2 - 1
+    b = RW.boring(P); b[3]["len"] = 4.0; b[4]["len"] = 4.0                                              # 26 Oct: the thorax no longer fuses -- short rows stay their own pieces
+    assert A._iso_n_parts(P, {"list": b}) == 9 + 2
     assert "0 parts out of 1" not in A.app.test_client().get("/api/progress").get_data(as_text=True)
 
 # ---- the stress battery's lessons (11 Oct 2026): refused before building, drawn with a warning

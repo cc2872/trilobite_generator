@@ -491,7 +491,9 @@ def plans(P, spec=None, strict=True):
     else:
         th, pg = split_rows(rows)
         if not th: raise ValueError("the thorax model needs at least one thoracic row before the pygidium")
-        gs = groups(th, scale, min_mm)
+        gs = [[i] for i in range(len(th))]                                   # 26 Oct 2026: the thorax never fuses -- every segment stays its own
+        #                                                                      articulated printed piece (keeps each pleural spine on its own hinged
+        #                                                                      segment); only the pygidium is a fused piece (tail_plan, below)
         for n, g in enumerate(gs):
             maker = lambda i, k, last, g=g: thorax_row(P, th[i], i, inner=(k > 0), n_rows=len(th))
             S = group_plan(th, g, 0.0, maker=maker); name = f"seg{n}" if (pg or n < len(gs) - 1) else "tail"
