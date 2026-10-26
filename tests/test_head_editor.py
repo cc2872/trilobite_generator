@@ -197,7 +197,7 @@ def test_rows_model_builds_sane_plain_body():
     sys.path.insert(0, os.path.join(ROOT, "isopod_model")); import rows as RW, body as BODY, check as CHECK
     P = schema.defaults(); P["printLength"] = 0.0                                                # 25 Oct: old pitch rule (the new default fuses the plain body to fewer pieces)
     parts, plans, PV, K = BODY.build(P, "isopod", rows={"list": RW.boring(P)})
-    assert len(parts) == 10 and all(p.is_watertight and len(p.split(only_watertight=False)) == 1 for p in parts)   # 9 thorax + the fused pygidium (was 11 before the 25-Oct fusion rule)
+    assert len(parts) == 11 and all(p.is_watertight and len(p.split(only_watertight=False)) == 1 for p in parts)   # head + 9 thorax + the fused pygidium (old pitch rule, pinned above)
     pv = [(y, z) for y, z in PV]
     assert CHECK.contacts(parts, pv, 0.0) == [] and CHECK.contacts(parts, pv, 20.0) == []
 
