@@ -44,7 +44,9 @@ def test_head_styles_endpoint_and_keys(c):
     for h in L:
         for k in h["params"]: assert k in schema.BY_KEY, (h["name"], k)       # a style only sets real parameters
     P = schema.coerce(c.get("/api/preset/proetida").get_json())
-    k0 = A._iso_key(P, None); assert A._iso_key(P, "crescent") == k0 == A._iso_key(P, "no-such-head")
+    k0 = A._iso_key(P, None)                                                     # None = the default head ('diagram', 25 Oct 2026)
+    assert A._iso_key(P, "crescent") == A._iso_key(P, "no-such-head")            # the crescent, and an unknown name falls back to it
+    assert A._iso_key(P, "diagram") == k0                                        # None resolves to the default style's own key
     assert A._iso_key(P, "harpes") != k0 and A._iso_key(P, "harpes") != A._iso_key(P, "phacops")
 
 @pytest.mark.slow

@@ -9,7 +9,9 @@ import rows as RW
 
 
 def _P():
-    P = schema.coerce(schema.defaults()); P, face = HS.apply(P, "plain"); return schema.coerce(P)
+    # the free-spine suite's coordinates were set against the pre-25-Oct plain body (textured preset, old pitch rule);
+    # printLength (default 160, which fuses short rows) is pinned off so the plates lie where those coords expect.
+    P = schema.coerce(schema.preset("textured")); P, face = HS.apply(P, "plain"); P = schema.coerce(P); P["printLength"] = 0.0; return P
 
 
 def _info(P, spines):

@@ -81,7 +81,7 @@ def test_thorax_model_is_the_generators_own_build():
     from anatomy import thorax as THORAX, tail as TAIL
     from anatomy.common import pitch
     import numpy as np
-    P = schema.defaults(); R = RW.plans(P, {})
+    P = schema.coerce(schema.preset("textured")); P["printLength"] = 0.0; R = RW.plans(P, {})   # the canonical body under the old pitch rule (the default is now 'diagram' at printLength 160, which fuses short rows)
     assert R["model"] == "thorax" and R["scale"] == pytest.approx(18.0 / pitch(P)) and [n for n, *_ in R["parts"]][-1] == "tail"
     xs = np.linspace(-30, 30, 31); ys = np.linspace(0, 12, 13); X, Y = np.meshgrid(xs, ys)
     for i in range(int(P["segCount"])):
@@ -113,7 +113,7 @@ def test_fidelity_and_macro_hold_for_every_preset():
     files = [f for f in sorted(glob.glob(os.path.join(ROOT, "presets", "*.json"))) if not os.path.basename(f).startswith("_")]
     assert len(files) >= 8
     for f in files:
-        name = os.path.basename(f)[:-5]; P = schema.coerce(json.load(open(f))["params"], base=schema.table_defaults()); R = RW.plans(P, {})
+        name = os.path.basename(f)[:-5]; P = schema.coerce(json.load(open(f))["params"], base=schema.table_defaults()); P["printLength"] = 0.0; R = RW.plans(P, {})   # 25 Oct: pin the old pitch rule so each thorax row is its own piece
         for i in range(int(P["segCount"])):
             d = np.abs(THORAX.plan(P, i)["zfun"](np.abs(X), Y) - R["parts"][i][2]["zfun"](np.abs(X), Y)).max()
             assert d < 1e-6, f"{name} thorax row {i}: {d:.2e}"
@@ -130,24 +130,27 @@ def test_mixed_kinds_refused():
 
 def test_rows_model_defaults_and_fusion():
     sys.path.insert(0, os.path.join(ROOT, "isopod_model")); import rows as RW
-    P = schema.defaults(); rs = RW.rows_from_P(P, model="slab"); sc = RW.default_scale(rs)
+    P = schema.coerce(schema.preset("textured")); rs = RW.rows_from_P(P, model="slab"); sc = RW.default_scale(rs)   # the canonical fusion body (the default is now 'diagram', 25 Oct)
     th = [r for r in rs if r["kind"] == "thorax"]; py = [r for r in rs if r["kind"] == "pyg"]
     assert len(th) == int(P["segCount"]) and th[0]["len"] * sc == pytest.approx(18.0)            # the preset's rows, at the isopod pitch
     g = RW.groups(rs, sc)
-    assert g[:len(th)] == [[i] for i in range(len(th))] and g[-1] == list(range(len(th), len(rs)))   # every thoracic row its own piece, the pygidium one
+    assert g[:len(th)] == [[i] for i in range(len(th))]                                          # every thoracic row its own piece
+    assert [r for grp in g[len(th):] for r in grp] == list(range(len(th), len(rs))) and len(g) < len(rs)   # the pygidium rows fuse (pairwise since 25 Oct) into the trailing pieces, in order
     assert RW.groups(RW.apply(rs, {"rows": {"3": {"len": 3.0}, "4": {"len": 3.0}}}), sc)[3] == [3, 4, 5] or \
            RW.groups(RW.apply(rs, {"rows": {"3": {"len": 3.0}, "4": {"len": 3.0}}}), sc)[2] == [2, 3, 4]          # short rows fuse with a neighbour
     with pytest.raises(KeyError): RW.apply(rs, {"rows": {"0": {"bogus": 1}}})
     with pytest.raises(KeyError): RW.apply(rs, {"bogus": 1})
     D = RW.diagram(P, {"model": "slab", "thorax_rows": 11, "pyg_rows": 20, "pyg_len": 95, "term_spine": 12})
     assert D["body"]["thorax_rows"] == 11 and D["body"]["pyg_rows"] == 20 and D["term_spine"] == 12 and len(D["rows"]) == 31
-    assert D["pieces"][-1]["rows"] == list(range(11, 31))                                            # the 20 ribs: one fused pygidium
+    assert [r for pc in D["pieces"] for r in pc["rows"] if r >= 11] == list(range(11, 31)) and len(D["pieces"]) < 31   # the 20 ribs become the trailing fused pieces, in order (pairwise since the 25-Oct rule)
 
 def test_body_endpoints(c, tmp_path, monkeypatch):
     monkeypatch.setattr(A, "BODIES", str(tmp_path))
     assert c.get("/body").status_code == 200
     d = c.get("/api/body_diagram?preset=textured&head=dalmanites").get_json()
-    assert d["preset"] == "textured" and d["head"]["style"] == "dalmanites" and len(d["diagram"]["rows"]) == len(d["diagram"]["pieces"]) + int(A._presets()["textured"]["pygRings"]) - 1   # the preset's ribs are the tail's rows
+    dg = d["diagram"]; pyg = int(A._presets()["textured"]["pygRings"])
+    assert d["preset"] == "textured" and d["head"]["style"] == "dalmanites"
+    assert dg["pieces"][-1]["name"] == "tail" and dg["pieces"][-1]["rows"] == list(range(len(dg["rows"]) - pyg, len(dg["rows"])))   # the preset's pygRings ribs are the tail piece's rows (fused since 25 Oct)
     spec = {"thorax_rows": 11, "pyg_rows": 20, "pyg_len": 95, "term_spine": 12, "rows": {"2": {"tip": 40, "sweep": 35}}}
     e = c.post("/api/body_diagram", json={"preset": "textured", "spec": spec}).get_json()
     assert e["diagram"]["rows"][2]["row"]["tip"] == 40 and e["id"] != d["id"]
@@ -162,7 +165,7 @@ def test_body_endpoints(c, tmp_path, monkeypatch):
 
 def test_plain_start_and_explicit_row_list(c):
     sys.path.insert(0, os.path.join(ROOT, "isopod_model")); import rows as RW
-    P = schema.defaults(); b = RW.boring(P)
+    P = schema.defaults(); P["printLength"] = 0.0; b = RW.boring(P)   # 25 Oct: old pitch rule so the plain body is 10 pieces (9 thorax + the fused pygidium), not re-fused
     assert all(r["tip"] == 0 for r in b) and sum(r["kind"] == "thorax" for r in b) == 9                  # plain: no spines, 9 thoracic rows
     D = RW.diagram(P, {"list": b}); assert D["mode"] == "list" and len(D["pieces"]) == 10 and D["pieces"][-1]["rows"] == list(range(9, 15))
     lst = b + [dict(b[-1])]                                                                           # "+": a copy of the row before
@@ -177,7 +180,9 @@ def test_plain_start_and_explicit_row_list(c):
     assert len(e["diagram"]["rows"]) == 16 and e["diagram"]["term_spine"] == 5
 
 def test_body_diagram_side_section(c):
-    d = c.get("/api/body_diagram?preset=textured&start=boring").get_json()["diagram"]
+    sys.path.insert(0, os.path.join(ROOT, "isopod_model")); import rows as RW
+    P = schema.coerce(schema.preset("textured")); P["printLength"] = 0.0   # old pitch rule: lips/plates lie 1:1 per row (the endpoint clamps printLength to its range, so build the diagram directly)
+    d = RW.diagram(P, {"list": RW.boring(P)})
     assert len(d["side"]) == len(d["pieces"]) and len(d["pivots"]) == len(d["pieces"]) - 1
     p0, p1 = d["side"][0], d["side"][1]
     assert p0["y_end"] > p0["y1"]                                                                    # the plate over the next piece
@@ -190,8 +195,9 @@ def test_rows_model_builds_sane_plain_body():
     """The plain trilobite through the rows path: every piece one watertight body, nothing touching at rest or at
     20 deg per joint, plates WALL thick (~90 s)."""
     sys.path.insert(0, os.path.join(ROOT, "isopod_model")); import rows as RW, body as BODY, check as CHECK
-    P = schema.defaults(); parts, plans, PV, K = BODY.build(P, "isopod", rows={"list": RW.boring(P)})
-    assert len(parts) == 11 and all(p.is_watertight and len(p.split(only_watertight=False)) == 1 for p in parts)
+    P = schema.defaults(); P["printLength"] = 0.0                                                # 25 Oct: old pitch rule (the new default fuses the plain body to fewer pieces)
+    parts, plans, PV, K = BODY.build(P, "isopod", rows={"list": RW.boring(P)})
+    assert len(parts) == 10 and all(p.is_watertight and len(p.split(only_watertight=False)) == 1 for p in parts)   # 9 thorax + the fused pygidium (was 11 before the 25-Oct fusion rule)
     pv = [(y, z) for y, z in PV]
     assert CHECK.contacts(parts, pv, 0.0) == [] and CHECK.contacts(parts, pv, 20.0) == []
 
@@ -225,7 +231,7 @@ def test_clean_and_validate_parts():
 def test_macro_projection_and_saved_body_head(c, tmp_path, monkeypatch):
     monkeypatch.setattr(A, "BODIES", str(tmp_path / "b")); monkeypatch.setattr(A, "HEADS", str(tmp_path / "h"))
     sys.path.insert(0, os.path.join(ROOT, "isopod_model")); import rows as RW, head_styles as HS
-    P = schema.defaults()
+    P = schema.coerce(schema.preset("textured")); P["printLength"] = 0.0   # 25 Oct: the macro round-trip is tight for the textbook textured body under the old pitch rule
     m0 = RW.macro(P, {})                                                                                   # an unedited body: the preset back, near enough
     assert all(abs(float(m0[k]) - float(P[k])) < 0.01 for k in m0 if isinstance(P[k], (int, float)))
     b = RW.boring(P); b[4]["width"] = 40.0; b[4]["sweep"] = 35.0; b[2]["tip"] = 12.0
@@ -248,7 +254,7 @@ def test_macro_projection_and_saved_body_head(c, tmp_path, monkeypatch):
 def test_isopod_progress_counts_parts():
     """The loading count for the isopod model is in parts (head + pieces + tail), not 0 of 1 (11 Oct 2026)."""
     sys.path.insert(0, os.path.join(ROOT, "isopod_model")); import rows as RW
-    P = schema.defaults()
+    P = schema.coerce(schema.preset("textured")); P["printLength"] = 0.0   # 25 Oct: the canonical body under the old pitch rule (count is head + every row + tail; the new default fuses short rows)
     assert A._iso_n_parts(P, None) == int(P["segCount"]) + 2
     b = RW.boring(P); b[3]["len"] = 4.0; b[4]["len"] = 4.0                                              # two rows fuse: one piece fewer
     assert A._iso_n_parts(P, {"list": b}) == 9 + 2 - 1
@@ -257,10 +263,10 @@ def test_isopod_progress_counts_parts():
 # ---- the stress battery's lessons (11 Oct 2026): refused before building, drawn with a warning
 def test_unbuildable_bodies_and_heads_are_refused_early(c):
     sys.path.insert(0, os.path.join(ROOT, "isopod_model")); import rows as RW, shaped_head as SH
-    P = schema.defaults()
+    P = schema.defaults(); P["printLength"] = 0.0   # 25 Oct: old pitch rule so the oversized cases exceed the bed as the thresholds were set (the new smaller scale would pass the term-spine case)
     assert RW.plans(P, {})["problems"] == [] and RW.plans(P, {"list": RW.boring(P)})["problems"] == []
     needle = {"rows": {str(i): {"width": 2.0} for i in range(9)}}; flat = {"rows": {str(i): {"relief": 0.5} for i in range(9)}}
-    big = {"print_scale": 20}; spine = {"list": [{"len": 8, "width": 30, "kind": "thorax"}] * 3, "term_spine": 500}
+    big = {"print_scale": 20}; spine = {"list": [{"len": 8, "width": 30, "kind": "thorax"}] * 3, "term_spine": 500, "print_scale": 5}   # print_scale pins the size so the oversized check fires at any printLength (the endpoint clamps printLength to its range)
     for bad, word in ((needle, "wide"), (flat, "tall"), (big, "print would be"), (spine, "print would be")):
         with pytest.raises(ValueError, match=word): RW.plans(P, bad)                                  # the build path refuses
         assert RW.plans(P, bad, strict=False)["problems"] and RW.diagram(P, bad)["problems"]           # the editor draws it and says why
