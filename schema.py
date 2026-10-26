@@ -161,6 +161,8 @@ PARAMS = [
     Param("pygSpineBend", "Tail spine bend", 0, -180, 180, 5, "Spines", "Their arc, root to tip", unit="deg"),
     Param("pygSpineGrow", "Tail spine extra length", 0.0, 0.0, 2.0, 0.05, "Spines", "Each margin spine runs on as a solid spine this much further / shield length (0 = the flat bump as built)"),
     Param("pygSpineBlade", "Tail spine blade fraction", 1.0, 0.0, 1.0, 0.05, "Spines", "How much of each margin spine is the flat blade of the shield (1 = all, as built; 0 = a round spine straight from the margin; 0.6 = a lichid lobe with a spine tip). Only with rise / bend / extra length."),
+    Param("printLength", "Print length", 160, 80, 600, 5, "Body", "The printed animal's length, head to tail, mm (25 Oct 2026: hand-sized by default). Segments too short to carry a joint at this size are fused into one printed piece -- every segment stays sculpted, the joints are fewer and bigger in proportion. 0 = the old rule (each segment at the isopod's 18 mm pitch)", unit="mm"),
+    Param("jointScale", "Joint size", 0.6, 0.5, 1.0, 0.05, "Body", "The ball-joint kit's size / the isopod's own (1 = its 13 mm ball and 17 mm piece). Smaller joints let a small print keep more of them; the clearances stay at full print size, so they still move"),
     Param("pygSpineWidth", "Tail spine width", 1.0, 0.3, 2.0, 0.05, "Spines", "Width of each margin lobe / spine at its root, as a factor on the built one (1 = as built; 0.5 slim triangles; 1.5 broad lobes)."),
     # ---- curved spines (23 Oct 2026, schema 6.5): every grafted spine may follow a circular arc. bend = the tangent's total
     #      turn root to tip (0 = straight, as before); roll = the plane it bends in about the spine's own axis (0 up, 90 out
@@ -276,7 +278,7 @@ CELLS = {
     "b3": dict(label="Tail axis", doc="the pygidial axis and its rings", primary=["pygRings", "tailRelief", "tailDomeExp"],
                more=["pygRibRelief", "pygFurrowScale", "pygAxisLen", "pygAxisFrac", "tailWall", "termSpine", "termBend"]),
     "a3": dict(label="Tail field + margin", doc="the pleural field, border, forks and marginal spines", primary=["pygWidth", "pygSpine", "pygMarginal"],
-               more=["tailOutlineExp", "pygBorderWidth", "pygSplay", "pygMarginalLen", "pygSpineRise", "pygSpineBend", "pygSpineGrow", "pygSpineBlade", "pygSpineWidth", "tailProngs", "tailProngLen", "tailProngSplay", "tailProngStem", "tailProngCenter", "tailProngWidth", "tailProngCurl", "tailProngBend"]),
+               more=["tailOutlineExp", "pygBorderWidth", "pygSplay", "pygMarginalLen", "pygSpineRise", "pygSpineBend", "pygSpineGrow", "pygSpineBlade", "pygSpineWidth", "printLength", "jointScale", "tailProngs", "tailProngLen", "tailProngSplay", "tailProngStem", "tailProngCenter", "tailProngWidth", "tailProngCurl", "tailProngBend"]),
     "ruler": dict(label="Print + hinge", doc="manufacturing, not morphology", primary=["maxAngle", "clearance", "nKnuckles"], more=["boreDia", "barrelR"]),
 }
 VERTICAL_SPINES = ["occipitalSpine", "axialSpine", "termSpine"]     # their own family (10 Sep verdict): dorsal, not a cell prong

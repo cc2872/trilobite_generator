@@ -263,11 +263,11 @@ def groups(rows, scale, min_mm=MIN_JOINT_MM):
     neighbours into one piece, and a piece still shorter than min_mm fuses into the piece behind it (ahead for the
     last). A joint sits at every remaining boundary. Returns [[row indices], ...] in order."""
     small = [r["len"] * scale < min_mm for r in rows]
-    gs = []
-    for i, s in enumerate(small):
-        if gs and s and small[gs[-1][-1]]: gs[-1].append(i)
-        else: gs.append([i])
     def length(g): return sum(rows[i]["len"] for i in g) * scale
+    gs = []
+    for i, s in enumerate(small):                                          # 25 Oct 2026: small rows fuse only until the piece is long enough for a
+        if gs and s and small[gs[-1][-1]] and length(gs[-1]) < min_mm: gs[-1].append(i)   # joint (they all fused into ONE rigid piece:
+        else: gs.append([i])                                               # a 160 mm print had a single thorax piece)
     changed = True
     while changed and len(gs) > 1:
         changed = False
@@ -283,7 +283,7 @@ KIT_HALF_W, KIT_H = 15.0, 13.5   # the isopod's middle strip at print: half-widt
 PRINT_MAX_MM = 700.0             # longest print side allowed (the export refuses 800; the bed is smaller than either)
 
 
-def problems(rows, scale, term_spine=0.0):
+def problems(rows, scale, term_spine=0.0, kit=1.0):
     """Why this body cannot be BUILT, as messages (empty = fine). The joint kit is absolute (print mm) and sits inside
     every thoracic row: at this print scale the rows must be wider than its strip and taller than its socket. And
     the whole print must fit a bed. The editor draws such a body and shows the message; the build refuses it.
@@ -291,16 +291,16 @@ def problems(rows, scale, term_spine=0.0):
     joint, 1.5 mm rows printed a metre long."""
     th = [r for r in rows if r["kind"] == "thorax"] or rows; out = []
     w_min = min(r["width"] for r in th); h_min = min(r["relief"] for r in th)
-    if w_min * scale < KIT_HALF_W: out.append(f"the joint kit is {KIT_HALF_W:g} mm wide at print; the narrowest thoracic row is {w_min * scale:.1f} mm (raise print_scale or widen the row)")
-    if h_min * scale < KIT_H: out.append(f"the joint kit is {KIT_H:g} mm tall at print; the lowest thoracic row is {h_min * scale:.1f} mm (raise print_scale or the row's relief)")
+    if w_min * scale < KIT_HALF_W * kit: out.append(f"the joint kit is {KIT_HALF_W * kit:g} mm wide at print; the narrowest thoracic row is {w_min * scale:.1f} mm (raise print_scale or widen the row)")
+    if h_min * scale < KIT_H * kit: out.append(f"the joint kit is {KIT_H * kit:g} mm tall at print; the lowest thoracic row is {h_min * scale:.1f} mm (raise print_scale or the row's relief)")
     L = (sum(r["len"] for r in rows) + max(term_spine, 0.0)) * scale; W = 2 * max(r["width"] + r["tip"] for r in rows) * scale
     if max(L, W) > PRINT_MAX_MM: out.append(f"the print would be {L:.0f} x {W:.0f} mm; at most {PRINT_MAX_MM:g} (lower print_scale, the rows or the terminal spine)")
     return out
 
 
-def fits(rows, scale, term_spine=0.0):
+def fits(rows, scale, term_spine=0.0, kit=1.0):
     """problems() as a ValueError (the build path)."""
-    p = problems(rows, scale, term_spine)
+    p = problems(rows, scale, term_spine, kit)
     if p: raise ValueError("; ".join(p))
 
 
@@ -474,10 +474,12 @@ def plans(P, spec=None, strict=True):
     fit a bed -- the build path; the editor's drawing passes strict=False and shows `problems` instead."""
     spec = spec or {}; model = spec.get("model") or "thorax"
     rows = apply(rows_from_P(P, spec, model), spec)
-    scale = float(spec.get("print_scale") or default_scale(rows))
-    min_mm = float(spec.get("min_joint_mm") or MIN_JOINT_MM)
+    pl = float(P.get("printLength", 0.0) or 0.0)                           # 25 Oct 2026: the animal printed at printLength mm, head to tail
+    scale = float(spec.get("print_scale") or (pl / float(P["length"]) if pl > 0 else default_scale(rows)))
+    kit = float(P.get("jointScale", 1.0) or 1.0)                           # 25 Oct 2026: the joint kit's print size / the isopod's
+    min_mm = float(spec.get("min_joint_mm") or MIN_JOINT_MM * kit)
     term = float(spec.get("term_spine") or 0.0)
-    if strict: fits(rows, scale, term)
+    if strict: fits(rows, scale, term, kit)
     F = furrow_amp(P)
     out = []; y = 0.0; offsets = []
     if model == "slab":
@@ -496,7 +498,7 @@ def plans(P, spec=None, strict=True):
         if pg:
             S = tail_plan(P, pg, th[-1]["len"], spec.get("tail_spines")); out.append(("tail", TAIL, S, y)); offsets.append(y); y += S["d"]
             gs = gs + [list(range(len(th), len(rows)))]
-    return dict(rows=rows, groups=gs, scale=scale, min_joint_mm=min_mm, parts=out, offsets=offsets, length=y, model=model, problems=problems(rows, scale, term),
+    return dict(rows=rows, groups=gs, scale=scale, min_joint_mm=min_mm, parts=out, offsets=offsets, length=y, model=model, problems=problems(rows, scale, term, kit),
                 free_spines=validate_free_spines(spec["spines"]) if spec.get("spines") is not None else [],
                 term_spine=float(spec.get("term_spine") or 0.0), mode=("list" if spec.get("list") is not None else "preset"))
 

@@ -109,7 +109,7 @@ def _iso_frame():
     return A, cf, cr, rear, front
 
 
-def iso_kit(P, s=None):
+def iso_kit(P, s=None, kit=1.0):
     """The isopod strip halves, scaled to the model (s = pitch / 18, or the given model-mm-per-print-mm), each in its
     own joint frame (the ball centre at y = 0, z at scale): 'ball' = piece's front half (ball, neck, column front),
     'socket' = its rear half (column rear, socket, fork). Plus the joint numbers in model mm."""
@@ -118,11 +118,12 @@ def iso_kit(P, s=None):
     def cut(y0, y1):
         box = M.to_manifold(M.box(2 * ISO_W, y1 - y0, ISO_ZC + 1.0, at=(0, y0, -1.0), align=("c", "min", "min")))
         return M.from_manifold(M.to_manifold(A) ^ box)
-    ball = cut(cf[1] - 12.0, ISO_YM + ISO_OVER); ball.apply_translation((0, -cf[1], 0)); ball.apply_scale(s)
-    sock = cut(ISO_YM - ISO_OVER, cr[1] + 12.0); sock.apply_translation((0, -cr[1], 0)); sock.apply_scale(s)
-    return dict(ball=ball, socket=sock, s=s, zp=cr[2] * s, col_rear=rear * s, col_front=front * s,
-                ball_start=(-12.0) * s, ball_end=(ISO_YM + ISO_OVER - cf[1]) * s,
-                sock_start=(ISO_YM - ISO_OVER - cr[1]) * s, sock_end=12.0 * s, w=ISO_W * s, zc=ISO_ZC * s)
+    g = s * float(kit)                                                     # 25 Oct 2026: the kit's geometry at `kit` x the isopod's print size;
+    ball = cut(cf[1] - 12.0, ISO_YM + ISO_OVER); ball.apply_translation((0, -cf[1], 0)); ball.apply_scale(g)   # s stays the model->print scale
+    sock = cut(ISO_YM - ISO_OVER, cr[1] + 12.0); sock.apply_translation((0, -cr[1], 0)); sock.apply_scale(g)
+    return dict(ball=ball, socket=sock, s=s, kit=float(kit), zp=cr[2] * g, col_rear=rear * g, col_front=front * g,
+                ball_start=(-12.0) * g, ball_end=(ISO_YM + ISO_OVER - cf[1]) * g,
+                sock_start=(ISO_YM - ISO_OVER - cr[1]) * g, sock_end=12.0 * g, w=ISO_W * g, zc=ISO_ZC * g)
 
 
 def placed_plans(P):
@@ -709,14 +710,15 @@ def build(P, head=None, face=None, outline=None, rows=None, preview=False):
         import head_styles as HS
         st = DEFAULT_HEAD if head is None else head
         face = HS.style(st)[0] if face is None else face; outline = HS.outline(st) if outline is None else outline; head = "shaped"
-    if rows is not None:
+    if rows is None and float(P.get("printLength", 0.0) or 0.0) > 0: rows = {}   # 25 Oct 2026: a print length goes through the rows model (its fusion rule
+    if rows is not None:                                                          # makes the pieces long enough for the joint kit at that size)
         import rows as RW
         R = RW.plans(P, rows); s = 1.0 / R["scale"]
         T0 = BALL.pose(P, [0.0] * (int(P["segCount"]) + 1))                     # the head and row 0 where placed_plans puts them
         plans = [("head", HEAD, HEAD.plan(P), T0[0][1, 3])] + [(n, m, S, T0[1][1, 3] + off) for (n, m, S, off) in R["parts"]]
         ga = BALL.GAP_AXIAL_FRAC * BALL.ISO_PITCH * s                          # the joint gaps: constant in print mm
         J = dict(gap_axial=ga, gap_vertical=BALL.GAP_VERT_FRAC * BALL.ISO_PITCH * s, gap_lateral=BALL.GAP_LAT_FRAC * BALL.ISO_PITCH * s)
-        K = iso_kit(P, s=s); PV = pivots(plans, J, K)
+        K = iso_kit(P, s=s, kit=float(P.get("jointScale", 1.0) or 1.0)); PV = pivots(plans, J, K)
         ROWS_INFO.clear(); ROWS_INFO.update(groups=R["groups"], scale=R["scale"], term_spine=R["term_spine"], rows=R["rows"], model=R["model"], free_spines=R.get("free_spines", []))
         return _build(P, head, face, outline, plans, J, K, PV, shell=(R["model"] == "slab"), term_spine=R["term_spine"])
     ROWS_INFO.clear()
