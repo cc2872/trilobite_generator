@@ -164,6 +164,12 @@ PARAMS = [
     Param("printLength", "Print length", 160, 80, 600, 5, "Body", "The printed animal's length, head to tail, mm (25 Oct 2026: hand-sized by default). Segments too short to carry a joint at this size are fused into one printed piece -- every segment stays sculpted, the joints are fewer and bigger in proportion. 0 = the old rule (each segment at the isopod's 18 mm pitch)", unit="mm"),
     Param("jointScale", "Joint size", 0.6, 0.5, 1.0, 0.05, "Body", "The ball-joint kit's size / the isopod's own (1 = its 13 mm ball and 17 mm piece). Smaller joints let a small print keep more of them; the clearances stay at full print size, so they still move"),
     Param("pygSpineWidth", "Tail spine width", 1.0, 0.3, 2.0, 0.05, "Spines", "Width of each margin lobe / spine at its root, as a factor on the built one (1 = as built; 0.5 slim triangles; 1.5 broad lobes)."),
+    # 26 Oct 2026: a fringe all round the tail, leaning back (the textbook pygidium). Defaults = the tail as built before.
+    Param("pygMarginalFrom", "Tail marginals from", 50, 0, 90, 1, "Spines", "Where the first marginal spine sits on the margin: 0 = the tail's front corner, 90 = the rear midline (50 = round the rear only, as before)", unit="deg"),
+    Param("pygMarginalTo", "Tail marginals to", 130, 90, 180, 1, "Spines", "Where the last sits: 180 = the other front corner (130 = as before)", unit="deg"),
+    Param("pygSpineSweep", "Tail spine lean", 0, 0, 60, 1, "Spines", "Each margin lobe leans back toward the rear by this much (0 = straight out from the tail's centre, as before); limited by the lobe's width", unit="deg"),
+    Param("pygLobePoint", "Tail lobe point", 1.2, 1.0, 3.0, 0.1, "Spines", "The marginal lobes' flanks: 1 = straight-sided triangles, higher = concave flanks, a broad base running out to a slender point (1.2 = as before)"),
+    Param("pygLobeBand", "Tail lobe band", 0.0, 0.0, 0.4, 0.01, "Spines", "The outer share of the tail's surface grid given to the lobes, so the dome inside stays smooth (0 = the whole grid follows the spiky margin, as before)"),
     # ---- curved spines (23 Oct 2026, schema 6.5): every grafted spine may follow a circular arc. bend = the tangent's total
     #      turn root to tip (0 = straight, as before); roll = the plane it bends in about the spine's own axis (0 up, 90 out
     #      toward the side, 180 down). Defaults 0, so every preset and reading is unchanged.
@@ -278,7 +284,7 @@ CELLS = {
     "b3": dict(label="Tail axis", doc="the pygidial axis and its rings", primary=["pygRings", "tailRelief", "tailDomeExp"],
                more=["pygRibRelief", "pygFurrowScale", "pygAxisLen", "pygAxisFrac", "tailWall", "termSpine", "termBend"]),
     "a3": dict(label="Tail field + margin", doc="the pleural field, border, forks and marginal spines", primary=["pygWidth", "pygSpine", "pygMarginal"],
-               more=["tailOutlineExp", "pygBorderWidth", "pygSplay", "pygMarginalLen", "pygSpineRise", "pygSpineBend", "pygSpineGrow", "pygSpineBlade", "pygSpineWidth", "printLength", "jointScale", "tailProngs", "tailProngLen", "tailProngSplay", "tailProngStem", "tailProngCenter", "tailProngWidth", "tailProngCurl", "tailProngBend"]),
+               more=["tailOutlineExp", "pygBorderWidth", "pygSplay", "pygMarginalLen", "pygMarginalFrom", "pygMarginalTo", "pygSpineSweep", "pygLobePoint", "pygLobeBand", "pygSpineRise", "pygSpineBend", "pygSpineGrow", "pygSpineBlade", "pygSpineWidth", "printLength", "jointScale", "tailProngs", "tailProngLen", "tailProngSplay", "tailProngStem", "tailProngCenter", "tailProngWidth", "tailProngCurl", "tailProngBend"]),
     "ruler": dict(label="Print + hinge", doc="manufacturing, not morphology", primary=["maxAngle", "clearance", "nKnuckles"], more=["boreDia", "barrelR"]),
 }
 VERTICAL_SPINES = ["occipitalSpine", "axialSpine", "termSpine"]     # their own family (10 Sep verdict): dorsal, not a cell prong
@@ -411,7 +417,8 @@ PRESETS["diagram"] = dict(PRESETS["textured"],                 # 25 Oct 2026: th
     length=130, width=82, relief=17.1, segCount=14, cephFrac=0.32, pygFrac=0.165, widthMaxPos=0.33, widthHeadFront=0.79, overlap=0.25, ringArch=0.4,   # 17:57: pleurae that touch (less lip under the plate ahead), a rounder axis
     widthThoraxFront=0.94, widthThoraxRear=0.68, widthTail=0.52, axisFrac=0.28, genalSweep=0.3, genalCurve=6,
     tipSweep=0.4, tipTaper=0.72, bladeChord=1.3, spineBase=0.0, spineSweep=55, pleuralSlope=0.6, bladeCamber=0.3,        # rounded pleurae; the pleura itself ends in a broad rounded point: no needle (it would snap)
-    pygSpine=0.4, pygSplay=18, pygMarginal=3, pygMarginalLen=0.45, pygSpineBlade=1.0, pygSpineWidth=0.55, pygSpineRise=0, pygRings=4, pygWidth=1.0, tailOutlineExp=2.0,   # the fringe: flat triangular lobes of the shield
+    pygSpine=0.0, pygSplay=18, pygMarginal=8, pygMarginalLen=0.4, pygSpineBlade=1.0, pygSpineWidth=0.6, pygSpineRise=0, pygRings=4, pygWidth=1.0, tailOutlineExp=2.0,   # the fringe: flat triangular lobes of the shield
+    pygMarginalFrom=22, pygMarginalTo=158, pygSpineSweep=40, pygLobeBand=0.2, pygLobePoint=1.6, pygBorderWidth=0.12,   # 26 Oct 2026: four lobes a side, all round the margin, leaning back, on a border (was a crown of three round the rear + a pair)
     furrowDepth=1.2, effacement=0.0, glabRise=0.18, glabLobes=3, glabInflate=1.3, borderWidth=0.08, eyeHeight=0.4, eyePos=0.3, eyeLat=0.0, eyeSize=0.16,   # the default lens eye beside the glabella
     genalSpine=0.0, genalHorn=0.0)   # the genal spines are the head's own surface (head style 'diagram'), not a rod unioned on   # the genal spines as round tapering HORNS continuing the border, not flat bands
 DEFAULT_PRESET = "diagram"   # 25 Oct 2026: the textbook trilobite is the generator's default (was "textured")

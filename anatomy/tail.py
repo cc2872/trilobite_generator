@@ -43,8 +43,15 @@ def plan(P):
     phi_f = math.atan(wp / Lp * math.tan(math.pi / 2 - sp)) if Lf_full > 0.5 else None
     wk = float(P.get("pygSpineWidth", 1.0))                      # 25 Oct 2026: the lobes' width at the root, 1 = as built
     hphi_f = math.radians(13) * wk
-    phi_m = [math.radians(50 + 80 * (k + 0.5) / n_m) for k in range(n_m)]
-    hphi_m = math.radians(80 / max(n_m, 1)) * 0.5 * 1.3 * wk
+    # 26 Oct 2026: where along the margin the marginals sit (deg, 0 = right front corner, 90 = rear, 180 = left front
+    # corner; the defaults 50..130 are the band round the rear they always had) and how far each lobe leans back
+    # (pygSpineSweep deg; 0 = straight out from the centre, as before). pygLobeBand: the outer share of the grid that
+    # carries the lobes, so the dome inside is sampled on smooth rings rather than on scaled copies of the spiky margin.
+    m_from, m_to = float(P.get("pygMarginalFrom", 50.0)), float(P.get("pygMarginalTo", 130.0))
+    sw0 = math.radians(float(P.get("pygSpineSweep", 0.0)))
+    band = float(P.get("pygLobeBand", 0.0))
+    phi_m = [math.radians(m_from + (m_to - m_from) * (k + 0.5) / n_m) for k in range(n_m)]
+    hphi_m = math.radians((m_to - m_from) / max(n_m, 1)) * 0.5 * 1.3 * wk
     # the margin spines as ONE list (24 Oct 2026): each dict(phi, Lk = the flat bump's length in the plan, L_full = the whole
     # spine, hh, e, rise, roll) -- the preset's pair + marginals, or the body's own `_tailSpines` list (the studio's dots:
     # phi deg, len mm, rise, roll, blade), right side only (phi <= 90), mirrored here. rise / roll None = P's.
@@ -54,27 +61,50 @@ def plan(P):
         for sd in own:
             L_full = float(sd.get("len", 0.0)); bl = float(sd.get("blade", 0.0)); phi_k = math.radians(float(sd.get("phi", 90.0)))
             if L_full > 0.5: spines.append(dict(phi=phi_k, Lk=L_full * bl, L_full=L_full, hh=hphi_f * float(sd.get("width", 1.0)), e=1.5 if bl < 0.999 else 1.2,
-                                                rise=float(sd.get("rise", 30.0)), roll=float(sd.get("roll", 0.0)), width=float(sd.get("width", 1.0))))
+                                                rise=float(sd.get("rise", 30.0)), roll=float(sd.get("roll", 0.0)), width=float(sd.get("width", 1.0)),
+                                                sweep=math.radians(float(sd.get("sweep", math.degrees(sw0))))))
         # 25 Oct 2026: a list of flat lobes (blade 1, no rise) stays a flat margin -- no solid spine runs on top of a lobe
         tube = any(abs(s_["rise"]) > 1e-6 or abs(s_["roll"]) > 1e-6 or s_["Lk"] < s_["L_full"] - 1e-6 for s_ in spines)
     else:
-        if Lf_full > 0.5: spines.append(dict(phi=phi_f, Lk=Lf, L_full=Lf_full, hh=hphi_f, e=1.5, rise=None, roll=None, width=1.0))
-        for pk in phi_m: spines.append(dict(phi=pk, Lk=Lm, L_full=Lm_full, hh=hphi_m, e=1.2, rise=None, roll=None, width=hphi_m / max(hphi_f, 1e-9)))   # width in units of the pair's root (an own copy rebuilds the same lobe)
-    def bump(phi, phi_k, hh, e): return np.clip(1 - np.abs(phi - phi_k) / hh, 0, 1) ** e
-    def radial_extra(phi):
-        ex = np.zeros_like(phi)
+        if Lf_full > 0.5: spines.append(dict(phi=phi_f, Lk=Lf, L_full=Lf_full, hh=hphi_f, e=1.5, rise=None, roll=None, width=1.0, sweep=sw0))
+        for pk in phi_m: spines.append(dict(phi=pk, Lk=Lm, L_full=Lm_full, hh=hphi_m, e=float(P.get("pygLobePoint", 1.2)), rise=None, roll=None, width=hphi_m / max(hphi_f, 1e-9), sweep=sw0))   # width in units of the pair's root (an own copy rebuilds the same lobe)
+    # each lobe leans toward the rear (+y) in two ways, never past the midline: (1) its tip sits behind the middle of its
+    # base (skew: the rear flank steeper than the front one -- a radial bump, so the outline cannot fold), and (2) the
+    # bump's direction turns toward the rear by as much as the lobe's width allows (more would fold the polar grid)
+    for sd in spines:
+        bx, by = wp * se(math.cos(sd["phi"])), Lp * se(math.sin(sd["phi"])); th = math.atan2(by, bx); r0 = math.hypot(bx, by)
+        sw_ = min(sd.get("sweep", 0.0), 0.45 * abs(math.pi / 2 - th)); Lk_ = max(sd["Lk"], 1e-6)
+        sd["skew"] = min(0.6 * sd["hh"], Lk_ * math.tan(sw_) / max(r0, 1e-6))
+        room = min(1.0, 0.8 * (sd["hh"] - sd["skew"]) * r0 / (sd["e"] * Lk_))   # the rear flank's steepest slope is e * Lk / (hh - skew), at the root
+        sd["lean"] = min(sw_, math.asin(room))
+        sd["lean_dir"] = min(sw_, sd["lean"] + math.atan(sd["skew"] * r0 / Lk_))    # the tip's direction from the base's middle
+    def bump(phi, phi_k, hh, e, skew=0.0, s=0.0):
+        d = phi - (phi_k + s * skew); w = np.where(s * d < 0, hh + skew, hh - skew) if s != 0.0 else hh
+        return np.clip(1 - np.abs(d) / w, 0, 1) ** e
+    def radial_extra(phi, lean_out=False):
+        ex = np.zeros_like(phi); ln = np.zeros_like(phi)
         for sd in spines:
             if sd["Lk"] > 0.5:
-                for pm in (sd["phi"], math.pi - sd["phi"]): ex = np.maximum(ex, sd["Lk"] * bump(phi, pm, sd["hh"], sd["e"]))
-        return ex
+                for pm in (sd["phi"], math.pi - sd["phi"]):
+                    sgn = 0.0 if abs(pm - math.pi / 2) < 1e-6 else (1.0 if pm < math.pi / 2 else -1.0)   # right side leans +, left side -, both toward the rear
+                    b = sd["Lk"] * bump(phi, pm, sd["hh"], sd["e"], sd.get("skew", 0.0), sgn); win = b > ex
+                    ex = np.where(win, b, ex); ln = np.where(win, sgn * sd.get("lean", 0.0), ln)
+        return (ex, ln) if lean_out else ex
     def margin_pt(phi):
         x0, y0 = wp * se(np.cos(phi)), Lp * se(np.sin(phi))
-        r0 = np.hypot(x0, y0); f = 1 + radial_extra(phi) / np.maximum(r0, 1e-6)
-        return x0 * f, y0 * f
+        r0 = np.maximum(np.hypot(x0, y0), 1e-6); ex, ln = radial_extra(phi, lean_out=True)
+        th = np.arctan2(y0, x0) + ln                                   # the radial direction, leaned toward the rear
+        return x0 + ex * np.cos(th), y0 + ex * np.sin(th)
     PHI_MIN = math.radians(1.5)   # the margin never reaches the front line: at phi = 0 the outer grid column would lie
     def outline(u, v):            # along y = 0 and its corner triangles would be collinear (the spline fit used to hide it)
         phi = PHI_MIN + (math.pi - 2 * PHI_MIN) * 0.5 * (1 - u)
         mx, my = margin_pt(np.array([phi])); fx = u * (wp - 1.0)
+        if band > 0.01:                                            # inside: smooth rings (the base margin scaled about the axis
+            bx, by = wp * se(math.cos(phi)), Lp * se(math.sin(phi))   # line) out to v = 1 - band; then the band, from that ring out
+            vi = min(v, 1 - band); ix, iy = (1 - vi) * fx + vi * bx, vi * by   # to the margin with its lobes -- never of zero width,
+            if v <= 1 - band: return float(ix), float(iy)          # as it would be where there is no lobe if it began on the margin
+            w_ = (v - (1 - band)) / band
+            return float(ix + w_ * (mx[0] - ix)), float(iy + w_ * (my[0] - iy))
         return float((1 - v) * fx + v * mx[0]), float(v * my[0])
     def outside(x, y):
         r = (np.abs(x / wp) ** nO + np.abs(y / Lp) ** nO) ** (1.0 / nO)
@@ -144,6 +174,9 @@ def ornaments(P, S):
             s_root = 0.8 if blade else 0.0                                                            # a short overlap (the grid's staircase shows along a long one)
             rx, ry = (x0 + dx * s_root * Lk, y0 + dy * s_root * Lk) if blade else (x0 - dx * 1.0, y0 - dy * 1.0)   # no blade: root 1 mm inside the margin
             zr = float(np.asarray(S["zfun"](np.array([rx]), np.array([ry]))).ravel()[0])
+            ln_ = sd.get("lean_dir", 0.0)                                                             # 26 Oct 2026: the lobe's lean toward the rear
+            if ln_ > 1e-6 and abs(phi_k - math.pi / 2) > 1e-6:
+                th_ = math.atan2(dy, dx) + (ln_ if phi_k < math.pi / 2 else -ln_); dx, dy = math.cos(th_), math.sin(th_)
             yaw = math.degrees(math.atan2(dx, dy))                                                   # spine_solid's +y is rear; yaw + toward +x
             def bump_section(W, ts, ra, rb, Lk=Lk, x0=x0, y0=y0, dx=dx, dy=dy, fr=fr, half_w=half_w):   # over the bump: its width and height
                 if Lk <= 0.5: return ra, rb

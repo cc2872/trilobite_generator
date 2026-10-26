@@ -144,6 +144,11 @@ def _build_isopod(P, folder, head=None, body_spec=None, preview=False):
     kin = dict(names=names, pivots=pivots,                      # pivots present => the viewer poses about per-joint pivots (ball joints)
                profile=[round(a / KIN.HEAD_DEG, 4) for a in KIN.profile(len(pivots))],   # each joint's share of the head angle (Esteve profile)
                profile_source=KIN.SOURCE)
+    try:                                                        # 26 Oct 2026: where the builder put the eye (print mm), for the sheet's lens drawing
+        Sh = plans[0][2]; Eh = Sh.get("eye") if isinstance(Sh, dict) else None
+        if Eh and not Eh.get("blind") and float(P.get("eyeSolid", 0)) > 0.5 and float(P.get("eyeSize", 0)) > 0.01:
+            kin["eye"] = [round(float(Eh["xe"]) / s, 3), round((float(Eh["ye"]) + float(plans[0][3])) / s, 3), round(float(Eh["eR"]) / s, 3)]
+    except Exception: pass
     # the checks (11 Oct 2026): the build has already refused invalid parts (body.MeshError); here what a slicer and the
     # chain would still notice -- parts touching at rest, and the debris the clean-up removed
     if preview: return out, kin, dict(print_valid=False, preview=True, notes=["preview: the pieces as drawn, before the joint clearances -- the printable pieces are being finished"], touching=[], debris_mm3={})
@@ -720,6 +725,7 @@ def api_sheet():
                         params=key, schema=man.get("schema", ""), build_seconds=man.get("build_seconds"),
                         volumes=[p.get("volume") for p in parts], meta=[dict(bodies=p.get("bodies"), watertight=p.get("watertight")) for p in parts],
                         checks=man.get("print", {}), head=man.get("head"), body=man.get("body"),   # the editors' specs, as the manifest records them
+                        eye=kin.get("eye"),                                                     # the eye as built (print mm), for the lens drawing
                         date=time.strftime("%Y-%m-%d"))
             blueprint.isopod_sheet(meshes, P, info, png, cmap=cmap)
         return jsonify(url=f"/files/{key}/sheet_isopod_{cmap}.png", measured=False)

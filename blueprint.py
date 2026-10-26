@@ -21,16 +21,22 @@ def _fits_bed(w, h, bed=BED_MM):
         if w * c + h * s <= bed and w * s + h * c <= bed: return True
     return False
 
-def _eye_lenses(ax, head, P, color=INK):
+def _eye_lenses(ax, head, P, color=INK, eye=None, cx=0.0):
     """Fill each eye on the dorsal plan with its lens packing (the packing factor, as circles): the eye outline and a
-    hex lattice of lenses sized by lensD and spaced by lensGap. The two eye domes are detected off-axis on the head."""
+    hex lattice of lenses sized by lensD and spaced by lensGap. eye = (x, y, R) where the builder put the right eye, in
+    the sheet's mm (26 Oct 2026: the manifest records it); without it the eye dome is searched for off-axis on the head
+    (the old way, which lands on the glabella's flank on a head whose glabella stands taller than its eyes)."""
     try:
         if P.get("eyeSolid", 1) < 0.5 or P.get("eyeSize", 0) <= 0.01: return
-        V = head.vertices; hw = max(abs(V[:, 0].min()), V[:, 0].max())
-        eR = P["eyeSize"] * hw
-        sel = (V[:, 0] > 0.3 * hw) & (V[:, 0] < 0.97 * hw)                   # the right eye dome: off-axis, highest point
-        if sel.sum() < 20 or eR < 1: return
-        Vs = V[sel]; ex, ey = Vs[np.argmax(Vs[:, 2]), 0], Vs[np.argmax(Vs[:, 2]), 1]
+        if eye:
+            ex, ey, eR = float(eye[0]) - cx, float(eye[1]), float(eye[2])
+            if eR < 0.5: return
+        else:
+            V = head.vertices; hw = max(abs(V[:, 0].min()), V[:, 0].max())
+            eR = P["eyeSize"] * hw
+            sel = (V[:, 0] > 0.3 * hw) & (V[:, 0] < 0.97 * hw)                   # the right eye dome: off-axis, highest point
+            if sel.sum() < 20 or eR < 1: return
+            Vs = V[sel]; ex, ey = Vs[np.argmax(Vs[:, 2]), 0], Vs[np.argmax(Vs[:, 2]), 1]
         D = max(P["lensD"] * eR, 0.4); pitch = D * (1 + P["lensGap"]); row = 0.87 * pitch
         lens = []
         for iy in range(-int(eR / row) - 1, int(eR / row) + 2):
@@ -578,7 +584,7 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
     # ---- PLAN · dorsal
     ax = fig.add_subplot(gs[0:19, 0:8]); ax.set_facecolor(BG); ax.set_aspect("equal"); ax.axis("off")
     plan(ax, flat, False, np.linspace(z0 + 0.4, z1 - 0.2, 14), ("PLAN · dorsal · relief %.1f mm" % H) if bw else ("PLAN · relief field (%s) · %.1f mm" % (cmap, H)))
-    _eye_lenses(ax, parts[0], P)
+    _eye_lenses(ax, parts[0], P, eye=info.get("eye"), cx=cx)
     _dim(ax, x0, y0, x1, y0, f"{W:.1f}", off=-8); _dim(ax, x0, y0, x0, y1, f"{L:.1f}", off=-13)      # length on the left, joints on the right
     ax.text(x0, y0 - 13, "A", fontsize=7, **mono); ax.text(x1, y0 - 13, "A", fontsize=7, ha="right", **mono)
     sb = 100.0 if W >= 120 else 50.0                                                          # a scale bar in the plan's own mm
