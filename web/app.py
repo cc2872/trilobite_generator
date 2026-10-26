@@ -117,26 +117,27 @@ def _iso_key(P, head=None, body=None):
     if isinstance(h, dict): return schema.param_hash(P) + f"-h-custom-{h['id']}{b}-" + SHAPED_SIG
     return schema.param_hash(P) + ("-i" + ISOPOD_SIG if h is None else f"-h-{h}-" + SHAPED_SIG) + b
 
-def _build_isopod(P, folder, head=None, body_spec=None):
+def _build_isopod(P, folder, head=None, body_spec=None, preview=False):
     """Build the isopod model at print mm: isopod body + ball joints + either the crescent on the isopod head piece
     (head None) or a head style drawn on its own silhouette (3 Oct 2026). The style's outline and sculpt keys are
     build options; P is used as given (the page applies a style's parameter values to P when it is picked, so the
     sliders show them and stay editable). Returns (parts, man-fields)."""
     IBODY = _isopod_body(); h = _head_style(head)
     rows = _body_spec(body_spec)
-    if h is None: parts, plans, PV, K = IBODY.build(P, "isopod", rows=rows)
+    if h is None: parts, plans, PV, K = IBODY.build(P, "isopod", rows=rows, preview=preview)
     elif isinstance(h, dict):                                   # the head editor's head: its own outline + face
-        parts, plans, PV, K = IBODY.build(P, "shaped", face=h["face"], outline=h["outline"], rows=rows)
+        parts, plans, PV, K = IBODY.build(P, "shaped", face=h["face"], outline=h["outline"], rows=rows, preview=preview)
     else:
         HS = _head_styles(); face, _ = HS.style(h)
-        parts, plans, PV, K = IBODY.build(P, "shaped", face=face, outline=HS.outline(h), rows=rows)
+        parts, plans, PV, K = IBODY.build(P, "shaped", face=face, outline=HS.outline(h), rows=rows, preview=preview)
     s = K["s"]                                                  # model units -> the isopod's own print mm
     pieces = [p.copy().apply_scale(1.0 / s) for p in parts]
     names = ["head"] + [f"seg{i}" for i in range(len(pieces) - 2)] + ["tail"]
     pivots = [[float(y / s), float(z / s)] for (y, z) in PV]    # per-joint pivot (y, z) in print mm, for the viewer's pose
     out = []
     for name, m in zip(names, pieces):
-        m.export(os.path.join(folder, f"{name}.glb")); m.export(os.path.join(folder, f"{name}.stl"))
+        if not preview: m.export(os.path.join(folder, f"{name}.glb"))           # the viewer reads the STL; the GLB is for downloads
+        m.export(os.path.join(folder, f"{name}.stl"))
         out.append(dict(name=name, url=f"/files/{os.path.basename(folder)}/{name}.glb", stl=f"/files/{os.path.basename(folder)}/{name}.stl",
                         bodies=len(__import__("mesh").bodies(m)), watertight=bool(m.is_watertight), volume=round(float(m.volume), 1)))
     import kinematics as KIN
@@ -145,6 +146,7 @@ def _build_isopod(P, folder, head=None, body_spec=None):
                profile_source=KIN.SOURCE)
     # the checks (11 Oct 2026): the build has already refused invalid parts (body.MeshError); here what a slicer and the
     # chain would still notice -- parts touching at rest, and the debris the clean-up removed
+    if preview: return out, kin, dict(print_valid=False, preview=True, notes=["preview: the pieces as drawn, before the joint clearances -- the printable pieces are being finished"], touching=[], debris_mm3={})
     import check as CHECK
     touching = [dict(a=names[k], b=names[j], mm3=round(v / s ** 3, 3)) for k, j, v in CHECK.contacts(parts, [(y, z) for y, z in PV], 0.0)]
     dropped = {names[k]: round(v / s ** 3, 3) for k, v in getattr(IBODY, "LAST_DROPPED", {}).items() if v > 0}
@@ -599,7 +601,8 @@ def api_build():
         head = _head_style(body.get("head"))                # a head style (isopod_model/head_styles.py), or None = the crescent
         try: bspec = _body_spec(body.get("body"))           # a rows-model body (the body editor): a spec or a saved name
         except KeyError as ex: return jsonify(error=str(ex)), 404
-        try: key = _iso_key(P, head, bspec); problems = _iso_problems(P, head, bspec)   # the isopod model has its own builder-source hash;
+        preview = bool(body.get("preview"))                 # 25 Oct 2026: the pieces as drawn, no joint clearances -- the viewer's first look, in seconds
+        try: key = _iso_key(P, head, bspec) + ("-preview" if preview else ""); problems = _iso_problems(P, head, bspec)   # the isopod model has its own builder-source hash;
         except (KeyError, ValueError) as ex: return jsonify(error=f"body or head spec: {str(ex)[:200]}"), 400   # resolving validates (bounds, keys)
         if problems: return jsonify(error="cannot build: " + "; ".join(problems)[:400]), 400
         folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
@@ -607,13 +610,14 @@ def api_build():
         PROGRESS.update(done=0, total=n_parts)
         if os.path.exists(manifest):
             PROGRESS.update(done=n_parts); return send_file(manifest)
+        if body.get("peek"): return jsonify(pending=True)          # 25 Oct 2026: the viewer asks first; a cached build is shown at once, no preview
         with LOCK:
             if os.path.exists(manifest):
                 PROGRESS.update(done=n_parts); return send_file(manifest)
             t0 = time.time(); os.makedirs(folder, exist_ok=True); bnotes = []
             _isopod_body().PROGRESS_HOOK = lambda done, total: PROGRESS.update(done=done, total=total)   # the build reports parts as they finish
             try:
-                out, kin, checks = _build_isopod(P, folder, head, bspec)
+                out, kin, checks = _build_isopod(P, folder, head, bspec, preview=preview)
             except Exception as ex:
                 shutil.rmtree(folder, ignore_errors=True)               # never cache a failed build — a retry must rebuild, not serve the error
                 PROGRESS.update(done=n_parts)

@@ -661,11 +661,15 @@ function loadingOff(){ clearInterval(poll); poll=null; $('loading').classList.re
 async function build(){ if(building){pending=true;return;} building=true; status('building',true); loadingOn();
   try{
     let man;
+    if(mode==='3d'&&joint==='isopod'){                                         // 25 Oct 2026: show the animal in seconds (the pieces as drawn, no joint clearances),
+      try{ const pv=await post('/api/build',Object.assign(buildBody(),{preview:true}));   // then finish the printable pieces and swap them in
+        if(pv&&pv.parts&&pv.parts.length){ loadingOff(); await load3d(pv); status('preview - finishing the printable pieces...',true); } }
+      catch(_){ /* the preview is a courtesy: the full build below still runs */ } }
     try{ man=await retryPost('/api/build','build',2,buildBody()); }
     catch(ex){ status('build failed - '+why(ex),false); return; }
     kin=man.kinematics; buildKey=man.key; readout();
     status(`built in ${man.build_seconds}s - ${man.print.print_valid?'printable':(man.print.violations||man.print.notes||['not printable']).join('; ')}`,false);
-    if(mode==='edit') await toSheet(); else if(mode==='3d') await load3d(man); else await sheet();   // building from the editor shows the result on the sheet
+    if(mode==='edit') await toSheet(); else if(mode==='3d') await load3d(man, Object.keys(partMeshes).length>0); else await sheet();   // building from the editor shows the result on the sheet
   } finally { building=false; loadingOff(); if(pending){pending=false; build();} } }
 let sheetWait=null;                        // resolved true by the img's load, false by its error or the timeout,
 const SHEET_TRIES=3;                       // so the overlay lifts on the painted sheet, not on the response
@@ -827,28 +831,51 @@ function init3d(){ if(threeReady) return; threeReady=true; const view=$('stage3d
   grid=new THREE.GridHelper(400,40,0x2a2a2a,0x161616); grid.position.y=-0.5; scene.add(grid);
   root=new THREE.Group(); root.rotation.x=-Math.PI/2; scene.add(root); loader=new STLLoader();
   const rs=()=>{ren.setSize(view.clientWidth,view.clientHeight); cam.aspect=view.clientWidth/view.clientHeight; cam.updateProjectionMatrix();}; window.addEventListener('resize',rs); rs();
-  (function loop(){requestAnimationFrame(loop); rbU.uTime.value=performance.now()*0.001; ctl.update(); ren.render(scene,cam);})(); }   // one clock drives the flow; any window of a full cycle is a seamless loop
-function partGroup(geo){ const g=new THREE.Group(); const m=new THREE.Mesh(geo, look==='blueprint'?fillMat:reliefMat()); m.name='fill'; g.add(m);
+  ctl.addEventListener('change',()=>{ dirty3d=true; }); window.addEventListener('resize',()=>{ dirty3d=true; });
+  (function loop(){requestAnimationFrame(loop); const anim=(cmap==='rainbow');                 // 25 Oct 2026: draw only when something changed (the camera, a pose,
+    if(ctl.update()||dirty3d||anim){ rbU.uTime.value=performance.now()*0.001; ren.render(scene,cam); dirty3d=false; } })(); }   // a load) or the colormap animates   // one clock drives the flow; any window of a full cycle is a seamless loop
+// 25 Oct 2026: a part shows as its mesh at once; its edge lines (two EdgesGeometry passes over 100k+ triangles each, the
+// slowest thing the viewer did, before anything was on screen) are added afterwards, one part per idle slice
+function partGroup(geo){ const g=new THREE.Group(); const m=new THREE.Mesh(geo, look==='blueprint'?fillMat:reliefMat()); m.name='fill'; g.add(m); return g; }
+function addEdges(g, gen){ if(gen!==loadGen||g.getObjectByName('edges')) return; dirty3d=true; const geo=g.getObjectByName('fill').geometry;
   const e1=new THREE.LineSegments(new THREE.EdgesGeometry(geo,24), inkLine.clone()); e1.name='edges'; g.add(e1);
-  const e2=new THREE.LineSegments(new THREE.EdgesGeometry(geo,8), faintLine.clone()); e2.name='faint'; g.add(e2); return g; }
-function setLook(l){ look=l; [...$('look').children].forEach(s=>s.classList.toggle('on',s.dataset.look===l)); if(!threeReady) return;
+  const e2=new THREE.LineSegments(new THREE.EdgesGeometry(geo,8), faintLine.clone()); e2.name='faint'; e2.visible=(look==='blueprint'); g.add(e2); window.__edges=(window.__edges||0)+1; }
+const idle=f=>setTimeout(f,30);                                            // a plain timer: the render loop never leaves idle time for requestIdleCallback
+function disposeAll(){ root.traverse(o=>{ if(o.geometry) o.geometry.dispose(); if(o.material&&o.material!==fillMat&&o.material.dispose&&o.name!=='fill') o.material.dispose(); }); root.clear(); partMeshes={}; }   // the old animal's buffers were never freed
+let loadGen=0; let dirty3d=true;
+function setLook(l){ look=l; [...$('look').children].forEach(s=>s.classList.toggle('on',s.dataset.look===l)); if(!threeReady) return; dirty3d=true;
   scene.background=new THREE.Color(0x000000);                                  // dark for both; the colormap glows on black
   stopRainbow();                                                              // leaving Relief (or re-entering) always restarts clean
   if(l!=='blueprint'){ if(cmap==='rainbow') startRainbow(); else colorParts(); }
-  for(const g of Object.values(partMeshes)){ g.getObjectByName('fill').material=(l==='blueprint'?fillMat:reliefMat()); g.getObjectByName('edges').visible=true; g.getObjectByName('faint').visible=(l==='blueprint'); }   // white feature edges in both looks: the Relief keeps a blueprint outline over the colormap
+  for(const g of Object.values(partMeshes)){ g.getObjectByName('fill').material=(l==='blueprint'?fillMat:reliefMat()); const e=g.getObjectByName('edges'), f=g.getObjectByName('faint'); if(e) e.visible=true; if(f) f.visible=(l==='blueprint'); }   // white feature edges in both looks: the Relief keeps a blueprint outline over the colormap
   scene.remove(grid); grid=new THREE.GridHelper(400,40,0x2a2a2a,0x161616); grid.position.y=-0.5; scene.add(grid); updateRbCtl(); }
 $('look').onclick=e=>{ if(e.target.dataset.look) setLook(e.target.dataset.look); };
-async function load3d(man){ init3d(); root.clear(); partMeshes={};
-  if(!man){ try{ man=await post('/api/build',buildBody()); } catch(ex){ status('3D failed - '+why(ex),false); return; } }
-  kin=man.kinematics;
+async function load3d(man, keepView){ init3d();
+  if(!man&&joint==='isopod'){ try{ const pk=await post('/api/build',Object.assign(buildBody(),{peek:true})); if(pk&&pk.parts){ man=pk; status(`built (cached) - ${man.print&&man.print.print_valid?'printable':((man.print&&(man.print.violations||man.print.notes))||['not printable']).join('; ')}`,false); } }catch(_){ } }   // built before: straight to it
+  if(!man){                                                                    // no build in hand (View 3D, ?only3d): the preview first, in seconds,
+    if(joint==='isopod'){ loadingOn();                                         // then the printable pieces swapped in under the same camera
+      try{ const pv=await post('/api/build',Object.assign(buildBody(),{preview:true})); if(pv&&pv.parts&&pv.parts.length){ loadingOff(); await show3d(pv,false); status('preview - finishing the printable pieces...',true); } }
+      catch(_){ } }
+    try{ man=await post('/api/build',buildBody()); } catch(ex){ loadingOff(); status('3D failed - '+why(ex),false); return; }
+    loadingOff(); status(`built in ${man.build_seconds}s - ${man.print&&man.print.print_valid?'printable':((man.print&&(man.print.violations||man.print.notes))||['not printable']).join('; ')}`,false);
+    return show3d(man, Object.keys(partMeshes).length>0); }
+  return show3d(man, keepView); }
+async function show3d(man, keepView){ const gen=++loadGen;
+  // all the parts at once (they were fetched one after another), then swapped in together: no half-drawn animal, no flicker
+  const geos=await Promise.all(man.parts.filter(p=>!p.error).map(p=>new Promise(res=>loader.load(p.stl,geo=>res([p.name,geo]),undefined,()=>res(null)))));
+  if(gen!==loadGen) return;                                                     // a newer build started meanwhile: drop this one
+  disposeAll(); kin=man.kinematics;
   if(man.print_joint){ posePivotY=man.print_joint.pivot_y_beyond_joint; posePivotZ=man.print_joint.pivot_z; }   // any print joint (ball/flexi); pin has none
   else { posePivotY=0; posePivotZ=null; }
-  for(const p of man.parts){ if(p.error) continue; await new Promise(res=>loader.load(p.stl,geo=>{geo.computeVertexNormals(); const g=partGroup(geo); partMeshes[p.name]=g; root.add(g); res();},undefined,()=>res())); }
-  setLook(look);                                                               // apply materials, the colormap, the white edges and dark background
-  pose(+$('roll').value); fit(); $('view3d').style.display='flex'; }
-function fit(){ const box=new THREE.Box3().setFromObject(root); if(box.isEmpty()) return; const c=box.getCenter(new THREE.Vector3()), s=box.getSize(new THREE.Vector3()).length();
+  for(const r of geos){ if(!r) continue; const [name,geo]=r; geo.computeVertexNormals(); const g=partGroup(geo); partMeshes[name]=g; root.add(g); }
+  setLook(look); window.__n3d=Object.keys(partMeshes).length;                // apply materials, the colormap and dark background (__n3d: for the tests)
+  if(kin&&kin.profile&&kin.profile.length){ const tot=kin.profile.reduce((a,b)=>a+b,0); const mx=+(180/Math.max(tot,1e-6)).toFixed(1);   // the slider's 100% = ENROLLED: the
+    const was=+$('roll').max||mx, frac=(+$('roll').value)/was; $('roll').max=mx; $('roll').value=(frac*mx).toFixed(1); $('rollval').textContent=rollLabel(+$('roll').value); }   // joints sum to 180 deg, tail under the head
+  pose(+$('roll').value); if(!keepView) fit(); $('view3d').style.display='flex';
+  const gs=Object.values(partMeshes); let i=0; const next=()=>{ if(gen!==loadGen||i>=gs.length) return; addEdges(gs[i++],gen); idle(next); }; idle(next); }
+function fit(){ dirty3d=true; const box=new THREE.Box3().setFromObject(root); if(box.isEmpty()) return; const c=box.getCenter(new THREE.Vector3()), s=box.getSize(new THREE.Vector3()).length();
   ctl.target.copy(c); cam.position.copy(c).add(new THREE.Vector3(0.6,0.55,0.95).multiplyScalar(s*0.9)); cam.near=s/100; cam.far=s*10; cam.updateProjectionMatrix(); }
-function pose(th){ if(!kin||!threeReady) return; rbU.uRoll.value=((+$('roll').max>0)?th/(+$('roll').max):0);   // enrollment-hue mode reads the roll fraction
+function pose(th){ if(!kin||!threeReady) return; dirty3d=true; rbU.uRoll.value=((+$('roll').max>0)?th/(+$('roll').max):0);   // enrollment-hue mode reads the roll fraction
   const rot=new THREE.Matrix4().makeRotationX(-th*Math.PI/180);
   if(kin.pivots){ // isopod model: parts are in one frame; each joint curls about its own pivot (y,z) in print mm, by its share of the head angle (kin.profile, Esteve et al. 2017)
     let M=new THREE.Matrix4();
@@ -856,7 +883,7 @@ function pose(th){ if(!kin||!threeReady) return; rbU.uRoll.value=((+$('roll').ma
     return; }
   const pz=(posePivotZ!=null?posePivotZ:kin.hinge_z), py=posePivotY, offs=kin.offsets; let M=new THREE.Matrix4();
   kin.names.forEach((n,i)=>{ if(i>0){ M=M.clone().multiply(new THREE.Matrix4().makeTranslation(0,offs[i-1],0)).multiply(new THREE.Matrix4().makeTranslation(0,py,pz)).multiply(rot).multiply(new THREE.Matrix4().makeTranslation(0,-py,-pz)); } const g=partMeshes[n]; if(g){g.matrixAutoUpdate=false; g.matrix.copy(M);} }); }
-function highlight(row){ if(!threeReady) return; for(const [n,g] of Object.entries(partMeshes)){ const on=row&&(row==='seg'?n.startsWith('seg'):n===row); const e=g.getObjectByName('edges'); if(e) e.material.opacity=on?1.0:(row?0.35:0.9); } }
+function highlight(row){ if(!threeReady) return; dirty3d=true; for(const [n,g] of Object.entries(partMeshes)){ const on=row&&(row==='seg'?n.startsWith('seg'):n===row); const e=g.getObjectByName('edges'); if(e) e.material.opacity=on?1.0:(row?0.35:0.9); } }
 async function to3D(load){ mode='3d'; $('stageEdit').style.display='none'; $('sheet').style.display='none'; $('stage3d').style.display='block'; $('rollbar').style.display='grid'; $('look').style.display='block'; $('view3d').style.display='flex'; $('view3d').textContent='View sheet'; placeView3D(); updateRbCtl(); if(load) await load3d(null); }
 async function toSheet(){ mode='sheet'; $('stageEdit').style.display='none'; $('stage3d').style.display='none'; $('rollbar').style.display='none'; $('look').style.display='none'; $('sheet').style.display='block'; $('view3d').style.display='flex'; $('view3d').textContent='View 3D'; placeView3D(); updateRbCtl(); await sheet(); }
 // the in-page combined editor: the working studio page, embedded as a stage view (12 Oct 2026). Build-integration (its

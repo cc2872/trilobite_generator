@@ -692,7 +692,11 @@ ROWS_INFO = {}
 PRINT_MIN_R = 0.6   # 25 Oct 2026: the thinnest spine radius at print size, mm (a 1.2 mm round spine prints and survives handling in PLA)
 DEFAULT_HEAD = "diagram"   # 25 Oct 2026: build()'s default head -- the head style 'diagram' (the crescent on the isopod head piece is head="isopod")
 
-def build(P, head=None, face=None, outline=None, rows=None):
+PREVIEW = False   # 25 Oct 2026: set by build(preview=True) -- the pieces as drawn, ornaments on, WITHOUT the joint clearances (the
+                  # 30-degree curl sweeps are three quarters of a build). For the viewer to show the animal in seconds; never printed.
+
+def build(P, head=None, face=None, outline=None, rows=None, preview=False):
+    global PREVIEW; PREVIEW = bool(preview)
     """head: 'isopod' (the crescent head made on the isopod's head piece, crescent_head.py; the default), 'shaped'
     (a parametric outline, shaped_head.py, with `outline` and `face`), or 'generator' (the classic anatomy head).
     rows (10 Oct 2026): a body spec for the rows model (isopod_model/rows.py: per-row length / width / trajectory,
@@ -906,6 +910,11 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
     for k in range(n):
         parts.append(build_part(k, plans, P, J, PV, U, shell=shell, strip_w=K["w"])); _progress(0, k + 1, n)
     lap("parts")
+    if PREVIEW:                                                             # the preview: the pieces as drawn, the spines on, no clearances
+        if H is not None: parts[0] = H
+        elif head not in ("isopod", "shaped"): parts[0] = head_ornaments(P, plans[0][2], parts[0])
+        SKIPPED.clear(); body_ornaments(P, plans, parts); lap("ornaments")
+        return parts, plans, PV, K
     rep = repeats(plans, parts, (H.bounds[1][1] + 1.0) if H is not None else -np.inf)
     global LAST_REPEATS; LAST_REPEATS = dict(rep)
     W = [M.to_manifold(m) for m in parts]                                   # the parts, as manifolds, through the stages
