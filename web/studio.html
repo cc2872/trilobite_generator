@@ -62,7 +62,7 @@
 <body>
 <div class="panel">
   <h1><span>Studio</span><span class="mono" style="color:var(--mid)">head + body</span></h1>
-  <div class="nav"><button onclick="location.href='/tree'" title="browse the orders as a ring/spiral family tree">family tree</button><button id="generator" title="the instrument and advanced page: enrollment measurement (the ruler), all parameters, landmarks and share">measure / advanced →</button></div>
+  <div class="nav"><button onclick="location.href='/tree'" title="browse the orders as a ring/spiral family tree">family tree</button><button id="toprism" title="where this animal sits among the made animals and the fossils">prism</button><button id="generator" title="the instrument and advanced page: enrollment measurement (the ruler), all parameters, landmarks and share">measure / advanced →</button></div>
   <div class="hint">One animal. Click the <b>head</b> or a <b>row</b> on the drawing; its controls appear below. Drag a handle to shape it.</div>
 
   <div class="sect"><span>Start from</span><span id="pg"></span></div>
@@ -317,6 +317,8 @@ function mode3d(on){ $('sheetimg').style.display=on?'none':'block'; const f=$('v
   $('toblue').classList.toggle('on',!on); $('to3d').classList.toggle('on',on); }
 $('sheetback').onclick=()=>{ $('sheetwrap').style.display='none'; };
 $('toblue').onclick=()=>mode3d(false); $('to3d').onclick=()=>mode3d(true);
+$('toprism').onclick=()=>{ try{ sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec, P:S.P})); }catch(_){}   // 30 Oct 2026: the prism reads this draft (?mine=1)
+  location.href='/prism?mine=1'; };
 $('generator').onclick=()=>{ try{ if(S.edited) sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, spec:S.spec, savedName:S.savedBody})); }catch(_){}
   location.href='/?preset='+encodeURIComponent(S.preset||'')+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+(S.edited?'&bodydraft=1':'')+(S.savedBody?'&body='+encodeURIComponent(S.savedBody):''); };
 

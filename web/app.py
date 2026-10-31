@@ -281,6 +281,9 @@ def body_page(): return send_file(os.path.join(ROOT, "web", "body.html"))       
 @app.get("/studio")
 def studio_page(): return send_file(os.path.join(ROOT, "web", "studio.html"))          # the combined editor (p5): head + body on one whole-animal drawing
 
+@app.get("/prism")
+def prism_page(): return send_file(os.path.join(ROOT, "web", "prism.html"))            # the Raup prism (30 Oct 2026): click a point, build it, see where it sits
+
 # ---- saved bodies (the body editor's "save"): web/bodies/<name>.json = {name, preset, spec, doc}. A saved body's
 # name goes wherever a body spec goes (?body=name, /api/build "body").
 BODIES = os.path.join(ROOT, "web", "bodies")

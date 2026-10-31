@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trilobite morphospace - prism</title>
+<!--
+  /prism: the Raup prism (30 Oct 2026). Base = head / thorax / tail length fractions (a triangle: they sum to 1), height =
+  thoracic segments. Dots: the made library (coloured by rear width), TriloMorph fossils, the Gon genera as built, the
+  ten presets. Click any point: its parameters go to the generator (sessionStorage draft, as the studio's View 3D
+  does) and the animal is built in the panel; the orange marker is "you", and the sliders move it. ?p= (a generator
+  share link) and ?mine=1 (the studio's draft) open on that animal. Data: web/static/prism/prism.json
+  (scripts/prism_data.py).
+-->
+<style>
+  :root{ --bg:#000; --ink:#fff; --mid:#9a9a9a; --dim:#5a5a5a; --line:#262626; --you:#f6704f; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink); font-family:"Helvetica Neue",Helvetica,Arial,sans-serif; }
+  #app{ display:grid; grid-template-columns:minmax(0,1fr) minmax(340px,38%); height:100vh; }
+  #stage{ position:relative; overflow:hidden; border-right:1px solid var(--line); }
+  #stage canvas{ display:block; }
+  .lab{ position:absolute; font-size:11px; letter-spacing:.14em; text-transform:uppercase; pointer-events:none; white-space:nowrap; transform:translate(-50%,-50%); }
+  .tick{ position:absolute; font-size:10px; color:var(--mid); pointer-events:none; transform:translate(-100%,-50%); padding-right:8px; }
+  .youlab{ color:var(--you); }
+  #cbar{ position:absolute; left:16px; top:14px; font-size:10px; letter-spacing:.12em; text-transform:uppercase; pointer-events:none; }
+  #cbar .grad{ width:150px; height:6px; margin:6px 0 3px; border:.5px solid var(--ink);
+    background:linear-gradient(90deg,#433e85,#375b8d,#2b748e,#228d8d,#21a685,#40bd72,#77d153,#bade28,#fde725); }
+  #cbar .ends{ display:flex; justify-content:space-between; width:152px; color:var(--mid); letter-spacing:0; }
+  #key{ position:absolute; left:16px; bottom:14px; display:flex; flex-wrap:wrap; gap:6px 16px; align-items:center; font-size:10px;
+    letter-spacing:.12em; text-transform:uppercase; pointer-events:none; max-width:calc(100% - 32px); }
+  #key span{ display:inline-flex; align-items:center; gap:6px; }
+  .dot{ width:7px; height:7px; border-radius:50%; display:inline-block; }
+  .ring{ width:6px; height:6px; border-radius:50%; border:1.2px solid var(--ink); display:inline-block; }
+  .sq{ width:6px; height:6px; border:1.2px solid var(--mid); display:inline-block; }
+  .bar{ width:14px; height:0; border-top:1.5px solid var(--ink); display:inline-block; }
+  #tip{ position:fixed; pointer-events:none; padding:6px 8px; background:rgba(0,0,0,.85); border:.5px solid var(--mid); font-size:11px;
+    line-height:1.45; display:none; max-width:240px; z-index:5; }
+  #hint{ position:absolute; right:16px; top:14px; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--mid); pointer-events:none; }
+  #side{ display:grid; grid-template-rows:auto auto 1fr; min-height:0; }
+  .panel{ padding:14px 16px 10px; border-bottom:1px solid var(--line); }
+  .top{ display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
+  h1{ margin:0; font-size:11px; letter-spacing:.22em; text-transform:uppercase; font-weight:normal; color:var(--mid); }
+  .nav a{ color:var(--mid); font-size:10px; letter-spacing:.14em; text-transform:uppercase; text-decoration:none; margin-left:12px; }
+  .nav a:hover{ color:var(--ink); }
+  #kind{ margin-top:14px; font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--mid); }
+  #name{ font-size:20px; margin:4px 0 2px; font-weight:normal; }
+  #sub{ font-size:11px; color:var(--mid); line-height:1.5; min-height:16px; }
+  .ctl{ display:grid; grid-template-columns:110px 1fr 46px; align-items:center; gap:10px; margin:9px 0; font-size:10px;
+    letter-spacing:.12em; text-transform:uppercase; }
+  .ctl output{ font-variant-numeric:tabular-nums; letter-spacing:0; text-align:right; font-size:11px; }
+  input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; background:transparent; height:16px; }
+  input[type=range]::-webkit-slider-runnable-track{ height:1px; background:var(--ink); }
+  input[type=range]::-moz-range-track{ height:1px; background:var(--ink); }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:9px; height:9px; border-radius:50%; background:var(--you); margin-top:-4px; border:0; }
+  input[type=range]::-moz-range-thumb{ width:9px; height:9px; border-radius:50%; background:var(--you); border:0; }
+  input[type=range]:disabled{ opacity:.35; }
+  .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:12px; }
+  button,.btn{ background:transparent; color:var(--ink); border:1px solid var(--ink); font:inherit; font-size:10px; letter-spacing:.16em;
+    text-transform:uppercase; padding:8px 12px; cursor:pointer; text-decoration:none; }
+  button.main{ background:var(--ink); color:var(--bg); }
+  button:disabled{ opacity:.35; cursor:default; }
+  .seg{ display:inline-flex; border:1px solid var(--mid); }
+  .seg span{ font-size:10px; letter-spacing:.14em; text-transform:uppercase; padding:7px 10px; cursor:pointer; color:var(--mid); }
+  .seg span.on{ background:var(--ink); color:var(--bg); }
+  #fit{ font-size:11px; color:var(--mid); line-height:1.6; margin-top:10px; min-height:18px; }
+  #fit b{ color:var(--ink); font-weight:normal; }
+  #viewwrap{ position:relative; min-height:0; }
+  #view{ position:absolute; inset:0; width:100%; height:100%; border:0; background:#000; display:none; }
+  #empty{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:10px; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--dim); text-align:center; padding:24px; }
+  #credit{ position:absolute; right:16px; bottom:14px; font-size:9px; color:var(--dim); pointer-events:none; }
+  @media (max-width:820px){ #app{ grid-template-columns:1fr; grid-template-rows:56vh auto; height:auto; }
+    #stage{ height:56vh; border-right:0; border-bottom:1px solid var(--line); } #viewwrap{ height:60vh; } #credit{ display:none; } }
+</style>
+<script type="importmap">{"imports":{"three":"/static/three/build/three.module.js","three/addons/":"/static/three/examples/jsm/"}}</script>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <div id="cbar">rear width / max width<div class="grad"></div><div class="ends"><span>0.30</span><span>0.65</span><span>1.00</span></div></div>
+    <div id="hint">click any point</div>
+    <div id="key">
+      <span><i class="dot" style="background:#fff"></i>fossil</span>
+      <span><i class="dot" style="background:#9a9a9a"></i>drawing</span>
+      <span><i class="ring"></i>genus, built</span>
+      <span><i class="sq"></i>preset</span>
+      <span><i class="bar"></i>generator</span>
+      <span><i class="dot" style="background:var(--you)"></i>you</span>
+    </div>
+    <div id="credit"></div>
+  </div>
+  <aside id="side">
+    <div class="panel">
+      <div class="top"><h1>Morphospace prism</h1><span class="nav"><a href="/">studio</a><a href="/generator">generator</a><a href="/tree">tree</a></span></div>
+      <div id="kind">nothing selected</div>
+      <div id="name">-</div>
+      <div id="sub">Pick a fossil, a genus, a preset or any made animal.</div>
+    </div>
+    <div class="panel">
+      <div class="ctl"><span>head</span><input id="s_c" type="range" min="0.18" max="0.45" step="0.005" disabled><output id="v_c">-</output></div>
+      <div class="ctl"><span>tail</span><input id="s_p" type="range" min="0.05" max="0.40" step="0.005" disabled><output id="v_p">-</output></div>
+      <div class="ctl"><span>segments</span><input id="s_n" type="range" min="2" max="16" step="1" disabled><output id="v_n">-</output></div>
+      <div class="ctl"><span>rear width</span><input id="s_r" type="range" min="0.30" max="1.00" step="0.01" disabled><output id="v_r">-</output></div>
+      <div class="row">
+        <span class="seg" id="joint"><span data-j="pin" class="on" title="the measured generator (pin joints), seconds">measured</span><span data-j="isopod" title="the printable isopod model, a minute or more">print</span></span>
+        <button id="build" class="main" disabled>build</button>
+        <a id="open" class="btn" target="_blank" rel="noopener" style="display:none">open in generator</a>
+        <button id="mine" title="the animal open in the studio (this tab)">my trilobite</button>
+      </div>
+      <div id="fit"></div>
+    </div>
+    <div id="viewwrap"><div id="empty">the animal appears here</div><iframe id="view" title="the built animal"></iframe></div>
+  </aside>
+</div>
+<div id="tip"></div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+const $ = id => document.getElementById(id);
+const S3 = Math.sqrt(3) / 2, ZS = 0.045;
+const VIR = ["#433e85","#375b8d","#2b748e","#228d8d","#21a685","#40bd72","#77d153","#bade28","#fde725"].map(h => new THREE.Color(h));
+const D = await (await fetch("/static/prism/prism.json")).json();
+$("credit").textContent = D.credit;
+const B = D.bounds, K = D.made.keys, KI = Object.fromEntries(K.map((k, i) => [k, i]));
+const clip = (k, v) => Math.min(B[k][1], Math.max(B[k][0], v));
+const NMAX = Math.max(16, ...D.fossils.map(f => f.n)) + 1;
+
+// ---------- geometry: ternary (head (0,0), tail (1,0), thorax (0.5,S3)) x segments
+function tern(c, p) { const th = 1 - c - p; return [p + 0.5 * th, S3 * th]; }
+function gl(c, p, n) { const [x, y] = tern(c, p); return [x - 0.5, n * ZS - NMAX * ZS / 2, -(y - S3 / 3)]; }
+function rcol(r) { const t = Math.min(1, Math.max(0, (r - 0.3) / 0.7)) * (VIR.length - 1); const i = Math.min(VIR.length - 2, Math.floor(t));
+  return VIR[i].clone().lerp(VIR[i + 1], t - i); }
+
+// ---------- scene
+const stage = $("stage");
+const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setClearColor(0x000000, 1); stage.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(32, 1, 0.01, 50); camera.position.set(1.55, 0.95, 2.35);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, -0.06, -0.05); controls.enableDamping = true; controls.autoRotate = true; controls.autoRotateSpeed = 0.5;
+controls.minDistance = 0.6; controls.maxDistance = 6; controls.addEventListener("start", () => { controls.autoRotate = false; });
+
+function sprite(kind) { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d");
+  g.lineWidth = 9; g.strokeStyle = "#fff"; g.fillStyle = "#fff";
+  if (kind === "disc") { g.beginPath(); g.arc(32, 32, 28, 0, 7); g.fill(); }
+  if (kind === "ring") { g.beginPath(); g.arc(32, 32, 24, 0, 7); g.stroke(); }
+  if (kind === "square") g.strokeRect(10, 10, 44, 44);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
+function cloud(pos, cols, size, tex, color = 0xffffff, opacity = 1) {
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  if (cols) g.setAttribute("color", new THREE.Float32BufferAttribute(cols, 3));
+  const m = new THREE.PointsMaterial({ size, map: sprite(tex), vertexColors: !!cols, transparent: true, alphaTest: 0.35, opacity, sizeAttenuation: true });
+  if (!cols) m.color.set(color); const o = new THREE.Points(g, m); scene.add(o); return o; }
+
+// every made animal: c, p, n, r from its stored values
+const made = D.made.v.map((v, i) => ({ i, preset: D.made.presets[D.made.preset[i]], c: v[KI.cephFrac], p: v[KI.pygFrac], n: v[KI.segCount], r: v[KI.widthThoraxRear], v }));
+const jit = made.map((_, i) => (((i * 2654435761) % 1000) / 1000 - 0.5) * 0.56);     // deterministic jitter for the integer n
+const madeCols = []; made.forEach(m => { const c = rcol(m.r); madeCols.push(c.r, c.g, c.b); });
+const madePts = cloud(made.flatMap((m, i) => gl(m.c, m.p, m.n + jit[i])), madeCols, 0.017, "disc", 0xffffff, 0.95);
+const fosPts = cloud(D.fossils.flatMap(f => gl(f.c, f.p, f.n)), D.fossils.flatMap(f => f.drawn ? [0.32, 0.32, 0.32] : [1, 1, 1]), 0.06, "disc");
+const genPts = cloud(D.genera.flatMap(g => gl(g.c, g.p, g.n)), null, 0.068, "ring");
+const PRE = Object.entries(D.presets).map(([name, q]) => ({ name, ...q }));
+const prePts = cloud(PRE.flatMap(q => gl(q.c, q.p, q.n)), null, 0.05, "square", 0x9a9a9a);
+
+function lines(pairs, color, dashed = false, opacity = 1) {
+  const g = new THREE.BufferGeometry().setFromPoints(pairs.flat().map(p => new THREE.Vector3(...p)));
+  const m = dashed ? new THREE.LineDashedMaterial({ color, dashSize: 0.018, gapSize: 0.018, transparent: true, opacity })
+                   : new THREE.LineBasicMaterial({ color, transparent: true, opacity });
+  const l = new THREE.LineSegments(g, m); if (dashed) l.computeLineDistances(); scene.add(l); return l; }
+const loop = P => P.map((p, i) => [p, P[(i + 1) % P.length]]);
+const corner = [[1, 0], [0, 1], [0, 0]];                                       // head, tail, thorax as (c, p)
+const T0 = corner.map(([c, p]) => gl(c, p, 0)), T1 = corner.map(([c, p]) => gl(c, p, NMAX));
+lines(loop(T0), 0x9a9a9a); lines(loop(T1), 0x6a6a6a, true); lines(T0.map((p, i) => [p, T1[i]]), 0x6a6a6a, true);
+const dia = [[B.cephFrac[0], B.pygFrac[0]], [B.cephFrac[1], B.pygFrac[0]], [B.cephFrac[1], B.pygFrac[1]], [B.cephFrac[0], B.pygFrac[1]]];
+const DL = dia.map(([c, p]) => gl(c, p, B.segCount[0])), DH = dia.map(([c, p]) => gl(c, p, B.segCount[1])), DF = dia.map(([c, p]) => gl(c, p, 0));
+lines(loop(DF), 0x5a5a5a); lines([...loop(DL), ...loop(DH), ...DL.map((p, i) => [p, DH[i]])], 0xffffff);
+
+// "you": an orange disc, a drop line to the floor, a floor dot; "from": a white ring where the pick started
+const you = new THREE.Group(); scene.add(you); you.visible = false;
+const youDot = new THREE.Points(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0], 3)),
+  new THREE.PointsMaterial({ size: 0.085, map: sprite("disc"), color: 0xf6704f, transparent: true, alphaTest: 0.35, depthTest: false }));
+youDot.renderOrder = 10; you.add(youDot);
+const drop = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+  new THREE.LineBasicMaterial({ color: 0xf6704f, transparent: true, opacity: 0.7 })); scene.add(drop); drop.visible = false;
+const from = new THREE.Points(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0], 3)),
+  new THREE.PointsMaterial({ size: 0.11, map: sprite("ring"), color: 0xffffff, transparent: true, alphaTest: 0.35, depthTest: false }));
+from.renderOrder = 9; scene.add(from); from.visible = false;
+
+// ---------- labels: a few anchors projected each frame
+const anchors = [];
+function label(text, xyz, cls = "lab") { const el = document.createElement("div"); el.className = cls; el.textContent = text; stage.appendChild(el);
+  const a = { el, v: new THREE.Vector3(...xyz) }; anchors.push(a); return a; }
+const off = (p, dx, dy, dz) => [p[0] + dx, p[1] + dy, p[2] + dz];
+label("head", off(T0[0], -0.05, -0.03, 0.03)); label("tail", off(T0[1], 0.05, -0.03, 0.03)); label("thorax", off(T0[2], 0, -0.03, -0.06));
+for (let v = 0; v <= NMAX; v += 4) label(String(v), gl(1, 0, v), "tick");
+label("thoracic segments", off(gl(1, 0, NMAX * 0.55), -0.12, 0, 0));
+const youLab = label("you", [0, 0, 0], "lab youlab"); youLab.el.style.display = "none";
+const tmp = new THREE.Vector3();
+function placeLabels() { const w = stage.clientWidth, h = stage.clientHeight;
+  for (const a of anchors) { tmp.copy(a.v).project(camera); a.el.style.left = ((tmp.x + 1) / 2 * w) + "px"; a.el.style.top = ((1 - tmp.y) / 2 * h) + "px"; } }
+
+// ---------- picking
+const tip = $("tip"), ray = new THREE.Raycaster(), mouse = new THREE.Vector2(); let hover = null, downAt = null;
+function pick() { ray.setFromCamera(mouse, camera);
+  ray.params.Points.threshold = 0.02; const h1 = ray.intersectObjects([fosPts, genPts, prePts]);
+  if (h1.length) return h1[0];
+  ray.params.Points.threshold = 0.009; const h2 = ray.intersectObject(madePts); return h2.length ? h2[0] : null; }
+function describe(h) {
+  if (h.object === fosPts) { const f = D.fossils[h.index]; return { kind: "fossil", item: f, title: f.genus, sub: `${f.order}${f.drawn ? " - drawing" : ""} - TriloMorph ${f.id}` }; }
+  if (h.object === genPts) { const g = D.genera[h.index]; return { kind: "genus, built", item: g, title: g.genus, sub: `built on the ${g.preset} preset (Gon guide)` }; }
+  if (h.object === prePts) { const q = PRE[h.index]; return { kind: "preset", item: q, title: q.name, sub: "order preset" }; }
+  const m = made[h.index]; return { kind: "made animal", item: m, title: `#${m.i + 1}`, sub: `from the ${m.preset} preset (library)` }; }
+renderer.domElement.addEventListener("pointermove", e => { const r = renderer.domElement.getBoundingClientRect();
+  mouse.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); hover = { x: e.clientX, y: e.clientY }; });
+renderer.domElement.addEventListener("pointerleave", () => { hover = null; tip.style.display = "none"; });
+renderer.domElement.addEventListener("pointerenter", () => { controls.autoRotate = false; });   // hold still under the cursor, so the point hovered is the point clicked
+renderer.domElement.addEventListener("pointerdown", e => { downAt = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener("pointerup", e => { if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;   // a drag, not a click
+  const h = pick(); if (h) select(describe(h)); });
+function updateTip() { if (!hover) return; const h = pick(); if (!h) { tip.style.display = "none"; renderer.domElement.style.cursor = "grab"; return; }
+  const d = describe(h); const it = d.item;
+  tip.innerHTML = `<b>${d.title}</b><br>${d.kind}${d.sub ? " - " + d.sub.split(" - ")[0] : ""}<br>head ${(+it.c).toFixed(2)} - tail ${(+it.p).toFixed(2)} - ${Math.round(it.n)} segments`;
+  tip.style.display = "block"; tip.style.left = Math.min(hover.x + 14, innerWidth - 250) + "px"; tip.style.top = (hover.y + 14) + "px";
+  renderer.domElement.style.cursor = "pointer"; }
+
+// ---------- the selected animal: its full parameters, the sliders, the marker, the build
+let cur = null, joint = "pin", presetCache = {}, loads = 0;
+async function presetP(name) { if (!presetCache[name]) presetCache[name] = await (await fetch("/api/preset/" + encodeURIComponent(name))).json(); return { ...presetCache[name] }; }
+async function select(d) {
+  controls.autoRotate = false;
+  let P, preset, notes = [];
+  if (d.kind === "made animal") { preset = d.item.preset; P = await presetP(preset); K.forEach((k, j) => { P[k] = d.item.v[j]; }); }
+  else if (d.kind === "preset") { preset = d.item.name; P = await presetP(preset); }
+  else { preset = d.item.preset; P = await presetP(preset);                       // a fossil or a genus: its proportions on its order's preset
+    const want = { cephFrac: d.item.c, pygFrac: d.item.p, segCount: d.item.n, widthThoraxRear: d.item.r };
+    for (const [k, v] of Object.entries(want)) { if (v == null) continue; const cv = clip(k, v); if (Math.abs(cv - v) > 1e-9) notes.push(`${k} ${(+v).toFixed(k === "segCount" ? 0 : 2)} -> ${(+cv).toFixed(k === "segCount" ? 0 : 2)}`); P[k] = k === "segCount" ? Math.round(cv) : cv; }
+    notes.unshift(`proportions from ${d.kind === "fossil" ? "the photo" : "the recipe"}; everything else from the ${preset} preset`); }
+  cur = { d, P, preset, start: { c: P.cephFrac, p: P.pygFrac, n: P.segCount }, mine: false };
+  $("kind").textContent = d.kind; $("name").textContent = d.title;
+  $("sub").innerHTML = [d.sub, ...notes.map((n, i) => i === 0 ? n : "outside the generator, clipped: " + n)].filter(Boolean).join("<br>");
+  setSliders(P); place(true); build(); }
+function setSliders(P) { for (const [s, k] of [["c", "cephFrac"], ["p", "pygFrac"], ["n", "segCount"], ["r", "widthThoraxRear"]]) {
+  const el = $("s_" + s); el.disabled = false; el.value = P[k]; $("v_" + s).textContent = s === "n" ? Math.round(P[k]) : (+P[k]).toFixed(2); } $("build").disabled = false; }
+function place(isStart) { const P = cur.P; const g = gl(P.cephFrac, P.pygFrac, P.segCount);
+  youDot.geometry.attributes.position.setXYZ(0, ...g); youDot.geometry.attributes.position.needsUpdate = true; you.visible = true;
+  drop.geometry.setFromPoints([new THREE.Vector3(...g), new THREE.Vector3(...gl(P.cephFrac, P.pygFrac, 0))]); drop.visible = true;
+  youLab.v.set(g[0] + 0.05, g[1] + 0.04, g[2]); youLab.el.style.display = "block";
+  if (isStart) { from.geometry.attributes.position.setXYZ(0, ...g); from.geometry.attributes.position.needsUpdate = true; }
+  const moved = Math.abs(P.cephFrac - cur.start.c) + Math.abs(P.pygFrac - cur.start.p) + Math.abs(P.segCount - cur.start.n) > 1e-6;
+  from.visible = moved; fit(); }
+for (const [s, k] of [["c", "cephFrac"], ["p", "pygFrac"], ["n", "segCount"], ["r", "widthThoraxRear"]]) {
+  $("s_" + s).addEventListener("input", e => { if (!cur) return; cur.P[k] = s === "n" ? Math.round(+e.target.value) : +e.target.value;
+    $("v_" + s).textContent = s === "n" ? Math.round(cur.P[k]) : (+cur.P[k]).toFixed(2); $("kind").textContent = "you"; place(false); });
+  $("s_" + s).addEventListener("change", () => { if (cur) build(); }); }
+
+// where you fit: inside the generator's range or not, the nearest fossil, the nearest made animals
+function fit() { const P = cur.P; const sc = { c: 0.06, p: 0.10, n: 2.5 };
+  const dist = q => Math.hypot((q.c - P.cephFrac) / sc.c, (q.p - P.pygFrac) / sc.p, (q.n - P.segCount) / sc.n);
+  const others = D.fossils.filter(f => f !== cur.d.item);                          // a picked fossil is not its own nearest
+  const nf = others.reduce((a, f) => dist(f) < dist(a) ? f : a, others[0]);
+  const near = made.filter(m => dist(m) < 0.25).length;
+  const th = 1 - P.cephFrac - P.pygFrac;
+  $("fit").innerHTML = `head <b>${(+P.cephFrac).toFixed(2)}</b> - thorax <b>${th.toFixed(2)}</b> - tail <b>${(+P.pygFrac).toFixed(2)}</b> - <b>${Math.round(P.segCount)}</b> segments<br>` +
+    `nearest fossil <b>${nf.genus}</b> (${nf.order}) - ${near} of ${made.length} made animals close by`; }
+
+function b64(o) { return btoa(unescape(encodeURIComponent(JSON.stringify(o)))); }
+function build() { if (!cur) return;
+  const P = cur.P, frame = $("view");
+  if (!cur.mine) { try { sessionStorage.setItem("trilo_body_draft", JSON.stringify({ preset: cur.preset, P })); } catch (_) {} }
+  const j = cur.mine ? "isopod" : joint;
+  frame.src = `/generator?preset=${encodeURIComponent(cur.preset)}&bodydraft=1&only3d=1&joint=${j}&sig=${Date.now()}`;
+  frame.style.display = "block"; $("empty").style.display = "none";
+  const myLoad = ++loads;                                                       // lay the animal out flat once its parts are in (the
+  frame.onload = () => { let t = 0; const iv = setInterval(() => {              // generator opens the pin model rolled to its stop)
+    if (myLoad !== loads || ++t > 600) return clearInterval(iv);
+    try { const w = frame.contentWindow; if (!w.__n3d) return; const r = w.document.getElementById("roll");
+      if (r) { r.value = 0; r.dispatchEvent(new Event("input")); } clearInterval(iv); } catch (_) { clearInterval(iv); } }, 250); };
+  const o = $("open"); o.href = `/generator?p=${encodeURIComponent(b64(P))}&joint=${j}`; o.style.display = "inline-block"; }
+$("build").onclick = build;
+$("joint").onclick = e => { const j = e.target.dataset.j; if (!j) return; joint = j;
+  [...$("joint").children].forEach(s => s.classList.toggle("on", s.dataset.j === j)); if (cur && !cur.mine) build(); };
+
+// my trilobite: the studio's draft in this tab (its head and body spec projected onto the parameters by /api/macro)
+async function schemaDefaults() { const j = await (await fetch("/api/schema")).json(); return Object.fromEntries(j.params.map(q => [q.key, q.default])); }
+async function loadMine(P0, preset, draft, base) {
+  let P = { ...(base === "schema" ? await schemaDefaults() : await presetP(preset)), ...(P0 || {}) };   // a ?p= link holds only the changes from the schema defaults
+  if (draft && (draft.spec || (draft.head && draft.head !== "crescent"))) {
+    try { const r = await fetch("/api/macro", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ P, preset, head: draft.head || null, body: draft.spec || null }) });
+      const j = await r.json(); if (j.P) P = { ...P, ...j.P }; } catch (_) {} }
+  cur = { d: { kind: "you" }, P, preset, start: { c: P.cephFrac, p: P.pygFrac, n: P.segCount }, mine: !!draft };
+  $("kind").textContent = "you"; $("name").textContent = draft ? "my trilobite" : "shared animal";
+  $("sub").textContent = draft ? "from the studio (this tab); head and body projected onto the generator's parameters" : "from a generator link";
+  setSliders(P); place(true); build(); }
+$("mine").onclick = async () => { let d = null; try { d = JSON.parse(sessionStorage.getItem("trilo_body_draft") || "null"); } catch (_) {}
+  if (!d || !d.preset) { $("sub").textContent = "open the studio in this tab first, then come back"; return; }
+  loadMine(d.P, d.preset, d); };
+const U = new URLSearchParams(location.search);
+if (U.get("p")) { try { const P = JSON.parse(decodeURIComponent(escape(atob(U.get("p"))))); loadMine(P, U.get("preset") || "proetida", null, "schema"); } catch (_) {} }
+else if (U.get("mine")) $("mine").click();
+
+// ---------- run
+function resize() { const w = stage.clientWidth, h = stage.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener("resize", resize); resize();
+renderer.setAnimationLoop(() => { controls.update(); updateTip(); renderer.render(scene, camera); placeLabels(); });
+window.__prism = { select: (kind, i) => select(describe({ object: { fossil: fosPts, genus: genPts, preset: prePts, made: madePts }[kind], index: i })), get cur() { return cur; } };
+</script>
+</body>
+</html>
