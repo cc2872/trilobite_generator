@@ -54,6 +54,7 @@
   input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:9px; height:9px; border-radius:50%; background:var(--you); margin-top:-4px; border:0; }
   input[type=range]::-moz-range-thumb{ width:9px; height:9px; border-radius:50%; background:var(--you); border:0; }
   input[type=range]:disabled{ opacity:.35; }
+  body.embed #side{ display:none; } body.embed #app{ grid-template-columns:1fr; } body.embed #hint{ display:none; }   /* 31 Oct 2026: the studio embeds /prism?mine=1&embed=1 as its 3rd view -- just the cloud + the 'you' marker, no side panel or build */
   .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:12px; }
   button,.btn{ background:transparent; color:var(--ink); border:1px solid var(--ink); font:inherit; font-size:10px; letter-spacing:.16em;
     text-transform:uppercase; padding:8px 12px; cursor:pointer; text-decoration:none; }
@@ -159,6 +160,15 @@ const made = D.made.v.map((v, i) => ({ i, preset: D.made.presets[D.made.preset[i
 const jit = made.map((_, i) => (((i * 2654435761) % 1000) / 1000 - 0.5) * 0.56);     // deterministic jitter for the integer n
 const madeCols = []; made.forEach(m => { const c = rcol(m.r); madeCols.push(c.r, c.g, c.b); });
 const madePts = cloud(made.flatMap((m, i) => gl(m.c, m.p, m.n + jit[i])), madeCols, 0.017, "disc", 0xffffff, 0.95);
+// the live cloud (31 Oct 2026): every animal built on the server, fetched fresh and drawn like the made library, so the
+// prism fills in over time. Display only -- a point is its hash + coordinates (no parameters are kept to rebuild from).
+function hashJit(h){ let x = 2166136261; for (let i = 0; i < h.length; i++) x = ((x ^ h.charCodeAt(i)) * 16777619) >>> 0; return (x % 1000) / 1000; }
+(async () => { try {
+  const lv = (await (await fetch("/api/prism/points")).json()).points || [];
+  if (!lv.length) return;
+  const cols = []; const pos = lv.flatMap(p => { const c = rcol(p[4]); cols.push(c.r, c.g, c.b); return gl(p[1], p[2], p[3] + (hashJit(p[0]) - 0.5) * 0.56); });
+  cloud(pos, cols, 0.017, "disc", 0xffffff, 0.95);
+} catch (_) {} })();
 const fosPts = cloud(D.fossils.flatMap(f => gl(f.c, f.p, f.n)), D.fossils.flatMap(f => f.drawn ? [0.32, 0.32, 0.32] : [1, 1, 1]), 0.06, "disc");
 const genPts = cloud(D.genera.flatMap(g => gl(g.c, g.p, g.n)), null, 0.068, "ring");
 const PRE = Object.entries(D.presets).map(([name, q]) => ({ name, ...q }));
@@ -266,7 +276,7 @@ function fit() { const P = cur.P; const sc = { c: 0.06, p: 0.10, n: 2.5 };
     `nearest fossil <b>${nf.genus}</b> (${nf.order}) - ${near} of ${made.length} made animals close by`; }
 
 function b64(o) { return btoa(unescape(encodeURIComponent(JSON.stringify(o)))); }
-function build() { if (!cur) return;
+function build() { if (!cur || EMBED) return;                                     // embedded (studio's 3rd view): mark the point only, never build
   const P = cur.P, frame = $("view");
   if (!cur.mine) { try { sessionStorage.setItem("trilo_body_draft", JSON.stringify({ preset: cur.preset, P })); } catch (_) {} }
   const j = cur.mine ? "isopod" : joint;
@@ -298,6 +308,7 @@ $("mine").onclick = async () => { let d = null; try { d = JSON.parse(sessionStor
   if (!d || !d.preset) { $("sub").textContent = "open the studio in this tab first, then come back"; return; }
   loadMine(d.P, d.preset, d); };
 const U = new URLSearchParams(location.search);
+const EMBED = U.has("embed"); if (EMBED) document.body.classList.add("embed");       // 31 Oct 2026: panel-less cloud, embedded as the studio's 3rd view
 if (U.get("p")) { try { const P = JSON.parse(decodeURIComponent(escape(atob(U.get("p"))))); loadMine(P, U.get("preset") || "proetida", null, "schema"); } catch (_) {} }
 else if (U.get("mine")) $("mine").click();
 
