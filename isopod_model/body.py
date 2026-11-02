@@ -676,6 +676,32 @@ def genal_piece_solids(S, plans, off, ga, yr, face):
     return out
 
 
+def margin_fringe(sh, S, k, off, Lc):
+    """The studio head's margin fringe (outline fringe_n, 2 Nov 2026): fringe_n small spines a side, spaced along the
+    front-and-side margin from fringe_from to fringe_to (0 the axis .. 1 the genal angle), each leaving the margin outward
+    (square to it), rooted just inside the plate's edge at mid-height so it is the plate continuing, lifting by
+    fringe_rise. [] when fringe_n is 0."""
+    import shaped_head as SH
+    o = sh.o; n = int(o.get("fringe_n", 0) or 0)
+    if n <= 0: return []
+    ax = np.linspace(0.0, float(sh.xg), 400); yf = np.asarray(sh.edges(ax)[0], float); ok = np.isfinite(yf)
+    X = k * ax[ok]; Y = S["flap"] + k * yf[ok] + off
+    sarc = np.r_[0, np.cumsum(np.hypot(np.diff(X), np.diff(Y)))]
+    if sarc[-1] < 1e-6: return []
+    r0 = float(o.get("fringe_w", 0.035)) * k * SH.RO; L = float(o.get("fringe_len", 0.25)) * Lc; out = []
+    for t in np.linspace(float(o.get("fringe_from", 0.35)), float(o.get("fringe_to", 0.9)), n):
+        st = t * sarc[-1]; px, py = np.interp(st, sarc, X), np.interp(st, sarc, Y)
+        tx, ty = np.interp(st + 0.5, sarc, X) - np.interp(st - 0.5, sarc, X), np.interp(st + 0.5, sarc, Y) - np.interp(st - 0.5, sarc, Y)
+        nn = max(np.hypot(tx, ty), 1e-9); nx, ny = ty / nn, -tx / nn                  # outward: away from the head (its inside is behind the edge)
+        if ny > 0: nx, ny = -nx, -ny
+        rx, ry = px - 1.6 * r0 * nx, py - 1.6 * r0 * ny
+        zr = float(S["zfun"](np.array([abs(rx)]), np.array([ry - off]))[0])
+        sp = curved_spine(r0, 0.4 * r0, L + 1.6 * r0, (rx, ry, 0.5 * zr), yaw_deg=float(np.degrees(np.arctan2(nx, ny))),
+                          pitch_deg=float(o.get("fringe_rise", 8.0)), plate=max(zr, 0.8))
+        out += [sp, M.mirror_x(sp)]
+    return out
+
+
 def shaped_head(P, plans, PV, K, J, outline, face):
     """The head drawn whole on a parametric outline (shaped_head.py), as a height-field solid like every other part:
     solid to the bed, except where it lies over the body behind its rear joint plane, where it is a WALL-thick plate.
@@ -725,6 +751,7 @@ def shaped_head(P, plans, PV, K, J, outline, face):
         else: z = min([zt(x, ye)] + [zt(x + R * np.cos(a), ye + R * np.sin(a)) for a in np.linspace(0, 2 * np.pi, 12, endpoint=False)]) - 0.3
         e = eye.copy(); e.apply_translation((x, ye, z)); extra += [e, M.mirror_x(e)]
     y_rear = S["flap"] + off; y_front = float(S["outline"](0.0, 1.0)[1]) + off
+    extra += margin_fringe(sh, S, k, off, Lc)                               # 2 Nov 2026: a fringe of small spines along the side margin
     # the grafted spines, through the same function as the pin head (anatomy.head.spine_ornaments, 23 Oct 2026):
     # occipital (tines, bend), prong (bend), frontal spine, genal horns. The genal angle is the shape's own (xg, yg).
     yo = y_rear - 0.07 * Lc; xg_, yg_ = k * sh.xg, S["flap"] + off + k * sh.yg

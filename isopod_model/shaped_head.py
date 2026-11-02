@@ -49,6 +49,12 @@ OUTLINE = dict(
     dome_fill=0.82,    # the vaulted part / the whole (0.6 leaves a broad flat brim: Harpetida)
     horn_h=0.32,       # the spine's ridge height / relief (a flat prolongation ~0.18)
     height=1.0,        # crown height, x the model's usual head height
+    fringe_n=0,        # 2 Nov 2026: a fringe of small spines along the side margin (Miraspis, Kettneraspis): how many a side (0 = none)
+    fringe_len=0.25,   # ... each one's length / the head's axial length
+    fringe_w=0.035,    # ... its root radius / the head's half-width
+    fringe_from=0.35,  # ... where the row starts and ends along the front-and-side margin, from the axis (0) to the
+    fringe_to=0.9,     #     genal angle (1)
+    fringe_rise=8.0,   # ... how far they lift as they leave, deg
     # ---- 3 Oct 2026: four more shape groups. Every default is "off".
     genal_at=0.0,      # where the spine leaves the margin: 0 the genal angle; +1 moved inward along the rear margin
                        # (intergenal spine); -1 moved forward along the side (a lateral cephalic spine)
@@ -72,7 +78,8 @@ OUTLINE_RANGE = dict(   # what the silhouette is drawn for (11 Oct 2026: a 0.2-l
     genal_kink_angle=(-180.0, 180.0), genal_web=(0.0, 1.0), genal_web_round=(-1.0, 1.0),
     notch=(0.0, 1.0), notch_exp=(1.0, 8.0), dome_fill=(0.3, 1.0), horn_h=(0.0, 1.0), height=(0.2, 3.0), genal_at=(-1.0, 1.0),
     front_flat=(0.0, 0.9), front_dent=(0.0, 0.5), point_w=(0.02, 1.0), point_fork=(0.0, 0.9), brim_w=(0.0, 1.0), brim_rise=(-0.5, 1.0),
-    brim_curve=(-1.0, 1.0), brim_roll=(0.0, 0.5), brim_pits=(0, 10))
+    brim_curve=(-1.0, 1.0), brim_roll=(0.0, 0.5), brim_pits=(0, 10), fringe_n=(0, 24), fringe_len=(0.02, 1.0), fringe_w=(0.005, 0.15),
+    fringe_from=(0.0, 1.0), fringe_to=(0.0, 1.0), fringe_rise=(-30.0, 60.0))
 
 def trace_of(t):
     """A traced head margin (20 Oct 2026): the RIGHT half, from the front on the axis back to the genal angle, as [[x, y], ...]
