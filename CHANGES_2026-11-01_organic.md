@@ -104,3 +104,8 @@ saved body unchanged); +1 = the turn at the root, then a straight run; -1 = a ho
   ran to 6 GB and was killed.
 - `test_curved_spines`' prong equality is relative (1e-9 x volume), not absolute: two identical calls differed by
   float noise in a longer run. New hook test in `test_organic.py`.
+- (later) A free spine's leave angle and its turn were one number (`rise`: a 155° turn forced a 54° leave), so a horn
+  that leaves low and loops round could not be drawn. New `bend` on free spines (deg, -360..360, default 0): extra turn
+  in the roll's plane, on top of the rise's; the leave angle stays. Studio slider and drawing follow it.
+- The horns refitted to the outline traced on the render: over the head's front, down its sides, ending at the rear
+  corners. x 10.7, y -33.0, len 116, rise 12.6, roll -50, yaw -173.5, hook 0.23, bend 204.

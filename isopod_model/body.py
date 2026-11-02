@@ -534,7 +534,7 @@ def free_spine_solid(sd, mesh, P, others=(), zone=None):
     rt = free_spine_root(sd, mesh, P, zone)
     if rt is None: return []
     x, y, top, low, z_under, cov, fit = rt
-    r0 = RW.free_root_radius(P); pitch0, bend0 = RW.free_spine_angles(sd.get("rise", 45.0)); rise = pitch0 + bend0
+    r0 = RW.free_root_radius(P); pitch0, bend0 = RW.free_spine_angles(sd.get("rise", 45.0)); rise = pitch0 + bend0 + float(sd.get("bend", 0.0))   # bend: extra turn
     tines = int(sd.get("tines", 1) or 1)
     def make(rb, rt_, zr, pitch):                                            # a plain curved spine, or a prong (25 Oct 2026): a shared stem that
         if tines <= 1:                                                       # splits into `tines` tines fanned by `splay`, lifted by `curl` at the split
