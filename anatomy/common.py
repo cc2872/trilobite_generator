@@ -84,7 +84,7 @@ def spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg=0, organic=None):
 SPINE_SEGMENTS = 24      # 24 Oct 2026: was 10 (a visibly beaded arc at print size); the joints are finer spheres too
 
 def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0, roll_deg=0.0, n=SPINE_SEGMENTS, flare=0.0, plate=None, profile=None,
-                 flare_len=0.12, extend=0.0, organic=None, rooted=True, slender=None):
+                 flare_len=0.12, extend=0.0, organic=None, rooted=True, slender=None, curve_toward=None):
     """A tapered spine along a circular arc: `bend_deg` is the total turn of the tangent from root to tip (0 = straight,
     180 = a half circle, tip pointing back at the root), `roll_deg` the plane it bends in about the spine's own axis
     (0 up, 90 toward +x, -90 toward -x, 180 down). Root at `at`, leaving along (yaw, pitch) as spine_solid does.
@@ -100,13 +100,16 @@ def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0
     organic (1 Nov 2026): the protocol's strength (anatomy/organic.py; None = the build's). Above 0 the spine is never
     thinner than its length allows (slender: off for a spine that continues a blade drawn in the plan, whose root is
     the blade's), falls along a full convex profile to a round tip, and -- rooted on a plate (rooted), with no blade to
-    continue -- grows out of it through a collar. 0 = exactly the spine as built before."""
+    continue -- grows out of it through a collar; asked for straight, it bends by organic.CURVE (toward curve_toward,
+    else the rear). 0 = exactly the spine as built before."""
     k = OR.strength(organic)
     if k > 0:
         if slender is None: slender = profile is None
         if slender: base_r, tip_r = OR.spine_radii(base_r, tip_r, length, k)
         else: tip_r = max(tip_r, k * OR.TIP_FRAC * base_r)
         if rooted and plate is None and profile is None: flare = OR.flare(flare, k)
+        if profile is None and abs(bend_deg) < 1e-6:                     # rule 7: nothing straight -- a curve toward the rear
+            bend_deg = k * OR.CURVE; roll_deg = OR.curve_roll(yaw_deg, pitch_deg, at, curve_toward)
     if k <= 0 and abs(bend_deg) < 1e-9 and flare <= 1.0 and plate is None and profile is None and extend <= 0: return spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg, organic=0.0)
     import trimesh
     if extend > 0:                                                        # start the spine `extend` mm BEHIND its root, along its own leave direction, so the
@@ -270,25 +273,33 @@ def prong(d, length, splay_deg, base_r, tip_r, at, yaw_deg=0.0, pitch_deg=0.0, r
       bend_deg, roll_deg (23 Oct 2026)  each tine arches along its length (curved_spine); 0 = straight, as before
     Pointing +y (rear) at yaw 0; yaw > 0 turns toward +x, pitch > 0 lifts. Returns one closed solid."""
     import trimesh
-    d = max(1, int(d)); R = trimesh.transformations.rotation_matrix; k = OR.strength()
+    d = max(1, int(d)); R = trimesh.transformations.rotation_matrix; ko = OR.strength()
     stem_len = max(0.0, min(stem_frac, 0.9)) * length; tine_len = length - stem_len
-    if k > 0: base_r, tip_r = OR.spine_radii(base_r, tip_r, length, k)     # organic: the whole prong is one spine for its proportions
+    if ko > 0: base_r, tip_r = OR.spine_radii(base_r, tip_r, length, ko)     # organic: the whole prong is one spine for its proportions
     r_split = base_r - (base_r - tip_r) * (stem_len / max(length, 1e-6)) if stem_len > 0 else base_r
-    if k > 0 and stem_len > 0: r_split = float(OR.taper(stem_len / max(length, 1e-6), base_r, tip_r, k))
+    if ko > 0 and stem_len > 0: r_split = float(OR.taper(stem_len / max(length, 1e-6), base_r, tip_r, ko))
     solids = []
-    if stem_len > 0.5:
-        solids.append(spine_solid(base_r, r_split, stem_len, at, yaw_deg, pitch_deg) if k <= 0 else
-                      curved_spine(base_r, r_split, stem_len + 0.5 * r_split, at, yaw_deg, pitch_deg, slender=False))   # (organic: runs on into the knot)
     # the split point in the world frame: `at` moved stem_len along the (yaw, pitch) direction
     dirv = np.array([0.0, 1.0, 0.0, 1.0])
     Mrot = R(math.radians(-yaw_deg), (0, 0, 1)) @ R(math.radians(pitch_deg), (1, 0, 0))
     split = np.asarray(at, float) + stem_len * (Mrot @ dirv)[:3]
+    if stem_len > 0.5:
+        if ko <= 0: solids.append(spine_solid(base_r, r_split, stem_len, at, yaw_deg, pitch_deg))
+        else:                                                              # organic: the stem is a curve too (its share of the prong's
+            b_s = ko * OR.CURVE * stem_len / max(length, 1e-6); r_s = OR.curve_roll(yaw_deg, pitch_deg, at)   # bend), the fork at its end
+            solids.append(curved_spine(base_r, r_split, stem_len + 0.5 * r_split, at, yaw_deg, pitch_deg, b_s, r_s, slender=False))   # (runs on into the knot)
+            split = spine_tip(stem_len, at, yaw_deg, pitch_deg, b_s, r_s)
     for k in range(d):
         off = 0.0 if d == 1 else splay_deg * (k / (d - 1) - 0.5)
         L = tine_len * (center_bias if (d % 2 == 1 and k == d // 2) else 1.0)
-        solids.append(curved_spine(r_split, tip_r, L, split, yaw_deg + off, pitch_deg + curl_deg, bend_deg, roll_deg, rooted=False, slender=False))
+        away = None                                                        # organic: a straight tine curves away from the fork's middle
+        if ko > 0 and d > 1 and abs(off) > 1e-6:
+            Mt = R(math.radians(-(yaw_deg + off)), (0, 0, 1)) @ R(math.radians(pitch_deg + curl_deg), (1, 0, 0))
+            away = (Mt @ dirv)[:3] - (Mrot @ dirv)[:3]
+        solids.append(curved_spine(r_split, tip_r, L, split, yaw_deg + off, pitch_deg + curl_deg, bend_deg, roll_deg, rooted=False, slender=False,
+                                   curve_toward=away))
     stub_r = root_r if root_r is not None else 1.15 * max(base_r, r_split)
-    if k > 0 and root_r is None: stub_r = base_r                          # organic: the stem's own collar, not a ball on the shield
+    if ko > 0 and root_r is None: stub_r = base_r                          # organic: the stem's own collar, not a ball on the shield
     knot = trimesh.creation.icosphere(subdivisions=2, radius=1.15 * r_split); knot.apply_translation(split)
     root = trimesh.creation.icosphere(subdivisions=2, radius=stub_r); root.apply_translation(at)
     return M.union(root, knot, *solids)

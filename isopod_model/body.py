@@ -651,12 +651,21 @@ def genal_piece_solids(S, plans, off, ga, yr, face):
             zth = np.maximum(zth, zz)
         # over the body (behind the rear joint plane, inside a part's reach): a WALL-thick plate clear of the thorax's top;
         # beside it: solid to the bed. The change between them is eased over ~2 mm (a hard switch per grid point left a comb).
-        w_over = smoothstep(1.0, -1.0, np.abs(X) - (reach + 0.8 * ga + 0.6)) * smoothstep(yr - 1.0, yr + 1.0, Y)
+        ease = 1.0 + 6.0 * _OR.strength()                                   # organic rule 7: the climb over the body is a long curve, not a step
+        w_over = smoothstep(ease, -1.0, np.abs(X) - (reach + 0.8 * ga + 0.6)) * smoothstep(yr - 1.0, yr + 1.0, Y)
         lift = np.where(np.isfinite(zth), np.maximum(zth + 0.6 + WALL - Z, 0.0), 0.0) * smoothstep(yr + 1.0, yr + 5.0, Y)   # not on the head's own flap
         top = np.maximum(Z + w_over * lift, 0.6)
         for _ in range(2):                                                  # soften the lift (3-tap, both ways), as the head's grid is
             tp = np.pad(top, 1, mode="edge"); top = np.maximum(0.25 * tp[1:-1, :-2] + 0.5 * tp[1:-1, 1:-1] + 0.25 * tp[1:-1, 2:], Z)
             tp = np.pad(top, 1, mode="edge"); top = np.maximum(0.25 * tp[:-2, 1:-1] + 0.5 * tp[1:-1, 1:-1] + 0.25 * tp[2:, 1:-1], Z)
+        if _OR.strength() > 0 and nu_b > 5:                                 # organic rule 7: along its length the climb is one smooth curve --
+            from scipy.ndimage import maximum_filter1d, gaussian_filter1d   # the lift (never less) taken as the upper envelope over ~10 mm,
+            mid = nv_b // 2; step = float(np.mean(np.hypot(np.diff(X[mid]), np.diff(Y[mid])))) or 1.0   # smoothed, the same across the band
+            win = max(3, int(round(10.0 * _OR.strength() / step)) | 1)
+            lift_all = (top - Z).max(axis=0)
+            env = gaussian_filter1d(maximum_filter1d(lift_all, size=win, mode="nearest"), sigma=0.5 * win, mode="nearest")
+            env = np.maximum(env, lift_all)
+            top = np.maximum(top, Z + env[None, :] * smoothstep(yr + 1.0, yr + 5.0, Y))
         for i in (0, nu_b - 1):
             if np.ptp(x1[:, i]) < 1e-9 and np.ptp(y1[:, i]) < 1e-9: top[:, i] = top[:, i].mean()
         bot = np.clip(w_over * (top - WALL), 0.0, top - 0.6)

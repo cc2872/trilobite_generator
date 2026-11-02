@@ -53,7 +53,10 @@ def test_a_kinked_genal_piece_bends_through_an_arc():
 
 def test_widening_keeps_the_inner_edge():
     """A genal piece widened by rule 1 grows on its outer side: its inner edge at the root stays where it was."""
-    p0 = GN.Piece((10, 0), 60, 2.0, 0.0, organic=0.0); p1 = GN.Piece((10, 0), 60, 2.0, 0.0, organic=1.0)
+    p0 = GN.Piece((10, 0), 60, 2.0, 0.0, organic=0.0)
+    turn = OR.CURVE_PLAN; OR.CURVE_PLAN = 0.0                                          # rule 1 alone (rule 7 would bow it)
+    try: p1 = GN.Piece((10, 0), 60, 2.0, 0.0, organic=1.0)
+    finally: OR.CURVE_PLAN = turn
     assert p1.W > p0.W
     inner = lambda p: p.bands[1][1](-0.9, 0.0)[0]                                      # segment1, near its root, v = 0 (inner side)
     assert abs(inner(p1) - inner(p0)) < 0.3
@@ -64,3 +67,19 @@ def test_the_instrument_and_the_landmarks_stay_at_zero():
     assert instrument._measured(P)["organic"] == 0.0
     a = landmarks.cephalon(dict(P, organic=1.0))["lm"]; b = landmarks.cephalon(dict(P, organic=0.0))["lm"]
     assert all(np.allclose(a[k], b[k]) for k in a)
+
+def test_a_straight_spine_is_a_curve_toward_the_rear():
+    """Rule 7: asked for straight, a spine pointing out (+x) bends so its tip turns toward the rear (+y), in the plane."""
+    s = curved_spine(1.0, 0.4, 40.0, (5, 0, 2), 90.0, 0.0, 0.0, organic=1.0)
+    far = s.vertices[np.argmax(s.vertices[:, 0])]
+    assert far[1] > 3.0 and abs(far[2] - 2.0) < 2.0
+    kept = curved_spine(1.0, 0.4, 40.0, (5, 0, 2), 90.0, 0.0, 10.0, 90.0, organic=1.0)   # a bend the user set is kept
+    assert kept.vertices[np.argmax(kept.vertices[:, 0])][1] < 3.0
+
+def test_the_genal_piece_is_one_curve():
+    """Rule 7: unkinked, an arc on the same chord (the tip end stays where it was asked for); kinked, a smooth curve."""
+    p = GN.Piece((10, 0), 40, 2.0, 0.0, organic=1.0)
+    assert p.path is not None and np.allclose(p.path[-1], p.end) and p.path[:, 0].max() > 11.0   # bowed outward
+    q = GN.Piece((10, 0), 40, 2.0, 75, kink=0.3, kink_angle=22, organic=1.0)
+    assert q.path is not None and OR.min_bend_radius(q.path) > 0.5 * q.W
+    assert GN.Piece((10, 0), 40, 2.0, 0.0, organic=0.0).path is None

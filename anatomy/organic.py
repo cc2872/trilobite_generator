@@ -14,10 +14,17 @@ animal, so nothing comes out as a needle, a wire, a sawn-off blade or a hard cor
   5. BENDS         a kink is a curve: the genal piece bends through a fillet of at least BEND_W x its width.
   6. EDGES         a plate's free edge is rolled, not cut square: the top falls to the edge through a quarter round of up
                    to EDGE_R (a solid part's) or, on a plate lifted off the bed, a bullnose its own thickness round.
+  7. CURVES        nothing is a straight line (1 Nov 2026, later): a spine asked for straight (bend 0) bends by CURVE over
+                   its length, its tip turning toward the rear (or, pointing straight back or forward, outward; on the
+                   midline, up); a tine curves away from its fork's middle. The genal piece's centreline is one curve:
+                   an arc turning by CURVE_PLAN from root to tip (its tip turning toward the rear and in), or, kinked, a
+                   smooth curve leaving the root along the first leg and reaching the tip along the second. Where two
+                   outlines meet (a pleural spine leaving its blade) they blend through a smooth maximum, not a crease.
+                   A bend the user set is kept as set.
 
 Where it applies: anatomy/common.curved_spine and spine_solid (every tube: occipital, axial, pleural horns, genal horns,
 prongs and their tines, tail spines, the studio's free spines), anatomy/thorax.plan (pleural spines in the plan),
-anatomy/tail.plan (the margin's lobes), anatomy/genal.Piece (tip, kink), anatomy/head.plan (the genal piece's section), anatomy/head.sphere_eye (the stalk) and
+anatomy/tail.plan (the margin's lobes), anatomy/genal.Piece (tip, kink, its curved centreline), anatomy/head.plan (the genal piece's section), anatomy/head.sphere_eye (the stalk) and
 isopod_model/body.build_part (rule 6, the studio's parts). The builders read STRENGTH, which the
 entry points set from P (assemble.part, isopod_model/body.build); instrument.py builds with organic 0.
 """
@@ -31,6 +38,9 @@ SLENDER_PLAN = 24.0 # the same for a spine drawn in a plan (length / root HALF-w
 SECTION = 0.6       # a plan spine's crest stands SECTION x its half-width above its edges (a rounded ridge, not a flat strip)
 BEND_W = 1.5        # a kink's fillet radius / the piece's width, at least
 LOBE_ROUND = 0.3    # a lobe drawn on a margin (the tail's): its apex eased over this fraction of its half-width
+CURVE = 20.0        # deg: the bend a spine asked for straight is given (tip toward the rear)
+CURVE_PLAN = 30.0   # deg: the turn of an unkinked genal piece's centreline, root to tip
+KINK_EASE = 0.55    # a kinked piece's curve: its control points this fraction of each leg from the root and from the tip
 EDGE_R = 1.6        # the roll on a solid part's free edge, model mm (at most; never more than a third of the plate's width there)
 
 STRENGTH = 1.0      # set per build by set_from(P)
@@ -108,3 +118,73 @@ def edge_drop(d, R, k=None):
     R = k * np.asarray(R, float)
     q = np.clip(1 - np.asarray(d, float) / np.maximum(R, 1e-9), 0, 1)
     return np.where(R > 1e-6, R * (1 - np.sqrt(np.maximum(1 - q * q, 0.0))), 0.0)
+
+
+# ---------------------------------------------------------------- rule 7: curves
+REAR = np.array([0.0, 1.0, 0.0])
+
+def curve_roll(yaw_deg, pitch_deg, at, toward=None):
+    """The roll (curved_spine's bend plane) that turns a spine leaving along (yaw, pitch) toward `toward` (world; None =
+    the rear, or outward when it points along the axis, up on the midline)."""
+    import math, trimesh
+    R = trimesh.transformations.rotation_matrix
+    A = (R(math.radians(-yaw_deg), (0, 0, 1)) @ R(math.radians(pitch_deg), (1, 0, 0)))[:3, :3]
+    d = A @ np.array([0.0, 1.0, 0.0])
+    def perp(g):
+        g = np.asarray(g, float); g = g - np.dot(g, d) * d; n = np.linalg.norm(g); return g / n if n > 1e-9 else None
+    g = perp(toward) if toward is not None else None
+    if g is None:
+        g = perp(REAR)
+        if g is None or abs(np.dot(REAR, d)) > 0.95:
+            x0 = float(np.asarray(at, float)[0])
+            g = perp((np.sign(x0), 0.0, 0.0)) if abs(x0) > 1e-6 else None
+            if g is None: g = perp((0.0, 0.0, 1.0)) if perp((0.0, 0.0, 1.0)) is not None else perp((1.0, 0.0, 0.0))
+    gl = A.T @ g                                                   # in the spine's own frame (before the roll)
+    return math.degrees(math.atan2(gl[0], gl[2]))                  # Ry(roll) e_z = (sin roll, 0, cos roll)
+
+
+def smax(a, b, s):
+    """A smooth maximum (no crease where a and b cross), within s of max(a, b)."""
+    a = np.asarray(a, float); b = np.asarray(b, float)
+    return 0.5 * (a + b + np.sqrt((a - b) ** 2 + np.asarray(s, float) ** 2))
+
+
+PLAN_TURN = np.array([-0.45, 0.89])     # in a plan (x outward, y rear): an unkinked piece's tip turns toward the rear and in
+
+def plan_arc(R, E, turn_deg, n=48):
+    """An arc from R to E (the chord kept), turning by turn_deg: bowed to the side that turns its tip toward the rear
+    and in. (n + 1, 2) points, or None for a short chord or no turn."""
+    import math
+    R = np.asarray(R, float); E = np.asarray(E, float); c = E - R; L = float(np.hypot(*c))
+    th = math.radians(abs(turn_deg))
+    if L < 1e-6 or th < 1e-3: return None
+    u = c / L; nrm = np.array([u[1], -u[0]])
+    if np.dot(nrm, PLAN_TURN) > 0: nrm = -nrm                        # bow away from the way the tip turns
+    rho = 0.5 * L / math.sin(0.5 * th); h = rho * math.cos(0.5 * th)  # radius; the centre's distance from the chord
+    C = 0.5 * (R + E) - h * nrm
+    a0 = math.atan2(*(R - C)[::-1]); a1 = math.atan2(*(E - C)[::-1])
+    da = (a1 - a0 + math.pi) % (2 * math.pi) - math.pi
+    ang = a0 + np.linspace(0.0, 1.0, n + 1) * da
+    return np.c_[C[0] + rho * np.cos(ang), C[1] + rho * np.sin(ang)]
+
+
+def plan_kinked(R, K, E, ease=None, n=48):
+    """A smooth curve for a kinked piece: a cubic leaving R along R->K and reaching E along K->E, its control points
+    `ease` of each leg out from R and back from E (it passes near the kink, not through it)."""
+    ease = KINK_EASE if ease is None else ease
+    R, K, E = (np.asarray(v, float) for v in (R, K, E))
+    c1 = R + ease * (K - R); c2 = E - ease * (E - K)
+    t = np.linspace(0.0, 1.0, n + 1)[:, None]
+    return (1 - t) ** 3 * R + 3 * (1 - t) ** 2 * t * c1 + 3 * (1 - t) * t ** 2 * c2 + t ** 3 * E
+
+
+def min_bend_radius(path):
+    """The tightest radius of curvature along a polyline (inf for a straight one)."""
+    P_ = np.asarray(path, float)
+    if len(P_) < 3: return np.inf
+    a, b, c = P_[:-2], P_[1:-1], P_[2:]
+    ab = np.hypot(*(b - a).T); bc = np.hypot(*(c - b).T); ca = np.hypot(*(a - c).T)
+    cross = np.abs((b - a)[:, 0] * (c - a)[:, 1] - (b - a)[:, 1] * (c - a)[:, 0])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        r = ab * bc * ca / np.maximum(2 * cross, 1e-12)
+    return float(np.min(r))

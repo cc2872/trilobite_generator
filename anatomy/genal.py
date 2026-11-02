@@ -69,10 +69,15 @@ class Piece:
         dl = segs[-1][4]; self.tip = E + rc * dl                   # the furthest point: the round end's apex (or the point)
         self.skeleton = np.vstack([R] + [s[1] for s in segs] + ([self.tip] if rc > 1e-9 else []))
         self.path = None
-        if self.kinked and k > 0:                                  # rule 5: the corner at the kink becomes an arc
-            self.path = self._fillet(R, K, E, d1, d2, k * OR.BEND_W * W, 0.5 * W)
+        if k > 0 and Ls > 0:                                       # rule 7: the centreline is one curve (rule 5's fillet when that will not do)
+            if self.kinked: cand = OR.plan_kinked(R, K, E)
+            else: cand = OR.plan_arc(R, E, k * OR.CURVE_PLAN)
+            if cand is not None and OR.min_bend_radius(cand) > 1.05 * 0.5 * W: self.path = cand
+            elif self.kinked: self.path = self._fillet(R, K, E, d1, d2, k * OR.BEND_W * W, 0.5 * W)   # rule 5
             if self.path is not None:
                 Lq[0] = float(np.hypot(*np.diff(self.path, axis=0).T).sum())
+                te = self.path[-1] - self.path[-2]; te = te / max(np.hypot(*te), 1e-12)
+                self.tip = E + rc * te                             # the round end runs on along the curve's last direction
                 self.skeleton = np.vstack([self.path] + ([self.tip] if rc > 1e-9 else []))
         self.bands = []
         # the root stub: a short round-ended band from inside the head out to the root, so the piece is joined to the head

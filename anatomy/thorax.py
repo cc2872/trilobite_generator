@@ -58,7 +58,7 @@ def plan(P, i):
         hw, _ = OR.plan_spine(ax, w, X_tip, half_w, Ls, k, cap)
         slope = 1.5 * S_sp * np.sqrt(p) / max(X_tip - w, 1e-6)              # the centreline's slope: the plan's half-width is across y
         hb_sp = hw * np.sqrt(1 + slope ** 2)
-        hb_new = np.where(ax > w, hb_sp, np.maximum(hb_old, r0_or * smoothstep(w - ramp, w, ax)))
+        hb_new = np.where(ax > w, hb_sp, OR.smax(hb_old, r0_or * smoothstep(w - ramp, w, ax), 0.3 * r0_or))   # rule 7: no crease
         return (1 - k) * hb_old + k * hb_new
     def edges(x):
         q = q_of(x); p = p_of(x)

@@ -345,6 +345,7 @@ def sphere_eye(R, arc_deg, lensD, lensGap, lensRise, stalk=0.0, stalk_r=0.45, le
     parts = []
     if stalk > 0.05:
         r0 = stalk_r * R; root_z = -embed - stalk
+        if OR.strength() > 0 and abs(bend_deg) < 1e-6: bend_deg = OR.strength() * OR.CURVE   # organic rule 7: no straight stalk
         pts, tang = stalk_arc(stalk, bend_deg, root_z)
         n = len(pts) - 1
         k_ = OR.strength()
