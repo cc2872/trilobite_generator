@@ -8,7 +8,10 @@ artifact — derives from this table. Add a parameter here and it exists everywh
 from dataclasses import dataclass, asdict
 import json, hashlib, warnings
 
-SCHEMA_VERSION = "6.5"      # 23 Oct 2026: curved spines (occipitalBend/Tines/Splay, genalHorn*, termBend, frontSpine*, headProngBend,
+SCHEMA_VERSION = "6.7"      # 1 Nov 2026: the genal piece rebuilt as parts you assemble (anatomy/genal.py): genalAngle (the full circle),
+                            # genalKink / genalKinkAngle, genalTip (pointed .. round), genalWeb / genalWebRound. genalCurve, genalPath and
+                            # genalTaper are gone; coerce() converts them (presets, the library, saved animals). 6.6 is the Dell's sutureFront.
+                            # 6.5 (23 Oct 2026): curved spines (occipitalBend/Tines/Splay, genalHorn*, termBend, frontSpine*, headProngBend,
                             # tailProngBend); defaults 0 reproduce every spine as built since 6.0.
                             # 6.4 (21 Oct 2026): tailOutlineExp, pygAxisLen, pygAxisFrac, pygBorderWidth (TriloMorph pygidia; every default
                             # reproduces the tail as built since v4, so presets and the frozen readings are unchanged).
@@ -103,12 +106,13 @@ PARAMS = [
     Param("headRearArc", "Head rear arc", 0.0, 0.0, 0.7, 0.01, "Head", "Crescent: the rear edge bows back from the axis to the genal angles by this fraction of head length (0 = straight rear, v4)"),
     Param("headRearExp", "Head rear arc shape", 2.2, 1.0, 5.0, 0.05, "Head", "1 = the rear edge leaves the axis at once (thin band); higher = it stays straight and bows late (thick band, short horns)"),
     Param("genalWidth", "Genal arm thickness", 0.12, 0.03, 0.5, 0.01, "Head", "Thickness of the crescent's arm across, / head half-width (harpetid 0.3)"),
-    Param("genalTaper", "Genal arm end", 2.0, 0.5, 3.0, 0.05, "Head", "End of the arm: 0.5 = blunt/rounded, 3 = drawn to a point"),
-    Param("genalPath", "Genal arm path", "s**2", 0, 0, 0, "Head",
-          "Sideways offset of the arm's centreline as a formula in s (0 = root, 1 = tip), scaled by genalCurve. "
-          "e.g. 's**2' flares late, 's' straight, 'sin(pi*s/2)' flares early, '-0.5*s+s**2' hugs the thorax then flares", kind="expr"),
+    Param("genalTip", "Genal spine tip", 0.0, 0.0, 1.0, 0.01, "Head", "Pointed to round: 0 = the width runs down to a point, 1 = a parallel band with a round end (a lobe when short)"),
     Param("genalWidthMM", "Genal arm thickness (mm)", 0.0, 0.0, 30.0, 0.5, "Head", "Absolute arm thickness in mm; 0 = use genalWidth (fraction of half-width)"),
-    Param("genalCurve", "Genal spine curve", 20, -60, 60, 1, "Head", "Inward curl of the genal spines", unit="deg"),
+    Param("genalAngle", "Genal spine direction", 20, -180, 180, 1, "Head", "Where the spine points from its root: 0 straight back, +90 straight out, 180 forward, -90 in over the body", unit="deg"),
+    Param("genalKink", "Genal spine kink", 0.0, 0.0, 0.9, 0.01, "Head", "Where the spine bends, / its length (0 = straight, no kink)"),
+    Param("genalKinkAngle", "Genal spine after the kink", 20, -180, 180, 1, "Head", "Where the part after the kink points (same circle as the direction)", unit="deg"),
+    Param("genalWeb", "Genal web", 0.0, 0.0, 1.0, 0.01, "Head", "An edge from the rear margin to the spine's tip, filling the corner: where it leaves the rear margin, from the genal angle (0 = no web) in to the axial furrow (1)"),
+    Param("genalWebRound", "Genal web roundness", 0.5, -1.0, 1.0, 0.05, "Head", "The web's edge: 0 straight, +1 a curve hugging the corner, -1 bulging out"),
     # ---- the facial suture (27 Sep 2026): the line the cephalon splits along at the moult, drawn as a shallow groove.
     # Gon (2009) p. 21: the three suture types differ only in where the posterior branch meets the margin.
     Param("sutureEnd", "Facial suture end", 0.0, -1.0, 1.0, 0.05, "Head",
@@ -240,7 +244,7 @@ UI = {
                    "macroIndex", "macroAmp", "pygSpine", "pygSplay", "termSpine", "pygMarginal", "pygMarginalLen", "pygSpineRise", "pygSpineBend", "pygSpineGrow", "pygSpineBlade", "pygSpineWidth"],
     },
     "ruler": ["maxAngle", "clearance", "boreDia", "barrelR", "nKnuckles"],
-    "arm": {"path": "genalPath", "curve": "genalCurve", "taper": "genalTaper"},
+    "arm": {"angle": "genalAngle", "kink": "genalKink", "kinkAngle": "genalKinkAngle", "tip": "genalTip", "web": "genalWeb", "webRound": "genalWebRound"},
 }
 
 def apply_macro(P, key, value):
@@ -272,7 +276,7 @@ CELLS = {
     "a1": dict(label="Cheek + genal angle", doc="the side of the head: eye, border, genal spine or prolongation", primary=["eyeSize", "genalSpine", "headRearArc"],
                more=["eyePos", "eyeArc", "eyeHeight", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade", "lensD", "lensGap", "lensRise",
                      "eyeStalk", "eyeStalkR", "eyeLean", "eyeStalkBend", "eyeSphere", "eyeAxial", "eyeTall", "eyeSink", "eyeCollar",
-                     "borderWidth", "genalSweep", "genalCurve", "genalPath", "genalWidth", "genalWidthMM", "genalTaper", "headRearExp",
+                     "borderWidth", "genalSweep", "genalAngle", "genalKink", "genalKinkAngle", "genalTip", "genalWeb", "genalWebRound", "genalWidth", "genalWidthMM", "headRearExp",
                      "headProngs", "headProngLen", "headProngSplay", "headProngStem", "headProngCenter", "headProngWidth", "headProngCurl", "headProngBend",
                      "genalHorn", "genalHornPitch", "genalHornBend", "genalHornRoll", "genalHornYaw", "genalHornWidth", "genalHornFlare",
                      "sutureEnd", "sutureDepth", "eyeRidge"]),
@@ -302,8 +306,9 @@ def cells_check():
 def migrate(P):
     """A v5 parameter dict -> v6: dead keys dropped and reported. coerce() drops them silently; this says which."""
     dead = [k for k in P if k in DEAD_KEYS]
-    Q = {k: v for k, v in P.items() if k not in DEAD_KEYS}
-    return Q, [f"{k}: removed in schema 6.0" for k in dead]
+    Q = migrate_genal({k: v for k, v in P.items() if k not in DEAD_KEYS})
+    old = [k for k in OLD_GENAL if k in P]
+    return Q, [f"{k}: removed in schema 6.0" for k in dead] + ([f"{', '.join(old)}: converted to genalAngle / genalKink / genalTip (schema 6.7)"] if old else [])
 
 DEAD_KEYS = {"headSkin", "skinOlenoides", "skinGltf", "skinHarpetida", "skinProetida", "tubercles", "tubercleSize", "seed", "eyeElong"}
 
@@ -370,7 +375,7 @@ for _p in PARAMS:
 _FORM = dict(length=130, width=69.5, relief=17.1, segCount=6, cephFrac=0.335, pygFrac=0.20,
              marginHeight=0.14, overlap=0.45,
              widthMaxPos=0.20, widthHeadFront=0.75, widthThoraxFront=0.93, widthThoraxRear=0.62, widthTail=0.50,
-             axisFrac=0.28, axisRise=0.0, cephParallel=0.05, genalSweep=0.3, genalSpine=0.12, genalCurve=10,
+             axisFrac=0.28, axisRise=0.0, cephParallel=0.05, genalSweep=0.3, genalSpine=0.12, genalAngle=5.1, genalKink=0.5, genalKinkAngle=14.9,
              headOutlineExp=2.15, headDomeExp=1.5, headDomeFill=0.82,
              tent=1.0, axisSigma=0.55, pleuralSlope=0.74, ringArch=0.22, bladeCamber=0.14,
              tipSweep=0.75, tipTaper=0.85, bladeChord=0.9, spineBase=0.0, spineSweep=45,
@@ -391,7 +396,7 @@ PRESETS = {
     # head, a second or two of Manifold booleans. eyeSolid=0 is still there for a quick build.
     "textured":  dict(dict(_FORM, **_sculpt(1.0)), eyeArc=150,
                       length=150, width=72, segCount=9, cephFrac=0.30, pygFrac=0.22, pygSpine=0.35, pygSplay=16, pygRings=4,
-                      genalSpine=0.32, genalCurve=12, genalPath="s**2", genalWidthMM=5, genalTaper=2.2, headRearArc=0.12, headRearExp=2.0,
+                      genalSpine=0.32, genalAngle=6.2, genalKink=0.5, genalKinkAngle=17.8, genalWidthMM=5, genalTip=0, headRearArc=0.12, headRearExp=2.0,
                       eyeSize=0.16, eyeHeight=0.85, eyePos=0.62, eyeSolid=1, eyeSlope=15, eyeProfile=4.0,
                       lensD=0.14, lensGap=0.25, lensRise=0.35,
                       glabInflate=1.35, widthThoraxRear=0.62, widthTail=0.55, tipTaper=0.8),
@@ -402,7 +407,7 @@ PRESETS["harpetid"] = dict(PRESETS["textured"],
     # Harpetid STL (98 × 144 × 23 mm): dome m 1.42, semi-axes 0.61 × 0.62 of the head, rim 0.2 relief (0.98 mm rms);
     # front outline n 1.89; W/L 1.61; prolongations 1.2 Lc past the occipital ring, 0.3 wh wide, rounded.
     cephFrac=0.42, pygFrac=0.10, segCount=9, width=72, headDomeExp=1.42, headDomeFill=0.61, headOutlineExp=1.89,
-    marginHeight=0.33, genalSpine=1.2, genalCurve=2, genalWidth=0.30, genalTaper=0.6, genalSweep=0.05, cephParallel=0.02,
+    marginHeight=0.33, genalSpine=1.2, genalAngle=2, genalKink=0, genalKinkAngle=2, genalWidth=0.30, genalTip=0.933, genalSweep=0.05, cephParallel=0.02,
     widthThoraxFront=0.58,          # harpid thorax is narrow inside the horseshoe: 55 / 96 mm on the scan
     eyeSize=0.05, eyeHeight=1.0, eyePos=0.45, eyeSolid=0,   # 0.05 wh is below the lens threshold; keep the scan's bump eye
     glabRise=0.12, borderWidth=0.0, pygSpine=0.0, pygRings=2,
@@ -415,7 +420,7 @@ PRESETS["phacopid"] = dict(PRESETS["textured"],
     tipTaper=0.6, bladeChord=1.0)
 PRESETS["diagram"] = dict(PRESETS["textured"],                 # 25 Oct 2026: the textbook trilobite, measured off its diagram (cephalon / thorax / pygidium figure)
     length=130, width=82, relief=17.1, segCount=14, cephFrac=0.32, pygFrac=0.165, widthMaxPos=0.33, widthHeadFront=0.79, overlap=0.25, ringArch=0.4,   # 17:57: pleurae that touch (less lip under the plate ahead), a rounder axis
-    widthThoraxFront=0.94, widthThoraxRear=0.68, widthTail=0.52, axisFrac=0.28, genalSweep=0.3, genalCurve=6,
+    widthThoraxFront=0.94, widthThoraxRear=0.68, widthTail=0.52, axisFrac=0.28, genalSweep=0.3, genalAngle=3, genalKink=0.5, genalKinkAngle=9,
     tipSweep=0.4, tipTaper=0.72, bladeChord=1.3, spineBase=0.0, spineSweep=55, pleuralSlope=0.6, bladeCamber=0.3,        # rounded pleurae; the pleura itself ends in a broad rounded point: no needle (it would snap)
     pygSpine=0.0, pygSplay=18, pygMarginal=8, pygMarginalLen=0.4, pygSpineBlade=1.0, pygSpineWidth=0.6, pygSpineRise=0, pygRings=4, pygWidth=1.0, tailOutlineExp=2.0,   # the fringe: flat triangular lobes of the shield
     pygMarginalFrom=22, pygMarginalTo=158, pygSpineSweep=40, pygLobeBand=0.2, pygLobePoint=1.6, pygBorderWidth=0.12,   # 26 Oct 2026: four lobes a side, all round the margin, leaning back, on a border (was a crown of three round the rear + a pair)
@@ -447,6 +452,7 @@ def coerce(P, base=None, quiet=False):
     """Fill missing keys with defaults, clamp to range, enforce int/odd-int kinds. Unknown keys are dropped.
     A dict that carries no parameter at all warns: that case is almost always a caller mistake, not an empty edit."""
     P, _ = unwrap(P)
+    P = migrate_genal(P)
     Q = dict(base) if base is not None else table_defaults()   # 8 Sep 2026: was defaults() (= textured), which leaked its crescent into every JSON preset
     hits = 0
     for k, v in P.items():
@@ -471,6 +477,31 @@ def coerce(P, base=None, quiet=False):
                       RuntimeWarning, stacklevel=2)
     return Q
 
+OLD_GENAL = ("genalCurve", "genalPath", "genalTaper")          # schema <= 6.5
+
+def migrate_genal(P):
+    """Schema <= 6.5 keys -> 6.7 (1 Nov 2026). The old genal spine was a band whose centreline left the root straight back
+    and drifted sideways by tan(genalCurve) x length x genalPath(s); genalTaper set its end (0.5 blunt .. 3 a point).
+    Here: the same centreline as two straight pieces through its root, middle and tip (genalAngle, genalKink 0.5,
+    genalKinkAngle; one piece when it was nearly straight), and genalTip from the taper. Keys already given win."""
+    if not isinstance(P, dict) or not any(k in P for k in OLD_GENAL): return P
+    P = dict(P); old = {k: P.pop(k) for k in OLD_GENAL if k in P}
+    if not any(k in P for k in ("genalAngle", "genalKink", "genalKinkAngle")):
+        import math, numpy as np
+        from anatomy.common import safe_expr
+        from anatomy.genal import from_old_path
+        try: gc = float(old.get("genalCurve", 20.0))
+        except (TypeError, ValueError): gc = 20.0
+        S_ = np.linspace(0, 1, 241); path = safe_expr(str(old.get("genalPath", "s**2")), S_, None); path = path - path[0]
+        if np.max(np.abs(path)) > 1e-9: path = path / np.max(np.abs(path))
+        a1, kink, a2 = from_old_path(math.tan(math.radians(gc)) * path, S_)
+        P.setdefault("genalAngle", a1); P.setdefault("genalKink", kink); P.setdefault("genalKinkAngle", a2)
+    if "genalTip" not in P and "genalTaper" in old:
+        from anatomy.genal import tip_from_taper
+        try: P["genalTip"] = round(tip_from_taper(old["genalTaper"]), 3)
+        except (TypeError, ValueError): pass
+    return P
+
 def coerce_report(P, base=None):
     """coerce() plus a list of what it silently did: keys clamped to range, int-rounded, or dropped as unknown.
     The sweep records these per row (pre-registration gate 6) so a preset that leaned on a clamp is visible."""
@@ -479,7 +510,9 @@ def coerce_report(P, base=None):
     if unwrapped: notes.append("params: read from the preset file's 'params' block")
     if P and not any(k in BY_KEY for k in P):
         notes.append(f"no parameter keys among {len(P)} given ({', '.join(sorted(map(str, P))[:4])}): built the base animal")
+    if any(k in P for k in OLD_GENAL): notes.append(f"{', '.join(k for k in OLD_GENAL if k in P)}: schema 6.5 genal keys converted (genalAngle / genalKink / genalTip)")
     for k, v in P.items():
+        if k in OLD_GENAL: continue
         if k not in BY_KEY:
             notes.append(f"{k}: unknown key dropped"); continue
         p = BY_KEY[k]

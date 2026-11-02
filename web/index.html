@@ -362,20 +362,23 @@ function drawMap(){
     o.push(`<circle class="ghost" cx="${F(xe)}" cy="${F(ye)}" r="4"/>`, `<circle class="hit" data-c="a1" cx="${F(xe)}" cy="${F(ye)}" r="4" stroke-width="8"/>`,
            hnd('eyeSize',xe+4,ye,q=>(q.x-xe)/hw));
   }
-  // genal spine: the long horn sweeping back off the cheek. The tip grip carries both of its numbers -
-  // drag along the body for length, across it for curve (signed: out past the pleurae, or in over them).
+  // genal spine (1 Nov 2026): a capsule from the genal angle aimed anywhere (genalAngle: 0 back, 90 out, 180 forward), an
+  // optional kink (genalKink, genalKinkAngle), drawn as its centreline. The tip grip is polar about the root: how far is the
+  // length, which way is the direction (the part after the kink, when there is one).
   const Lg=P.genalSpine*hL*g.scGenal, gx=hw*0.96, gyr=headY(g,0.96,'rear');
-  const outRoom=PLANW-16-(cx+gx), inRoom=Math.max(gx-a-6,8);
-  const curPx=q=>0.30*Math.max(q,12)*Math.tan(P.genalCurve*Math.PI/180);   // sideways reach of the tip, signed
-  const invCurve=(q,len)=>Math.atan((q.x-(cx+gx))/(0.30*Math.max(len,12)))*180/Math.PI;
+  const dv=a=>[Math.sin(a*Math.PI/180), Math.cos(a*Math.PI/180)];
+  const kk=(+P.genalKink||0)>0.01?+P.genalKink:0, d1=dv(+P.genalAngle||0), d2=dv(kk?(+P.genalKinkAngle||0):(+P.genalAngle||0));
+  const Kx=cx+gx+d1[0]*Lg*(kk||0.5), Ky=gyr+d1[1]*Lg*(kk||0.5), Tx=cx+gx+d1[0]*Lg*(kk||1)+(kk?d2[0]*Lg*(1-kk):0), Ty=gyr+d1[1]*Lg*(kk||1)+(kk?d2[1]*Lg*(1-kk):0);
+  const invAng=q=>{ const ox_=kk?Kx:cx+gx, oy_=kk?Ky:gyr; return Math.atan2(q.x-ox_, q.y-oy_)*180/Math.PI; };
+  const invLen=q=>{ const ox_=kk?Kx:cx+gx, oy_=kk?Ky:gyr; const d=Math.hypot(q.x-ox_, q.y-oy_); return (kk?Lg*kk+d:d)/(hL*g.scGenal); };
+  const kAng=kk?'genalKinkAngle':'genalAngle';
   if(Lg>3){
-    const dx=Math.max(Math.min(curPx(Lg), outRoom), -inRoom);
-    const horn=s=>`M${F(cx+s*gx)} ${F(gyr)} Q${F(cx+s*(gx+0.35*dx))} ${F(gyr+0.60*Lg)} ${F(cx+s*(gx+dx))} ${F(gyr+Lg)}`;
+    const horn=s=>`M${F(cx+s*gx)} ${F(gyr)} L${F(cx+s*(Kx-cx))} ${F(Ky)} L${F(cx+s*(Tx-cx))} ${F(Ty)}`;
     o.push(`<path class="mir" d="${horn(-1)}"/>`, `<path class="ink" d="${horn(1)}"/>`, `<path class="hit" data-c="a1" d="${horn(1)}"/>`);
-    o.push(hnd2('genalCurve','genalSpine',cx+gx+dx,gyr+Lg,q=>invCurve(q,Lg),q=>(q.y-gyr)/(hL*g.scGenal)));
+    o.push(hnd2(kAng,'genalSpine',Tx,Ty,invAng,invLen));
   } else {
     o.push(`<path class="ghost" d="M${F(cx+gx)} ${F(gyr)} L${F(cx+gx+7)} ${F(gyr+9)}"/>`,
-           hnd2('genalCurve','genalSpine',cx+gx+7,gyr+9,q=>invCurve(q,12),q=>(q.y-gyr)/(hL*g.scGenal)));
+           hnd2('genalAngle','genalSpine',cx+gx+7,gyr+9,q=>Math.atan2(q.x-(cx+gx),q.y-gyr)*180/Math.PI,q=>Math.hypot(q.x-(cx+gx),q.y-gyr)/(hL*g.scGenal)));
   }
   // pleural spine: the sketch's outward arrow. Its tip is polar about the blade root - how far out is the
   // length, how far back is the sweep - so the one grip carries both numbers, as the genal horn's does.
@@ -546,7 +549,7 @@ function packing(){ const d=document.createElement('div'); d.className='pack';
 const VISUAL={
  frame:()=>[featureSelect('frame'), slider('length'), slider('width'), slider('relief'), slider('segCount'), slider('cephFrac'), slider('pygFrac')],
  b1:()=>[glyph('glab','0 0 340 125'), slider('glabInflate'), slider('glabRise'), slider('glabLobes'), slider('glabFront'), slider('headOutlineExp'), slider('headDomeExp'), slider('cephParallel'), slider('occipitalSpine')],
- a1:()=>[featureSelect('a1'), packing(), slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('eyePos'), slider('eyeLat'), slider('eyeStalk'), slider('eyeStalkR'), slider('eyeLean'), slider('eyeSolid'), slider('eyeSlope'), slider('eyeShade'), slider('eyeProfile'), slider('lensD'), slider('lensGap'), slider('lensRise'), slider('genalSpine'), slider('genalCurve'), slider('genalPath'), slider('genalTaper'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
+ a1:()=>[featureSelect('a1'), packing(), slider('eyeSize'), slider('eyeArc'), slider('eyeHeight'), slider('eyePos'), slider('eyeLat'), slider('eyeStalk'), slider('eyeStalkR'), slider('eyeLean'), slider('eyeSolid'), slider('eyeSlope'), slider('eyeShade'), slider('eyeProfile'), slider('lensD'), slider('lensGap'), slider('lensRise'), slider('genalSpine'), slider('genalAngle'), slider('genalKink'), slider('genalKinkAngle'), slider('genalTip'), slider('genalWeb'), slider('genalWebRound'), slider('headRearArc'), slider('headRearExp'), slider('headProngs'), slider('headProngLen'), slider('headProngSplay'), slider('headProngStem'), slider('headProngCenter'), slider('headProngCurl')],
  b2:()=>[featureSelect('b2'), slider('axisFrac'), slider('axisRise'), slider('furrowDepth'), slider('ringArch'), slider('axialSpine')],
  a2:()=>[glyph('pleura','0 0 340 110'), featureSelect('a2'), slider('fulcrum'), slider('pleuralSlope'), slider('overlap'), slider('spineBase'), slider('spineSweep')],
  b3:()=>[slider('pygRings'), slider('pygAxisLen'), slider('pygAxisFrac'), slider('tailRelief'), slider('tailDomeExp')],

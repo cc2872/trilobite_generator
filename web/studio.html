@@ -140,7 +140,7 @@ function axialOf(r,i){ const P=S.P||{}; const rel=+P.relief||17; const thx=S.BD.
 const ALIAS={glabInflate:'glab_inflate', eyePos:'eye_pos', eyeLat:'eye_lat', eyeSize:'eye_size', glabRise:'glab_rise'};
 const RH={
   width:[0.6,2.0], length:[0.5,2.0], front_exp:[1.0,6.0], front_point:[0,0.6], widest:[0,0.6], side:[0,0.6], rear_taper:[0,0.6], corner:[0,0.5],
-  genal:[0,2.5], genal_w:[0.03,0.6], genal_tip:[0.05,1.0], genal_spread:[-30,60], genal_curve:[-60,60], notch:[0,1], notch_exp:[1,6], dome_fill:[0.4,1],
+  genal:[0,2.5], genal_w:[0.03,0.6], genal_tip:[0,1.0], genal_angle:[-180,180], genal_kink:[0,0.9], genal_kink_angle:[-180,180], genal_web:[0,1], genal_web_round:[-1,1], notch:[0,1], notch_exp:[1,6], dome_fill:[0.4,1],
   horn_h:[0,0.6], height:[0.4,2.0], genal_at:[-1,1], front_flat:[0,0.9], front_dent:[0,0.3], point_w:[0.02,0.5], point_fork:[0,0.8],
   brim_w:[0,0.6], brim_rise:[0,0.4], brim_curve:[-1,1], brim_roll:[0,0.3], brim_pits:[0,6,1],
   eye_size:[0,0.5], eye_pos:[0.2,0.95], eye_height:[0.2,2.5], eye_lat:[0,0.95], axis_frac:[0.15,0.45], glab_inflate:[0.5,2.0], glab_rise:[0,0.6],
@@ -222,7 +222,7 @@ $('plus').onclick=()=>{ const at=(S.sel&&S.sel.type==='row')?S.sel.i+1:S.spec.li
 $('minus').onclick=()=>{ const i=(S.sel&&S.sel.type==='row')?S.sel.i:S.spec.list.length-1; removeRow(i); status(`row ${i} removed`); };
 
 function slider(box,k,val,lo,hi,step,onin,tag,faint){ const d=document.createElement('div'); d.className='ctrl';
-  d.innerHTML=`<div class="lab"><span>${({front_exp:'front_exp - pointiness (1.2 sharp, 2 round, 4 blunt)',genal_tip:'genal_tip - tip / root width',notch:'notch - rear margin U depth'})[k]||k}${tag?' <span style="color:var(--mid)">- '+tag+'</span>':''}</span><span class="val" id="v_${k}"></span></div><input type="range" min="${lo}" max="${hi}" step="${step}" id="s_${k}">`;
+  d.innerHTML=`<div class="lab"><span>${({front_exp:'front_exp - pointiness (1.2 sharp, 2 round, 4 blunt)',genal_tip:'genal_tip - pointed (0) to round (1)',genal_angle:'genal_angle - 0 back, 90 out, 180 forward, -90 in',genal_kink:'genal_kink - where it bends (0 = straight)',genal_kink_angle:'genal_kink_angle - where the part after the kink points',genal_web:'genal_web - web anchor on the rear margin (0 = none)',genal_web_round:'genal_web_round - 0 straight, +1 hugs the corner, -1 bulges',notch:'notch - rear margin U depth'})[k]||k}${tag?' <span style="color:var(--mid)">- '+tag+'</span>':''}</span><span class="val" id="v_${k}"></span></div><input type="range" min="${lo}" max="${hi}" step="${step}" id="s_${k}">`;
   if(faint) d.style.opacity=0.4; box.appendChild(d); const inp=d.querySelector('input'); inp.value=val; d.querySelector('.val').textContent=fmt(val);
   inp.oninput=()=>{ onin(+inp.value); d.querySelector('.val').textContent=fmt(+inp.value); d.querySelector('.val').classList.add('on'); }; return d; }
 
@@ -500,7 +500,7 @@ new p5(s=>{
     else if(h&&h.kind==='ax'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; ownAxial(h.i); S.drag={kind:'ax',i:h.i,k:h.k,root:h.root}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='ph'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; ownHorn(h.i); S.drag={kind:'ph',i:h.i,k:h.k,root:h.root}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='ts'){ ownTail(); S.sel={type:'tailspine',j:h.j}; S.drag={kind:'ts',j:h.j,k:h.k}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
-    else if(h&&h.kind==='head'){ S.sel={type:'head'}; S.headSel=h.k; S.drag={kind:'head',k:h.k,elev:!!h.elev,x0:s.mouseX,y0:s.mouseY,start:headSnapshot()}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
+    else if(h&&h.kind==='head'){ S.sel={type:'head'}; S.headSel=h.k; S.drag={kind:'head',k:h.k,elev:!!h.elev,x0:s.mouseX,y0:s.mouseY,start:headSnapshot(),H0:JSON.parse(JSON.stringify((S.HD&&S.HD.diagram.handles)||{}))}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else { S.sel=null; S.drag=null; renderContext(); renderTable(); } };
   s.mouseReleased=()=>{ if(S.drag){ if(['ax','ph','ts','fs'].includes(S.drag.kind)) sendBody(); S.drag=null; stage.style.cursor='grab'; } };
   s.mouseDragged=()=>{ if(!S.drag) return;
@@ -566,7 +566,7 @@ new p5(s=>{
           P.genalHornBend=Math.max(0,Math.min(180,Math.round(bend/5)*5)); P.genalHornRoll=sag>=0?90:-90; } }      // bending in plan = rolled to the side (+x = outward)
       S.edited=true; invalidateBuild(); renderContext(false); return; }
     // head: the body canvas runs fore-aft DOWN and across to the RIGHT, so remap the head editor's deltas
-    const sc=headScale(); const pxH=sc*px; const st=S.drag.start, L=S.HD.diagram.size.length;
+    const sc=headScale(); const pxH=sc*px; const st=S.drag.start, L=S.HD.diagram.size.length, Lh=L;
     const along=(s.mouseY-S.drag.y0)/pxH, across=(s.mouseX-S.drag.x0)/pxH;   // along:+rear  across:+outward
     const v={};
     switch(S.drag.k){
@@ -579,8 +579,20 @@ new p5(s=>{
       case 'glabella': v.glab_len=st.glab_len-along/L; v.glab_inflate=st.glab_inflate+across*1.5; break;
       case 'eye':      v.eye_pos=st.eye_pos-along/L; v.eye_lat=st.eye_lat+across; break;
       case 'brim':     v.brim_w=st.brim_w-across/0.7; break;
-      case 'spine': {  const r=(S.HD.diagram.handles||{}).root||[1,0]; const tx=(s.mouseX-ox)/pxH, ty=(s.mouseY-oy)/pxH-HEADDY/sc;   // mouse in head units (24 Oct 2026: HEADDY is model mm, so / sc - it put the tip half a head-width behind the cursor)
-                       const ax=Math.abs(tx), ay=ty; const dx=ax-r[0], dy=ay-r[1]; v.genal=Math.hypot(dx,dy)/L; v.genal_spread=Math.atan2(dx,dy)*180/Math.PI; break; } }
+      // 1 Nov 2026: the genal piece. The tip turns the whole circle about the root (or, with a kink, about the kink); the kink
+      // grip bends it (drag the middle of a straight spine to make one); the web grip slides the web's anchor along the rear margin.
+      case 'spine': case 'kink': case 'web': {
+        const H0=S.drag.H0||{}, R0=H0.root||[1,0], K0=H0.kink||R0, T0=H0.spine||R0;
+        const mx=Math.abs((s.mouseX-ox)/pxH), my=(s.mouseY-oy)/pxH-HEADDY/sc;   // mouse in head units (HEADDY is model mm, so / sc)
+        const ang=(a,b)=>Math.atan2(b[0]-a[0],b[1]-a[1])*180/Math.PI, dist=(a,b)=>Math.hypot(b[0]-a[0],b[1]-a[1]);
+        const rc=0.5*(+st.genal_w||0.1)*(+st.genal_tip||0);                  // the round end's radius (head units)
+        if(S.drag.k==='spine'){ const M=[mx,my];
+          if((+st.genal_kink||0)>0.01){ const L1=dist(R0,K0), L=L1+dist(K0,M); v.genal=L/Lh; v.genal_kink=Math.min(0.9,L1/Math.max(L-rc,1e-6)); v.genal_kink_angle=ang(K0,M); }
+          else { v.genal=dist(R0,M)/Lh; v.genal_angle=ang(R0,M); v.genal_kink_angle=v.genal_angle; } }
+        else if(S.drag.k==='kink'){ const M=[mx,my]; const L1=dist(R0,M), L=L1+dist(M,T0);
+          v.genal=L/Lh; v.genal_kink=Math.max(0.02,Math.min(0.9,L1/Math.max(L-rc,1e-6))); v.genal_angle=ang(R0,M); v.genal_kink_angle=ang(M,T0); }
+        else { const span=Math.max(R0[0]-0.12,1e-3); v.genal_web=Math.max(0,Math.min(1,(R0[0]-mx)/span)); }
+        break; } }
     for(const [k,val] of Object.entries(v)) if(Number.isFinite(val)) setHeadKey(k,val,true);
     sendHead(); };
   function headSnapshot(){ const o={}; for(const k of Object.keys(RH)) if(isOut(k)||isFace(k)) o[k]=headCur(k); return o; }

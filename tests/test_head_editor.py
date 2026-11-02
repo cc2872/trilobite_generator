@@ -59,8 +59,8 @@ def test_saved_heads_round_trip(c, tmp_path, monkeypatch):
     assert A._iso_key(P, "t-harpes") == A._iso_key(P, {"style": "harpes", "outline": {"genal": 1.6}, "face": {"glab_len": 0.5}})
     assert "-h-custom-" in A._iso_key(P, "t-harpes")
     # edits on top of a saved head; saving from a saved head flattens onto the guide style
-    r = c.post("/api/heads", json={"name": "t-harpes2", "style": "t-harpes", "outline": {"genal_spread": 15}})
-    assert r.get_json()["saved"]["style"] == "harpes" and r.get_json()["saved"]["outline"] == {"genal": 1.6, "genal_spread": 15.0}
+    r = c.post("/api/heads", json={"name": "t-harpes2", "style": "t-harpes", "outline": {"genal_angle": 15}})
+    assert r.get_json()["saved"]["style"] == "harpes" and r.get_json()["saved"]["outline"] == {"genal": 1.6, "genal_angle": 15.0}
     assert c.delete("/api/heads/t-harpes2").status_code == 200 and c.delete("/api/heads/t-harpes2").status_code == 404
     assert [h["name"] for h in c.get("/api/heads").get_json()] == ["t-harpes"]
 
@@ -237,8 +237,8 @@ def test_macro_projection_and_saved_body_head(c, tmp_path, monkeypatch):
     b = RW.boring(P); b[4]["width"] = 40.0; b[4]["sweep"] = 35.0; b[2]["tip"] = 12.0
     m = RW.macro(P, {"list": b})
     assert m["segCount"] == 9 and m["width"] == pytest.approx(80.0) and 0.3 < m["widthMaxPos"] < 0.8 and m["macroIndex"] == 2 and m["macroAmp"] > 0.2
-    hm = HS.macro(P, dict(HS.outline("harpes"), genal=1.0, genal_curve=15), {"eye_size": 0.2}, HS.STYLES["harpes"]["params"])
-    assert hm["genalSpine"] == pytest.approx(1.0) and hm["genalCurve"] == -15 and hm["eyeSize"] == pytest.approx(0.2) and hm["cephFrac"] > P["cephFrac"]
+    hm = HS.macro(P, dict(HS.outline("harpes"), genal=1.0, genal_angle=-15), {"eye_size": 0.2}, HS.STYLES["harpes"]["params"])
+    assert hm["genalSpine"] == pytest.approx(1.0) and hm["genalAngle"] == -15 and hm["eyeSize"] == pytest.approx(0.2) and hm["cephFrac"] > P["cephFrac"]
     # through the site: a saved head, a saved body that remembers it, and /api/macro on both
     assert c.post("/api/heads", json={"name": "t-mh", "style": "harpes", "outline": {"genal": 1.0}, "face": {"eye_size": 0.2}}).status_code == 200
     assert c.post("/api/bodies", json={"name": "t-mb", "preset": "textured", "head": "t-mh", "spec": {"list": b}}).status_code == 200

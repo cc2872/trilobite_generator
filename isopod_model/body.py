@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import numpy as np, trimesh
 import schema, mesh as M
 from anatomy import head as HEAD, thorax as THORAX, tail as TAIL
-from anatomy.common import spine_solid, curved_spine, prong, pitch
+from anatomy.common import spine_solid, curved_spine, prong, pitch, smoothstep
 from joints import ball as BALL
 from manifold3d import Manifold, OpType, Mesh as _MMesh
 
@@ -601,6 +601,51 @@ def body_ornaments(P, plans, parts, skip=()):
             if sols: parts[best[0]] = M.union(parts[best[0]], *sols)
 
 
+def genal_piece_solids(S, plans, off, ga, yr, face):
+    """The shaped head's genal piece (1 Nov 2026, anatomy/genal.py through shaped_head.Shape.piece) as solids, both sides:
+    each band of the piece a height field under Shape.piece_z, in model mm. Beside the body it is solid to the bed (it
+    prints without supports, as the head's own spine did); over the body (behind the head's rear joint plane, inside a
+    segment's reach) it is a WALL-thick plate held clear of the thorax's top."""
+    sh = S["shape"]; pc = getattr(sh, "piece", None)
+    if pc is None or not pc.bands: return []
+    k = S["scale"]; kz = S["kz"]; flap = S["flap"]
+    segs = []                                                               # each body part's outline extent and surface, for "over the body"
+    for name, mod, Sk, offk in plans[1:]:
+        e = np.array([Sk["outline"](u, v) for u in np.linspace(-1, 1, 81) for v in (0.0, 1.0)])
+        segs.append((e[:, 1].min() + offk - 4.0, e[:, 1].max() + offk + 4.0, np.abs(e[:, 0]).max(), Sk["zfun"], offk))
+    out = []
+    for nm, o_, s_of in pc.bands:
+        nu_b = 31 if nm == "root" else 81; nv_b = 13
+        U_ = np.linspace(-1, 1, nu_b); V_ = np.linspace(0, 1, nv_b)
+        P1 = np.array([[o_(u_, v_) for u_ in U_] for v_ in V_]); x1, y1 = P1[..., 0], P1[..., 1]
+        sg = np.repeat(np.array([s_of(u_) for u_ in U_])[None, :], nv_b, 0); vg = np.repeat(V_[:, None], nu_b, 1)
+        z1 = sh.piece_z(nm, sg, vg, x1, y1, face)
+        for i in (0, nu_b - 1):                                             # a pinched end (a round tip's apex) carries one z
+            if np.ptp(x1[:, i]) < 1e-9 and np.ptp(y1[:, i]) < 1e-9: z1[:, i] = z1[:, i].mean()
+        X = k * x1; Y = flap + k * y1 + off; Z = kz * z1
+        reach = np.zeros_like(Y); zth = np.full_like(Y, -np.inf)
+        for y0_, y1_, w_, zf, offk in segs:
+            m = (Y >= y0_) & (Y <= y1_)
+            if not m.any(): continue
+            reach = np.where(m, np.maximum(reach, w_), reach)
+            zz = np.full_like(Y, -np.inf); zz[m] = np.asarray(zf(np.minimum(np.abs(X[m]), w_), Y[m] - offk), float)   # its top at |x|, held at its edge beyond
+            zth = np.maximum(zth, zz)
+        # over the body (behind the rear joint plane, inside a part's reach): a WALL-thick plate clear of the thorax's top;
+        # beside it: solid to the bed. The change between them is eased over ~2 mm (a hard switch per grid point left a comb).
+        w_over = smoothstep(1.0, -1.0, np.abs(X) - (reach + 0.8 * ga + 0.6)) * smoothstep(yr - 1.0, yr + 1.0, Y)
+        lift = np.where(np.isfinite(zth), np.maximum(zth + 0.6 + WALL - Z, 0.0), 0.0) * smoothstep(yr + 1.0, yr + 5.0, Y)   # not on the head's own flap
+        top = np.maximum(Z + w_over * lift, 0.6)
+        for _ in range(2):                                                  # soften the lift (3-tap, both ways), as the head's grid is
+            tp = np.pad(top, 1, mode="edge"); top = np.maximum(0.25 * tp[1:-1, :-2] + 0.5 * tp[1:-1, 1:-1] + 0.25 * tp[1:-1, 2:], Z)
+            tp = np.pad(top, 1, mode="edge"); top = np.maximum(0.25 * tp[:-2, 1:-1] + 0.5 * tp[1:-1, 1:-1] + 0.25 * tp[2:, 1:-1], Z)
+        for i in (0, nu_b - 1):
+            if np.ptp(x1[:, i]) < 1e-9 and np.ptp(y1[:, i]) < 1e-9: top[:, i] = top[:, i].mean()
+        bot = np.clip(w_over * (top - WALL), 0.0, top - 0.6)
+        m_ = M._closed(np.c_[X.ravel(), Y.ravel(), top.ravel()], np.c_[X.ravel(), Y.ravel(), bot.ravel()], nv_b, nu_b)
+        out += [m_, M.mirror_x(m_)]
+    return out
+
+
 def shaped_head(P, plans, PV, K, J, outline, face):
     """The head drawn whole on a parametric outline (shaped_head.py), as a height-field solid like every other part:
     solid to the bed, except where it lies over the body behind its rear joint plane, where it is a WALL-thick plate.
@@ -638,6 +683,8 @@ def shaped_head(P, plans, PV, K, J, outline, face):
     fill = M._closed(np.c_[FX.ravel(), FY.ravel(), fz.ravel()], np.c_[FX.ravel(), FY.ravel(), np.zeros(FX.size)], FX.shape[0], FX.shape[1])
     head = M.from_manifold(_force(M.to_manifold(head) + M.to_manifold(fill)))
     head = max(head.split(only_watertight=False), key=lambda b: b.volume)
+    pieces = genal_piece_solids(S, plans, off, ga, yr, fc)                 # 1 Nov 2026: the genal piece, its own solid, aimed anywhere
+    if pieces: head = M.from_manifold(_force(M.to_manifold(head) + M.to_manifold(M.union(*pieces))))
     # the preset's ornaments, as isopod_head places them: on this head's own surface
     zt = lambda x_, y_: float(S["zfun"](np.array([abs(x_)]), np.array([y_ - off]))[0])
     extra = []; Lc = float(S["Lc"]); margin = float(S["margin"]); E = S["eye"]
@@ -762,7 +809,7 @@ def _head_sig():
     if _HEAD_SIG is None:
         import hashlib; h = hashlib.sha1(); here = os.path.dirname(os.path.abspath(__file__))
         for f in ("body.py", "shaped_head.py", "crescent_head.py", "head_styles.py", "../anatomy/head_crescent.py", "../anatomy/head.py", "../mesh.py", "../fields.py",
-                  "../anatomy/common.py"):                                  # 24 Oct 2026: the spines' builder was missing -- a spine change served stale heads
+                  "../anatomy/common.py", "../anatomy/genal.py"):           # 24 Oct 2026: the spines' builder was missing -- a spine change served stale heads
             try: h.update(open(os.path.join(here, f), "rb").read())
             except OSError: pass
         _HEAD_SIG = h.hexdigest()[:10]

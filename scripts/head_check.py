@@ -132,5 +132,5 @@ for r in R:
     spine = "spine" in H
     o = HS.outline(r["style"]) if r["style"] in HS.OUTLINES else {}
     r["waviness"] = wav; r["genal_turn"] = float(turn) if spine else float("nan"); r["WL"] = 2 * float(np.abs(p[:, 0]).max()) / L
-    print(f"{r['style']:16s} {wav:6.2f}        {r['genal_turn']:7.1f}            {r['WL']:4.2f}   {o.get('genal_spread', '-')}")
+    print(f"{r['style']:16s} {wav:6.2f}        {r['genal_turn']:7.1f}            {r['WL']:4.2f}   {o.get('genal_angle', '-')}")
 json.dump([dict(style=r["style"], waviness=r["waviness"], genal_turn=r["genal_turn"], WL=r["WL"], corners=len(r["bad_corners"]), notches=len(r["bad_runs"])) for r in R], open(os.path.join(OUT, "metrics.json"), "w"), indent=1)

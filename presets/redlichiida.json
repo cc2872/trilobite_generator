@@ -73,10 +73,11 @@
   "headRearArc": 0.0,
   "headRearExp": 2.2,
   "genalWidth": 0.12,
-  "genalTaper": 2.0,
-  "genalPath": "s**2",
+  "genalTip": 0.0,
   "genalWidthMM": 0.0,
-  "genalCurve": 14.0,
+  "genalAngle": 7.3,
+  "genalKink": 0.5,
+  "genalKinkAngle": 20.7,
   "tipSweep": 0.75,
   "bladeChord": 0.9,
   "tipTaper": 0.9,
@@ -107,5 +108,5 @@
   "nKnuckles": 3,
   "eyeRidge": 0.8
  },
- "schema": "6.2"
+ "schema": "6.7"
 }

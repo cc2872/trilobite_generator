@@ -152,7 +152,8 @@ def overhang(P, part, S, port, opts=None):
             occ = M.to_manifold(spine_solid(0.6 * S["margin"], 0.5, P["occipitalSpine"] * S["Lc"],
                                 (0, -0.07 * S["Lc"], ring_top(P) - 1.0), 0, pitch_deg=55))
         if S["Lg"] <= 0.5: return None if occ is None else M.from_manifold(occ)
-        arm = M.to_manifold(M.heightfield_shell(S["arm_outline"], S["arm_z"], S["t"], nu=81, nv=13, symmetric=False))
+        from anatomy.head import genal_solid
+        arm = M.to_manifold(genal_solid(S))                          # 1 Nov 2026: the genal piece (anatomy/genal.py), all its parts
         arm = arm + arm.mirror((1, 0, 0))
         # the arm hangs off the head's rear flap (the shingle over seg0), which the rear cut removes: restore the flap
         # outside the axial ring as the pin build's shell, so the arm has something to hang from.

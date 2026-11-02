@@ -16,6 +16,7 @@ import numpy as np
 import mesh as M
 from fields import seg_halfwidth, head_halfwidth, furrow_amp
 from anatomy.common import pitch, ring_top, smoothstep, plateau, trough, vault, spine_solid, curved_spine, prong, safe_expr, GRID_HEAD
+from anatomy import genal as GN
 from anatomy.port import Port
 
 def eye_geometry(P):
@@ -63,7 +64,6 @@ def plan(P, notes=None):
         return np.maximum(wh * np.clip(1 - front ** nO, 0, 1) ** (1 / nO), 1.5)
     gs = P["genalSweep"] * pitch(P)
     Lg = P["genalSpine"] * Lc
-    gc = math.radians(P["genalCurve"])
     arc = P["headRearArc"] * Lc; nR = P["headRearExp"]
     def cheek(u):
         q = np.clip((np.abs(u) * wh - a) / (wh - a), 0, 1)
@@ -73,15 +73,8 @@ def plan(P, notes=None):
         return -par - Le * np.clip(1 - r ** nO, 0, 1) ** (1 / nO)
     W_arm = P["genalWidthMM"] if P["genalWidthMM"] > 0.05 else P["genalWidth"] * wh
     W_arm = max(W_arm, 1.5)
-    kT = P["genalTaper"]
-    S_ = np.linspace(0, 1, 241)
-    path = safe_expr(P["genalPath"], S_, notes)
-    path = path - path[0]
-    if np.max(np.abs(path)) > 1e-9: path = path / np.max(np.abs(path))
-    x_off = math.tan(gc) * Lg * path
-    xc_s = (wh - 0.5 * W_arm) + x_off
-    W_s = W_arm * np.clip(1 - S_ ** (2.0 / max(kT, 0.2)), 0, 1) ** (0.5 * kT) + 0.7
-    X_tip = float(np.max(xc_s + 0.5 * W_s))
+    X_tip = wh + 0.35                                             # 1 Nov 2026: the head's own outline, as it was without a spine (the old arm
+                                                                  # widened it to its tip's x); the genal piece is its own solid
     def head_edges(x):
         ax = np.abs(np.asarray(x, float))
         return y_front(np.minimum(ax, wh)), cheek(np.minimum(ax, wh) / wh)
@@ -161,27 +154,34 @@ def plan(P, notes=None):
         return d
     has_detail = r_height > 1e-9 or s_depth > 1e-9
     zfun = (lambda x, y: zfun_base(x, y) + detail(x, y)) if has_detail else zfun_base
-    # crescent arms (genal horns / harpetid prolongations): swept bands of width W_s along the user's path
-    yr_root = float(cheek(np.array([1.0]))[0]); S0 = -0.12
-    def arm_outline(u, v):
-        s = S0 + (1 - S0) * 0.5 * (u + 1); sc = np.clip(s, 0, 1)
-        xc = float(np.interp(sc, S_, xc_s)); w = float(np.interp(sc, S_, W_s))
-        ds = 1e-3; xa = float(np.interp(np.clip(sc + ds, 0, 1), S_, xc_s)); xb = float(np.interp(np.clip(sc - ds, 0, 1), S_, xc_s))
-        tx, ty = (xa - xb), Lg * 2 * ds; nrm = math.hypot(tx, ty); tx, ty = tx / nrm, ty / nrm
-        nx, ny = ty, -tx
-        off = (v - 0.5) * w
-        return xc + nx * off, yr_root + Lg * s + ny * off
+    # the genal piece (1 Nov 2026, anatomy/genal.py): a capsule from the genal angle aimed anywhere, an optional kink, a tip from
+    # pointed to round, and a web from the rear margin to the tip. Each part is a plan band (genal.Piece.bands) built as a
+    # shell under arm_z: a plate at the margin's height beside the body, raised clear of the thorax where it lies over it,
+    # running into the head's own surface at the root.
+    yr_root = float(cheek(np.array([1.0]))[0])
+    root = np.array([wh - 0.5 * W_arm, yr_root])
+    anchor = None; web = float(P.get("genalWeb", 0.0))
+    if web > 0.01:
+        xa = root[0] - web * (root[0] - (a + 0.5)); anchor = (xa, float(cheek(np.array([xa / wh]))[0]))
+    piece = GN.Piece(root, Lg, W_arm, P["genalAngle"], kink=P["genalKink"], kink_angle=P["genalKinkAngle"], tip=P["genalTip"],
+                     web=anchor, web_round=P["genalWebRound"], hw_min=0.35, inward=(-0.6, -0.8))
+    if notes is not None:
+        for n_ in piece.notes: notes.append(("head", "genal", n_))
+    arm_outline = [o for nm, o, _ in piece.bands if nm.startswith("segment")][-1]   # the last capsule: (1, 0.5) is the tip (landmark 16)
+    z_plate = max(P["marginHeight"] * h, 0.0) + t + 0.6 + c
     def arm_z(x, y):
-        ax = np.abs(x)
-        z_h = max(P["marginHeight"] * h, 0.0) + t + 0.6 + c
+        x = np.asarray(x, float); y = np.asarray(y, float); ax = np.abs(x)
         z_in = margin + (h - margin) * vault(np.clip(ax / w0, 0, 1), P) + P["bladeCamber"] * h + t + c + 0.3
-        inboard = ax < w0 + 1.0
-        z = np.where(inboard & (y > yr_root - 0.5), np.maximum(z_h, z_in), z_h)
-        body = y < yr_root + 0.5
-        zb = zfun(np.asarray(x, float), np.asarray(y, float)) - 0.3
-        blend = smoothstep(yr_root - 0.5, yr_root + 2.5, y)
-        return np.where(body, zb, (1 - blend) * zb + blend * z)
-    return dict(outline=outline, zfun=zfun, xmax=xmax, arm_outline=arm_outline, arm_z=arm_z, Lg=Lg, t=t, c=c, h=h, Lc=Lc,
+        over = (ax < w0 + 1.0) & (y > yr_root - 0.5)                 # over the thorax: clear its top
+        z = np.where(over, np.maximum(z_plate, z_in), z_plate)
+        # inside the head's outline the piece runs just under the head's own surface (as the old arm did), easing to its
+        # plate over 3 mm past the margin -- behind the rear margin or beside the side, whichever way the piece points
+        axc = np.minimum(ax, wh); yr_ = cheek(axc / wh); yf_ = y_front(axc)
+        d_out = np.maximum.reduce([y - yr_, yf_ - y, ax - wh])
+        zb = zfun(axc, np.clip(y, yf_, yr_)) - 0.3
+        blend = smoothstep(-0.5, 2.5, d_out)
+        return (1 - blend) * zb + blend * z
+    return dict(outline=outline, zfun=zfun, xmax=xmax, arm_outline=arm_outline, arm_z=arm_z, genal=piece, Lg=Lg, t=t, c=c, h=h, Lc=Lc,
                 wh=wh, a=a, margin=margin, u_a=a / X_tip, eye=G, suture=suture, eye_ridge=ridge,
                 zfun_base=zfun_base, detail=detail if has_detail else None, y_genal=float(cheek(np.array([1.0]))[0]))
 
@@ -421,9 +421,8 @@ def ornaments(P, S, notes=None):
     """In build order. Each entry is (name, solid, how): how = "union" (with its mirror image where symmetric) or
     "mirror" (the eye: union the right one only, cut the part at x = 0, mirror, weld; see the note on the eye)."""
     out = []
-    if S["Lg"] > 0.5:
-        arm = M.heightfield_shell(S["arm_outline"], S["arm_z"], S["t"], nu=81, nv=13, symmetric=False)
-        out.append(("genalArms", [arm, M.mirror_x(arm)], "union"))
+    arm = genal_solid(S)
+    if arm is not None: out.append(("genalArms", [arm, M.mirror_x(arm)], "union"))
     if P.get("eyeSolid", 0) > 0.5 and P["eyeSize"] > 0.01:
         G = S["eye"]; EP = eye_params(P, G["eR"])
         xm = float(S["xmax"](np.array([G["ye"]]))[0]) - 0.4
@@ -436,6 +435,12 @@ def ornaments(P, S, notes=None):
     out += spine_ornaments(P, Lc=S["Lc"], margin=S["margin"], wh=S["wh"], y_front=yf, y_rear=0.0,
                            z_occ=ring_top(P) - 1.0, z_genal=lambda x, y: zt(x, y), yr_genal=S["y_genal"])
     return out
+
+def genal_solid(S, nu=81, nv=13):
+    """The right genal piece as one solid (its bands unioned), or None (1 Nov 2026)."""
+    if S["Lg"] <= 0.5 or S.get("genal") is None: return None
+    parts = [M.heightfield_shell(o, S["arm_z"], S["t"], nu=(31 if nm == "root" else nu), nv=nv, symmetric=False) for nm, o, _ in S["genal"].bands]
+    return parts[0] if len(parts) == 1 else M.union(*parts)
 
 def spine_ornaments(P, Lc, margin, wh, y_front, y_rear, z_occ, z_genal, yr_genal, z_front=None):
     """The head's grafted spines, shared by the pin head and the isopod model's shaped head (23 Oct 2026) so the two

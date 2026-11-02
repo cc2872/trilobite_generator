@@ -74,10 +74,11 @@
   "headRearArc": 0.0,
   "headRearExp": 2.2,
   "genalWidth": 0.12,
-  "genalTaper": 2.0,
-  "genalPath": "s**2",
+  "genalTip": 0.0,
   "genalWidthMM": 0.0,
-  "genalCurve": 10.0,
+  "genalAngle": 5.1,
+  "genalKink": 0.5,
+  "genalKinkAngle": 14.9,
   "tipSweep": 0.75,
   "bladeChord": 1.05,
   "tipTaper": 0.5,
@@ -109,5 +110,5 @@
   "sutureEnd": 1.0,
   "sutureDepth": 0.3
  },
- "schema": "6.2"
+ "schema": "6.7"
 }

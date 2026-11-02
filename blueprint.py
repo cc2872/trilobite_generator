@@ -399,7 +399,8 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None, cmap="
              f"LENGTH   {L:.1f} mm", f"WIDTH    {W:.1f} mm", f"RELIEF   {z1 - z0:.1f} mm", f"SEGMENTS {int(P['segCount'])}", f"PITCH    {pitch:.2f} mm", "",
              f"HINGE z  {meas.get('hinge_z', '—')} mm", f"KNUCKLE  {meas.get('knuckle', '—')} mm × {int(P.get('nKnuckles', 3))}", f"STOP     {P['maxAngle']}° / joint", "",
              f"E@STOP   {meas.get('e_max', '—')}", f"GAP      {meas.get('closure_gap_mm', '—')} mm", f"CLASS    {str(meas.get('enroll_class', '—')).upper()}", f"PRINT    {'VALID' if meas.get('print_valid') else 'CHECK'}", "",
-             "GENAL PATH", f"  {P.get('genalPath', '—')}", f"  {P.get('genalCurve', 0)}° · {P.get('genalWidthMM', 0)} mm", "",
+             "GENAL SPINE", f"  {P.get('genalAngle', 0):.0f}°" + (f" · kink {P.get('genalKink', 0):.2f} → {P.get('genalKinkAngle', 0):.0f}°" if P.get('genalKink', 0) > 0.01 else ""),
+             f"  tip {P.get('genalTip', 0):.2f} · web {P.get('genalWeb', 0):.2f} · {P.get('genalWidthMM', 0)} mm", "",
              "SPEC     panel below +", "         PNG metadata", "", "SHEET 1 / 1   REV A"]
     ax5.text(0.02, 0.98, "\n".join(lines), color=INK, fontsize=8, family="monospace", va="top", ha="left", linespacing=1.55)
     for s in ax5.spines.values(): s.set_visible(True); s.set_color(INK); s.set_linewidth(0.8)

@@ -103,13 +103,13 @@ const S={style:'plain', outline:{}, face:{}, D:null, meta:null, pinned:null, hov
   trace:{img:null, w:0, h:0, pts:[], on:false, frame:null, opacity:0.55}};   // 20 Oct 2026: a photo under the plan, clicked points, the frame once applied
 // labels for the keys whose names do not say what they do (20 Oct 2026)
 const LABEL={front_exp:'front_exp - pointiness (1.2 sharp, 1.6 ogival, 2 round, 4 blunt)', front_point:'front_point - median spine / length', widest:'widest - from the rear / length',
-  genal:'genal - spine length / head length', genal_tip:'genal_tip - tip width / root width (0.1 = a point)', notch:'notch - rear margin U depth', width:'width - head / thorax half-width'};
+  genal:'genal - spine length / head length', genal_tip:'genal_tip - pointed (0) to round (1)', genal_angle:'genal_angle - 0 back, 90 out, 180 forward, -90 in', notch:'notch - rear margin U depth', width:'width - head / thorax half-width'};
 // schema-named keys in shaped_head.HANDLES -> the face keys the diagram actually takes
 const ALIAS={glabInflate:'glab_inflate', eyePos:'eye_pos', eyeLat:'eye_lat', eyeSize:'eye_size', glabRise:'glab_rise'};
 // slider ranges (the page's, not the schema's: shaped_head.OUTLINE / head_crescent.FACE carry defaults and comments, no ranges)
 const R={
   width:[0.6,2.0], length:[0.5,2.0], front_exp:[1.0,6.0], front_point:[0,0.6], widest:[0,0.6], side:[0,0.6], rear_taper:[0,0.6], corner:[0,0.5],
-  genal:[0,2.5], genal_w:[0.03,0.6], genal_tip:[0.05,1.0], genal_spread:[0,80], genal_curve:[-90,90], notch:[0,1], notch_exp:[1,6], dome_fill:[0.4,1],
+  genal:[0,2.5], genal_w:[0.03,0.6], genal_tip:[0,1.0], genal_angle:[-180,180], genal_kink:[0,0.9], genal_kink_angle:[-180,180], genal_web:[0,1], genal_web_round:[-1,1], notch:[0,1], notch_exp:[1,6], dome_fill:[0.4,1],
   horn_h:[0,0.6], height:[0.4,2.0], genal_at:[-1,1], front_flat:[0,0.9], front_dent:[0,0.3], point_w:[0.02,0.5], point_fork:[0,0.8],
   brim_w:[0,0.6], brim_rise:[0,0.4], brim_curve:[-1,1], brim_roll:[0,0.3], brim_pits:[0,6,1],
   eye_size:[0,0.5], eye_pos:[0.2,0.95], eye_height:[0.2,2.5], eye_lat:[0,0.95], axis_frac:[0.15,0.45], glab_inflate:[0.5,2.0], glab_rise:[0,0.6],
@@ -263,7 +263,7 @@ new p5(s=>{
       case 'brim':     v.brim_w=st.brim_w-across/0.7; break;
       case 'crown':    v.height=st.height+up/0.357; v.glab_rise=st.glab_rise+along*0.3; break;
       case 'spine': {  const r=HP.root||{x:1,y:0}; const tx=(s.mouseX-ox)/px, ty=-(s.mouseY-oyP)/px;      // absolute: the tip follows the mouse
-                       const dx=Math.abs(ty)-r.x, dy=tx-r.y; v.genal=Math.hypot(dx,dy)/L; v.genal_spread=Math.atan2(dx,dy)*180/Math.PI; break; }
+                       const dx=Math.abs(ty)-r.x, dy=tx-r.y; v.genal=Math.hypot(dx,dy)/L; v.genal_angle=Math.atan2(dx,dy)*180/Math.PI; if(!(+st.genal_kink>0.01)) v.genal_kink_angle=v.genal_angle; break; }   // 1 Nov 2026: the full circle (kink and web in the studio)
     }
     for(const [k,val] of Object.entries(v)) if(Number.isFinite(val)) setKeyQuiet(k,val);
     send(); };

@@ -23,7 +23,7 @@ def test_synthetic_head_round_trips():
     h = TI.head_from(_synthetic()); o = h["outline"]; f = h["face"]
     tr = np.array(o["trace"]); assert tr[0].tolist() == [0.0, pytest.approx(-20 / 24, abs=0.01)] and tr[-1].tolist() == [0.0, 0.0]
     assert abs(tr[:, 0].max() - 1.0) < 1e-6 and (tr[:, 1] <= 0.99).all()
-    assert abs(o["genal"] - 10 / 20) < 0.02 and abs(o["genal_spread"] - 20) < 1.0                       # spine length / sagittal length; spread recovered through the rotation
+    assert abs(o["genal"] - 10 / 20) < 0.02 and abs(o["genal_angle"] - 20) < 1.0                       # spine length / sagittal length; spread recovered through the rotation
     assert abs(f["eye_size"] - 3 / 24) < 0.01 and abs(f["eye_pos"] - 11 / 20) < 0.01 and abs(f["eye_lat"] - (17 - 3) / 24) < 0.01
     assert abs(f["axis_frac"] - 7 / 24) < 0.01 and abs(f["glab_inflate"] - 9 / 7) < 0.01
     assert not h["blind"]

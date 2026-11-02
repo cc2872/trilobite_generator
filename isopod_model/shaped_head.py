@@ -17,6 +17,7 @@ import math
 import numpy as np
 from scipy.spatial import cKDTree
 from anatomy import head_crescent as HC
+from anatomy import genal as GN
 from anatomy.common import smoothstep
 
 RO = HC.RO
@@ -36,9 +37,13 @@ OUTLINE = dict(
     corner=0.12,       # radius of a rounded genal angle, / half-width (when there is no genal spine)
     genal=0.6,         # genal spine / prolongation length, / axial length (0 = none; TriloMorph median 0.23, 95th pct 1.4)
     genal_w=0.10,      # its width at the root, / half-width (harpetid prolongation 0.3; trinucleid needle 0.07)
-    genal_tip=0.12,    # tip width / root width (1 = a parallel band with a round end; 0.1 = drawn to a point)
-    genal_spread=4.0,  # it leaves at this angle outward from straight back, deg
-    genal_curve=0.0,   # and turns by this much along its length, deg (+ outward, - back inward)
+    genal_tip=0.12,    # POINTED TO ROUND: tip width / root width (0 = drawn to a point; 1 = a parallel band with a round end)
+    genal_angle=4.0,   # 1 Nov 2026: where it points from its root, deg: 0 straight back, +90 out, 180 forward, -90 in (the full circle)
+    genal_kink=0.0,    # where it bends, / its length (0 = straight, no kink)
+    genal_kink_angle=4.0,  # where the part after the kink points (the same circle)
+    genal_web=0.0,     # an edge from the rear margin to the tip, filling the corner: its anchor, from the genal angle (0 = none) in
+                       # toward the axis (1)
+    genal_web_round=0.5,   # the web's edge: 0 straight, +1 hugging the corner, -1 bulging out
     notch=0.048,       # the rear margin bows back between the genal angles: depth / axial length (0 straight across)
     notch_exp=2.0,     # 2 = an elliptical U; higher = straight across, then a late bend
     dome_fill=0.82,    # the vaulted part / the whole (0.6 leaves a broad flat brim: Harpetida)
@@ -58,12 +63,13 @@ OUTLINE = dict(
     brim_pits=0,       # rows of pits on it
 )
 # the crescent print piece's own silhouette (head3d: R 20, arm 4 x 20, the U notch), as it was the default until 20 Oct 2026
-CRESCENT_OUTLINE = dict(OUTLINE, length=1.08, front_exp=2.0, widest=0.08, genal=0.77, genal_w=0.167, genal_tip=1.0, genal_spread=0.0, notch=0.693)   # notch: 0.9 x the band length 0.77 (24 Oct: / axial length)
+CRESCENT_OUTLINE = dict(OUTLINE, length=1.08, front_exp=2.0, widest=0.08, genal=0.77, genal_w=0.167, genal_tip=1.0, genal_angle=0.0, genal_kink_angle=0.0, notch=0.693)   # notch: 0.9 x the band length 0.77 (24 Oct: / axial length)
 TRACE_MAX = 400     # points a traced outline may carry
 
 OUTLINE_RANGE = dict(   # what the silhouette is drawn for (11 Oct 2026: a 0.2-long head crashed in interp, a 3 x 3 x genal-3 one printed 2.7 m)
     width=(0.5, 2.5), length=(0.4, 2.5), front_exp=(1.0, 8.0), front_point=(0.0, 1.5), widest=(0.0, 0.8), side=(0.0, 1.0), rear_taper=(0.0, 0.9),
-    corner=(0.0, 0.5), genal=(0.0, 3.5), genal_w=(0.02, 1.0), genal_tip=(0.02, 1.5), genal_spread=(-60.0, 80.0), genal_curve=(-90.0, 90.0),
+    corner=(0.0, 0.5), genal=(0.0, 3.5), genal_w=(0.02, 1.0), genal_tip=(0.0, 1.0), genal_angle=(-180.0, 180.0), genal_kink=(0.0, 0.9),
+    genal_kink_angle=(-180.0, 180.0), genal_web=(0.0, 1.0), genal_web_round=(-1.0, 1.0),
     notch=(0.0, 1.0), notch_exp=(1.0, 8.0), dome_fill=(0.3, 1.0), horn_h=(0.0, 1.0), height=(0.2, 3.0), genal_at=(-1.0, 1.0),
     front_flat=(0.0, 0.9), front_dent=(0.0, 0.5), point_w=(0.02, 1.0), point_fork=(0.0, 0.9), brim_w=(0.0, 1.0), brim_rise=(-0.5, 1.0),
     brim_curve=(-1.0, 1.0), brim_roll=(0.0, 0.5), brim_pits=(0, 10))
@@ -86,7 +92,24 @@ def trace_of(t):
     out[0][1] = ymin                                               # the front, exactly (a hand's or a resampler's jitter snapped)
     return out
 
+def migrate_outline(o):
+    """A head saved before 1 Nov 2026: its spine left straight back, turned out to genal_spread over its first 0.3 and on by
+    genal_curve along its length (and genal_tip above 1 widened it). Now: two straight pieces through the old spine's root,
+    middle and tip (genal_angle, genal_kink 0.5, genal_kink_angle; one piece when it was straight). New keys win."""
+    if not o or not any(k in o for k in ("genal_spread", "genal_curve")): return o
+    o = dict(o); sp = float(o.pop("genal_spread", OLD_SPREAD)); cu = float(o.pop("genal_curve", 0.0))
+    if not any(k in o for k in ("genal_angle", "genal_kink", "genal_kink_angle")):
+        S = np.linspace(0, 1, 241); e = np.clip(S / 0.3, 0, 1); th = np.radians(sp * (3 * e ** 2 - 2 * e ** 3) + cu * S)
+        x = np.r_[0, np.cumsum(np.sin(th)[1:])]; y = np.r_[0, np.cumsum(np.cos(th)[1:])]
+        o["genal_angle"], o["genal_kink"], o["genal_kink_angle"] = GN.from_old_path(x, y)
+    if "genal_tip" in o:
+        try: o["genal_tip"] = min(float(o["genal_tip"]), 1.0)
+        except (TypeError, ValueError): pass
+    return o
+OLD_SPREAD = 4.0        # the old default genal_spread
+
 def outline_of(o=None):
+    o = migrate_outline(o)
     f = dict(OUTLINE, **(o or {})); tr = f.pop("trace", None); bad = set(f) - set(OUTLINE)
     if bad: raise KeyError(f"unknown outline keys {sorted(bad)} (have {sorted(OUTLINE)} and 'trace')")
     for k, v in f.items():
@@ -220,66 +243,32 @@ class Shape:
         if o["front_point"] > 0:
             pw = max(o["point_w"], 0.03) * RO
             yfb = yfb - o["front_point"] * L1 * np.exp(-((axb - o["point_fork"] * RO) / pw) ** 2)
-        # ---- the spine: discs along a centreline that leaves the margin and may spread and curve
+        # ---- the genal piece (1 Nov 2026, anatomy/genal.py): no longer drawn into the columns (which let it run only outward
+        # of its root), but a solid of its own: a capsule from the root aimed anywhere, an optional kink, a tip from pointed to
+        # round, and a web from the rear margin to the tip. Its root is where the spine left before: the genal angle, or moved
+        # along the margin by genal_at.
+        self.piece = None
         if horn:
-            if not moved: x0, y0 = xg - 0.5 * w0, yg
+            if not moved: x0, y0 = xg - 0.5 * w0, yg; inward = (-0.6, -0.8)
             elif at > 0:                                           # inward along the rear margin
-                x0 = xg * (1 - 0.85 * at); y0 = float(np.interp(x0, axb, yrb)) - 0.3 * w0
+                x0 = xg * (1 - 0.85 * at); y0 = float(np.interp(x0, axb, yrb)) - 0.3 * w0; inward = (0.0, -1.0)
             else:                                                  # forward along the side, then round the front
                 y0 = yg + at * (yg - (yw - 0.8 * Lf))
                 if y0 >= yw: x0 = RO - (RO - xg) * ((y0 - yw) / max(yg - yw, 1e-6)) ** 2
                 else: x0 = RO * (1 - fl) * np.clip(1 - ((yw - y0) / Lf) ** nF, 0, 1) ** (1 / nF) + fl * RO
-                x0 = x0 - 0.3 * w0
-            S = np.linspace(0, 1, 241)
-            # 25 Oct 2026: a genal spine is the lateral border continued -- it leaves TANGENT to the side (straight back)
-            # and bends out to its spread over its first 0.3 (a spine that left at 40 deg from a vertical side put a 40 deg
-            # corner on the outline at the root: odontopleura, deiphon, ceraurus in head_check). A spine moved along the
-            # margin (genal_at) keeps its own leave, since the margin's tangent there is not straight back.
-            ease = 3 * np.clip(S / 0.3, 0, 1) ** 2 - 2 * np.clip(S / 0.3, 0, 1) ** 3
-            if moved:                                                  # the margin's own direction at the root (rearward), outward positive
-                i0 = int(np.clip(np.searchsorted(axb, x0 + 0.3 * w0), 2, nb - 3)); edge = yfb if y0 < np.interp(x0, axb, 0.5 * (yfb + yrb)) else yrb
-                dxdy = (axb[i0 + 2] - axb[i0 - 2]) / (edge[i0 + 2] - edge[i0 - 2] + 1e-9)
-                th0 = float(np.degrees(np.arctan(dxdy))) if abs(edge[i0 + 2] - edge[i0 - 2]) > 1e-6 else 0.0
-                th0 = float(np.clip(th0, 0.0, 85.0))                    # (the band can only run outward of its root)
-            else: th0 = 0.0
-            th = np.radians(th0 + (o["genal_spread"] - th0) * ease + o["genal_curve"] * S)
-            dsx, dsy = np.sin(th) * Lh / 240, np.cos(th) * Lh / 240
-            xc = x0 + np.r_[0, np.cumsum(dsx[1:])]; yc = y0 + np.r_[0, np.cumsum(dsy[1:])]
-            r = 0.5 * w0 * (1 - (1 - o["genal_tip"]) * S); r = np.maximum(r, 0.35)
-            # 24 Oct 2026: the band lives in the silhouette's columns (one front and one rear edge per x), so it can only
-            # run OUTWARD of its own root: a centreline that turns in over the head (negative spread, a curve that hooks
-            # back) made the head's rear margin the band's upper edge and the solid filled down to the band (the studio's
-            # spines through the pygidium, 23 Oct). The band is cut where its CENTRELINE would cross its root's inner
-            # edge (a drift of up to the root half-width is tolerated: harpes' -6 deg curl always had that sliver);
-            # a spine that turns under or over the head is the genal HORN (P.genalHorn*, a solid of its own).
-            bad = np.where(xc < x0 - r[0])[0]
-            if len(bad) and bad[0] < len(S) - 1:
-                cut = max(int(bad[0]), 2)
-                self.notes.append(f"genal band cut at {S[cut]:.0%} of its length: it would turn in over the head (use the genal horn for a curved or inward spine)")
-                S, xc, yc, r = S[:cut + 1] / S[cut], xc[:cut + 1], yc[:cut + 1], r[:cut + 1]; Lh = float(np.hypot(xc[-1] - x0, yc[-1] - y0))
-        else:
-            S = xc = yc = r = None
+                x0 = x0 - 0.3 * w0; inward = (-1.0, 0.0)
+            anchor = None; web = float(o["genal_web"])
+            if web > 0.01:
+                xa = x0 - web * (x0 - 0.12 * RO); anchor = (xa, float(np.interp(xa, axb, yrb)))
+            self.piece = GN.Piece((x0, y0), Lh, w0, o["genal_angle"], kink=o["genal_kink"], kink_angle=o["genal_kink_angle"],
+                                  tip=o["genal_tip"], web=anchor, web_round=o["genal_web_round"], hw_min=0.35, inward=inward)
+            self.notes += self.piece.notes
         self.horn, self.x_in, self.yg, self.xg, self.yw = horn, x_in, yg, xg, yw
-        Xmax = self.Xmax = float(max(RO, (xc + r).max() if horn else RO))
+        Xmax = self.Xmax = float(RO)                               # the columns hold the head proper; the genal piece is its own solid
         ax = self.ax = np.linspace(0, Xmax, n); body = ax <= RO
         yf = np.where(body, np.interp(ax, axb, yfb), np.inf); yr = np.where(body, np.interp(ax, axb, yrb), -np.inf)
         self.body_yf, self.body_yr = yf.copy(), yr.copy()         # the head without its spine (fields: what is "spine")
         rear_is_outer = body & (ax > xg)
-        if horn:
-            dx = ax[:, None] - xc[None, :]; ok = np.abs(dx) < r[None, :]
-            hgt = np.sqrt(np.clip(r[None, :] ** 2 - dx ** 2, 0, None))
-            top = np.where(ok, yc[None, :] + hgt, -np.inf); bot = np.where(ok, yc[None, :] - hgt, np.inf)
-            j = top.argmax(1); hmax = top.max(1); hmin = bot.min(1); has = ok.any(1)
-            use = has & (hmax > yr)
-            rear_is_outer = np.where(use, ax >= xc[j], rear_is_outer)
-            yr = np.where(use, hmax, yr); yf = np.where(has, np.minimum(yf, hmin), yf)
-            if moved:                                              # 25 Oct 2026: a spine from the side leaves a V slot between its inner edge and the
-                reg = ax >= x0 - w0                                #  rounded genal corner behind it (a vertical wall in the columns: bristolia, head_check).
-                xr, vr = ax[reg], yr[reg]; kk = np.tan(np.radians(60.0))   # The re-entrant is real (olenellids have it) but open: the rear edge there
-                fin = np.isfinite(vr)                              #  takes its upper envelope at 60 degrees -- a fillet, not a slot.
-                if fin.sum() > 2:
-                    env = (vr[fin][None, :] - kk * np.abs(xr[:, None] - xr[fin][None, :])).max(1)
-                    yr[reg] = np.where(np.isfinite(vr), np.maximum(vr, env), vr)
         ok_c = np.isfinite(yf) & np.isfinite(yr) & (yr > yf)      # empty columns (past the tip) close to a point
         with np.errstate(invalid="ignore"): mid_all = 0.5 * (yf + yr)
         mid_c = np.interp(ax, ax[ok_c], mid_all[ok_c])
@@ -299,7 +288,7 @@ class Shape:
         out = np.vstack(segs_o); self.T_out = cKDTree(out)
         self.arc = np.r_[0, np.cumsum(np.hypot(*np.diff(out, axis=0).T))]
         inn = np.vstack(segs_i) if segs_i else np.array([[0.0, 1e4]]); self.T_in = cKDTree(inn)
-        if horn: self.T_c = cKDTree(np.c_[xc, yc]); self.S, self.r, self.Lh, self.xc, self.yc = S, r, Lh, xc, yc
+        self.Lh = Lh
 
     def edges(self, x):
         a = np.abs(np.asarray(x, float)); return np.interp(a, self.ax, self.yf), np.interp(a, self.ax, self.yr)
@@ -310,14 +299,7 @@ class Shape:
         do, io = self.T_out.query(q); dn, _ = self.T_in.query(q)
         fill = min(self.o["dome_fill"], 1 - 0.9 * self.o["brim_w"]) if self.o["brim_w"] > 0 else self.o["dome_fill"]
         g = dict(do=do.reshape(sh), dn=dn.reshape(sh), arc=self.arc[io].reshape(sh), dome_fill=fill, horn_h=self.o["horn_h"])
-        if self.horn:
-            _, ic = self.T_c.query(q); s = self.S[ic].reshape(sh)
-            byf = np.interp(ax, self.ax, self.body_yf); byr = np.interp(ax, self.ax, self.body_yr)   # +-inf past the head: spine
-            with np.errstate(invalid="ignore"): d_out = np.nan_to_num(np.maximum(byf - y, y - byr), nan=1e3, posinf=1e3)
-            beh = smoothstep(-1.5, 1.5, d_out) * smoothstep(self.x_in - 3.0, self.x_in, ax) if abs(self.o["genal_at"]) <= 0.01 else smoothstep(-0.5, 1.5, d_out)
-            g.update(behind=beh, taper=1 - 0.55 * s, hw=self.r[ic].reshape(sh))
-        else:
-            g.update(behind=np.zeros(sh), taper=np.ones(sh), hw=np.ones(sh))
+        g.update(behind=np.zeros(sh), taper=np.ones(sh), hw=np.ones(sh))      # 1 Nov 2026: the genal piece has its own surface (piece_z)
         g["front"] = 1 - g["behind"]
         return g
 
@@ -341,6 +323,19 @@ class Shape:
             z = (1 - w) * (z + hb * fr) + w * zb                   # the vault stands on the brim's inner edge
             z = z + o["brim_roll"] * HC.RELIEF * np.exp(-((do - bw) / (0.28 * bw)) ** 2) * fr
         return z + HC._detail(ax, Yh, face) if HC.has_detail(face) else z
+
+    def piece_z(self, name, s, v, x, y, face=None):
+        """The genal piece's surface at scale 1 (relief 10), on band `name` at position s along it (0 root .. 1 tip) and v
+        across (0 .. 1): a rounded ridge, as the column spine was (a quarter-ellipse each side from the shield's edge floor,
+        0.6 rim, to a crest horn_h x relief tapering along the length), rising out of the head's own surface at the root.
+        The web is a low plate at the edge floor; the root stub follows the head's surface just under it."""
+        s = np.asarray(s, float); v = np.asarray(v, float); e_ = 0.6 * HC.RIM
+        if name in ("root", "web"): return np.full(np.shape(s), e_ + 0.15)   # low plates at the shield's edge floor
+        crest = self.o["horn_h"] * HC.RELIEF * (1 - 0.55 * np.clip(s, 0, 1))
+        t_ = np.clip(1 - np.abs(2 * v - 1), 0, 1)
+        ridge = e_ + (crest - e_) * np.sqrt(np.clip(1 - (1 - t_) ** 2, 0, 1))
+        p = self.piece; w = smoothstep(0.0, min(1.0, 1.5 * p.W / max(p.L, 1e-6)), s)   # the ridge rises out of the margin
+        return e_ + w * (ridge - e_)
 
 
 def plan(P, plans, K, outline=None, face=None, z_thorax=None):
@@ -367,7 +362,7 @@ def plan(P, plans, K, outline=None, face=None, z_thorax=None):
     def xmax(y):
         yy = (np.asarray(y, float) - flap) / k
         return k * np.where(yy < sh.yw, RO * np.clip(1 - (np.clip(sh.yw - yy, 0, None) / (sh.L1 + sh.yw)) ** o["front_exp"], 0, 1) ** (1 / o["front_exp"]), RO)
-    return dict(outline=outline_fn, zfun=zfun, xmax=xmax, t=P["wall"] * P["headWall"], c=P["clearance"], h=kz * HC.RELIEF,
+    return dict(outline=outline_fn, zfun=zfun, xmax=xmax, t=P["wall"] * P["headWall"], c=P["clearance"], h=kz * HC.RELIEF, kz=kz,
                 Lc=k * sh.L1, wh=k * RO, a=k * F_["axis_frac"] * RO, margin=kz * HC.RIM, Lg=0.0, u_a=F_["axis_frac"] * RO / sh.Xmax,
                 eye=eye, scale=k, shape=sh, flap=flap)
 
@@ -382,7 +377,9 @@ HANDLES = {            # diagram handle -> the outline / face keys it drags (wha
     "process": ("front_point", "point_w", "point_fork"),
     "widest":  ("width", "widest", "side", "rear_taper"),
     "angle":   ("corner",),
-    "spine":   ("genal", "genal_spread", "genal_curve", "genal_w", "genal_tip"),
+    "spine":   ("genal", "genal_angle", "genal_w", "genal_tip"),
+    "kink":    ("genal_kink", "genal_kink_angle"),
+    "web":     ("genal_web", "genal_web_round"),
     "root":    ("genal_at",),
     "notch":   ("notch", "notch_exp"),
     "glabella": ("glab_len", "glabInflate", "glab_bulge", "glab_boss"),
@@ -391,11 +388,36 @@ HANDLES = {            # diagram handle -> the outline / face keys it drags (wha
     "crown":   ("height", "glabRise", "glab_round"),
 }
 
+def plan_outline(sh):
+    """The head's plan outline at scale 1, right half: from the front on the axis round to the rear margin on the axis --
+    the head proper (its columns) with the genal piece unioned on (1 Nov 2026). A piece aimed in across the axis is cut at it."""
+    body = np.r_[np.c_[sh.ax, sh.yf], np.c_[sh.ax, sh.yr][::-1]]
+    if sh.piece is None: return body
+    from shapely.geometry import Polygon, box
+    from shapely.ops import unary_union
+    B = Polygon(np.r_[[[0.0, sh.yf[0]]], body, [[0.0, sh.yr[0]]]]).buffer(0)
+    U = unary_union([B, sh.piece.polygon()]).intersection(box(0.0, -1e4, 1e4, 1e4)).simplify(0.01, preserve_topology=True)
+    if U.geom_type != "Polygon": U = max(getattr(U, "geoms", [U]), key=lambda g: g.area)
+    ring = np.asarray(U.exterior.coords)[:-1]
+    on = ring[:, 0] < 1e-6
+    if not on.any(): return np.vstack([ring, ring[:1]])
+    # rotate so the walk starts on the axis at the front and ends on it at the rear, dropping the axis itself
+    n_ = len(ring); idx = np.where(on)[0]
+    front_i = idx[np.argmin(ring[idx, 1])]; rear_i = idx[np.argmax(ring[idx, 1])]
+    def walk(a, b, step):
+        out = [a]; k = a
+        while k != b: k = (k + step) % n_; out.append(k)
+        return out
+    w1 = walk(front_i, rear_i, 1); w2 = walk(front_i, rear_i, -1)
+    score = lambda w: (sum(1 for k in w[1:-1] if on[k]), -len(w))   # round the outside: off the axis, the long way
+    w = min((w1, w2), key=score)
+    return ring[w]
+
 def diagram(outline=None, face=None, n=260):
     """Polylines of one head for the sketch: plan (right half; mirror it) and elevation (the section on the axis and
     the highest profile). Returns dict(outline, glabella, eye, brim, boss, section, profile, handles, size)."""
     sh = Shape(outline); o = sh.o; F_ = HC.face_of(face); u = 1.0 / RO
-    ax = sh.ax; plan_ = np.r_[np.c_[ax, sh.yf], np.c_[ax, sh.yr][::-1]] * u
+    ax = sh.ax; plan_ = plan_outline(sh) * u
     gl = float(F_["glab_len"]); f = np.linspace(0, min(0.92 * gl, 1.0), n)
     gw = HC._glab_half(f / gl, face) * (1 - smoothstep(0.80, 0.92, f / gl) * 0.0)
     nose = np.clip(1 - np.clip((f / gl - 0.70) / 0.30, 0, 1) ** F_["glab_front"], 0, 1) ** (1 / F_["glab_front"])
@@ -423,11 +445,15 @@ def diagram(outline=None, face=None, n=260):
              glabella=(0.0, -min(0.92 * gl, 1.0) * sh.L1 * u))
     if o.get("trace") is not None:                                 # a traced margin: the front, side and rear handles have nothing to drag
         for k in ("front", "widest", "angle", "notch"): H.pop(k, None)
-    if sh.horn:
-        H["spine"] = (float(sh.xc[-1]) * u, float(sh.yc[-1]) * u); H["root"] = (float(sh.xc[0]) * u, float(sh.yc[0]) * u)
+    if sh.piece is not None:
+        pc = sh.piece; H["spine"] = tuple(float(c) * u for c in pc.tip); H["root"] = tuple(float(c) * u for c in pc.root)
+        H["kink"] = tuple(float(c) * u for c in pc.kink)                               # the kink, or the middle of a straight spine
+        A = pc.anchor if pc.anchor is not None else (pc.root[0] - max(0.9 * pc.W, 1.5), float(np.interp(pc.root[0] - max(0.9 * pc.W, 1.5), sh.ax, sh.yr)))
+        H["web"] = (float(A[0]) * u, float(A[1]) * u)                                    # the web's anchor on the rear margin (beside the root: none yet)
     if o["front_point"] > 0: H["process"] = (o["point_fork"], float(sh.yf[int(np.argmin(sh.yf))]) * u)
     if b > 0.02: H["brim"] = (0.7 * (1 - b), float(np.interp(0.7 * RO, ax, sh.yf)) * (1 - b) * u + sh.yw * b * u)
     if eye is not None: H["eye"] = (E["xe"] * u, float(eye[:, 1].mean()))
+    reach = float(np.abs(plan_[:, 0]).max()) if len(plan_) else sh.Xmax * u
     return dict(outline=plan_, glabella=glab, eye=eye, brim=brim, boss=boss, section=np.c_[ys * u, sec * kz], profile=np.c_[ys * u, prof * kz],
-                handles=H, size=dict(length=sh.L1 * u, halfwidth=sh.Xmax * u, width_vs_thorax=o["width"]), notes=list(sh.notes),
+                handles=H, size=dict(length=sh.L1 * u, halfwidth=max(sh.Xmax * u, reach), width_vs_thorax=o["width"]), notes=list(sh.notes),
                 trace=(np.array(o["trace"], float) if o.get("trace") is not None else None))

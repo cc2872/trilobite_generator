@@ -100,8 +100,8 @@ def head_from(rec, n_front=40, n_rear=30):
     outline = dict(trace=tr)
     if Lg >= 0.05:
         outline["genal"] = round(min(Lg, 3.5), 3)
-        outline["genal_spread"] = round(float(np.degrees(math.atan2(sp[0], sp[1]))), 1)    # 0 = straight back; + outward
-        outline["genal_spread"] = max(0.0, min(80.0, outline["genal_spread"]))     # 24 Oct 2026: the band runs outward only
+        outline["genal_angle"] = round(float(np.degrees(math.atan2(sp[0], sp[1]))), 1)     # 0 = straight back; + outward (1 Nov 2026: the full circle)
+        outline["genal_kink_angle"] = outline["genal_angle"]
     else:
         outline["genal"] = 0.0
     # the face
