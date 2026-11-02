@@ -91,7 +91,9 @@ def _relief_grid(m, n=300, view="top", field=True):
         # mask to the actual footprint: a grid cell is "on the animal" if a surface point sits within ~2 cells of it.
         d, _ = cKDTree(Pxy).query(pts)
         cell = 2.5 * max(ga[1] - ga[0], gb[1] - gb[0])
-        M = (d < cell).reshape(GA.shape)
+        M = (d < cell).reshape(GA.shape) | _raster_mask(m, ga, gb, (1, 2) if view == "side" else (0, 1))   # 2 Nov 2026: plus the
+        # triangles themselves -- on a long thin tube the vertices lie further apart than the cell, and the silhouette came
+        # out as a string of beads (the dotted spines of Kolihapeltis on the genera plate)
         Z = None
         if field:
             from scipy.interpolate import griddata
@@ -99,6 +101,21 @@ def _relief_grid(m, n=300, view="top", field=True):
         return GA, GB, Z, M
     except Exception:
         return None, None, None, None
+
+def _raster_mask(m, ga, gb, axes):
+    """The mesh's projection on the plane of `axes`, rasterised onto the grid (ga across, gb up): True where any triangle
+    covers a cell. Every triangle is filled, so a thin tube is a continuous band at any vertex spacing."""
+    from PIL import Image, ImageDraw
+    try:
+        nx, ny = len(ga), len(gb); dx = (ga[-1] - ga[0]) / max(nx - 1, 1); dy = (gb[-1] - gb[0]) / max(ny - 1, 1)
+        T = m.vertices[m.faces][:, :, list(axes)]
+        if axes == (1, 2): T = T[(m.vertices[m.faces][:, :, 0] > 0.5).any(axis=1)]   # the side view: the right flank, as the field
+        px = (T[:, :, 0] - ga[0]) / dx; py = (T[:, :, 1] - gb[0]) / dy
+        img = Image.new("L", (nx, ny), 0); dr = ImageDraw.Draw(img)
+        for a, b in zip(px.tolist(), py.tolist()): dr.polygon(list(zip(a, b)), fill=1, outline=1)
+        return np.asarray(img, bool)
+    except Exception:
+        return np.zeros((len(gb), len(ga)), bool)
 
 def _contours(m, levels):
     """Horizontal sections (z = const): the topographic lines of the dorsal plan."""
