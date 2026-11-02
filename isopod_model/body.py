@@ -505,7 +505,8 @@ def _spine_clear(h, plate, others):
     the plate yet below the plate's top where the plate exists -- the belly of the tube through a 2 mm lip plate into
     the joint) and every other part at rest? Returns (ok, why)."""
     V = h.vertices
-    out = ~plate.contains(V)
+    out = ~np.concatenate([plate.contains(V[i:i + 128]) for i in range(0, len(V), 128)])   # in batches: one ray query over a
+                                                                                             # long hooked tube ran to 6 GB
     if out.any():
         tops = _tops(plate, V[out, 0], V[out, 1]); low = V[out][np.isfinite(tops) & (V[out, 2] < tops - 0.05)]
         if len(low):
@@ -537,7 +538,8 @@ def free_spine_solid(sd, mesh, P, others=(), zone=None):
     tines = int(sd.get("tines", 1) or 1)
     def make(rb, rt_, zr, pitch):                                            # a plain curved spine, or a prong (25 Oct 2026): a shared stem that
         if tines <= 1:                                                       # splits into `tines` tines fanned by `splay`, lifted by `curl` at the split
-            return curved_spine(rb, rt_, L, (x, y, zr), yaw_deg=float(sd.get("yaw", 0.0)), pitch_deg=pitch, bend_deg=rise - pitch, roll_deg=float(sd.get("roll", 0.0)), flare=1.4)
+            return curved_spine(rb, rt_, L, (x, y, zr), yaw_deg=float(sd.get("yaw", 0.0)), pitch_deg=pitch, bend_deg=rise - pitch, roll_deg=float(sd.get("roll", 0.0)), flare=1.4,
+                                hook=float(sd.get("hook", 0.0)))
         return prong(tines, L, float(sd.get("splay", 40.0)), rb, rt_, (x, y, zr), yaw_deg=float(sd.get("yaw", 0.0)), pitch_deg=pitch, root_r=rb,
                      stem_frac=float(sd.get("stem", 0.4)), curl_deg=float(sd.get("curl", 0.0)), bend_deg=rise - pitch, roll_deg=float(sd.get("roll", 0.0)))
     tried = None

@@ -33,7 +33,7 @@ def test_prong_with_arched_tines():
     p = prong(3, 40.0, 40.0, 2.0, 0.45, (0, 0, 0), stem_frac=0.5, bend_deg=70.0)
     assert p.is_watertight and len(M.bodies(p)) == 1
     p0 = prong(3, 40.0, 40.0, 2.0, 0.45, (0, 0, 0), stem_frac=0.5)
-    assert abs(p0.volume - prong(3, 40.0, 40.0, 2.0, 0.45, (0, 0, 0), stem_frac=0.5, bend_deg=0.0).volume) < 1e-9
+    assert abs(p0.volume - prong(3, 40.0, 40.0, 2.0, 0.45, (0, 0, 0), stem_frac=0.5, bend_deg=0.0).volume) < 1e-9 * max(p0.volume, 1.0)   # (the boolean's own float noise; was absolute 1e-9)
 
 def test_schema_defaults_are_a_no_op():
     D = schema.table_defaults()

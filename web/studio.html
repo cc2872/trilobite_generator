@@ -117,7 +117,7 @@ const HNKEYS=['horn_len','horn_rise','horn_roll','horn_yaw'];       // ... and i
 function hornOf(r,i){ const P=S.P||{}; const thx=S.BD.rows.filter(x=>x.row.kind!=='pyg'); const frac=thx.length>1?Math.min(i/(thx.length-1),1):0;
   if(+r.horn_own>=0.5) return {L:+r.horn_len, turn:+r.horn_rise, roll:+r.horn_roll, yaw:+r.horn_yaw, own:true};
   return {L:(+P.pleuralHorn||0)*(+r.width)*(1+(+P.pleuralHornGrad||0)*frac), turn:(+P.pleuralHornPitch||45)+(+P.pleuralHornBend||0), roll:(+P.pleuralHornRoll||0), yaw:0, own:false}; }
-const FSKEYS=['x','y','len','rise','roll','yaw','tines','splay','stem','curl']; const FSR={x:[0,120], y:[-80,400], len:[0,200], rise:[-180,180], roll:[-180,180], yaw:[-180,180], tines:[1,5], splay:[0,180], stem:[0,0.9], curl:[-60,60]};
+const FSKEYS=['x','y','len','rise','roll','yaw','hook','tines','splay','stem','curl']; const FSR={x:[0,120], y:[-80,400], len:[0,200], rise:[-180,180], roll:[-180,180], yaw:[-180,180], hook:[-1,1], tines:[1,5], splay:[0,180], stem:[0,0.9], curl:[-60,60]};
 let addMode=false; $('addfeature').onclick=()=>{ addMode=!addMode; $('addfeature').classList.toggle('on',addMode); $('stage').classList.toggle('placing',addMode); if(!addMode){ S.pending=null; renderContext(); } status(addMode?'click on the animal to place a dot there':'' ,false); };
 // the placed dot, before it is anything (25 Oct 2026): S.pending = {x, y}; the panel asks what grows from it
 function growFeature(kind){ const d=S.pending; if(!d) return; S.spec.spines=S.spec.spines||[]; const rel=(S.P&&+S.P.relief)||17; const prong=kind==='prong';
@@ -246,7 +246,7 @@ function renderContext(rebuild=true){ const box=$('context');
   if(S.sel.type==='free'){ const j=S.sel.j; const L=S.spec.spines||[]; if(j>=L.length){ S.sel=null; return renderContext(); } const q=L[j];
     $('ctxname').textContent=`${(q.tines||1)>1?'Prong':'Spine'} ${j}${q.x<0.75?' - on the axis':' - mirrored'}`; $('ctxtools').innerHTML='';
     if(rebuild||box.dataset.k!=='fs'+j){ box.innerHTML=''; box.dataset.k='fs'+j;
-      for(const k of FSKEYS){ const rr=FSR[k]; slider(box,k,q[k],rr[0],rr[1],(rr[1]-rr[0])/300,val=>{ q[k]=+(+val).toFixed(3); sendBody(); },{x:'mm across',y:'mm along (- = head)',len:'mm',rise:'deg',roll:'deg',yaw:'deg, + outward',tines:'1 = a plain spine; 2 = a fork; 3 = a trident',splay:'deg, the fan of the tines',stem:'the shared stem, as a share of the length',curl:'deg, the tines lift (or dip) at the split'}[k]); }
+      for(const k of FSKEYS){ const rr=FSR[k]; slider(box,k,q[k],rr[0],rr[1],(rr[1]-rr[0])/300,val=>{ q[k]=+(+val).toFixed(3); sendBody(); },{x:'mm across',y:'mm along (- = head)',len:'mm',rise:'deg',roll:'deg',yaw:'deg, + outward',hook:'where it turns: + at the root (a hook, then straight), - at the tip',tines:'1 = a plain spine; 2 = a fork; 3 = a trident',splay:'deg, the fan of the tines',stem:'the shared stem, as a share of the length',curl:'deg, the tines lift (or dip) at the split'}[k]); }
       const row=document.createElement('div'); row.className='row'; row.style.marginTop='8px';
       for(const [t,f] of [['duplicate',()=>{ L.splice(j+1,0,Object.assign({},q,{y:q.y+8})); S.sel={type:'free',j:j+1}; sendBody(); renderContext(); }],
                           ['- spine',()=>{ L.splice(j,1); S.sel=L.length?{type:'free',j:Math.min(j,L.length-1)}:null; sendBody(); renderContext(); }]]){ const b=document.createElement('button'); b.className='btn small'; b.textContent=t; b.onclick=f; row.appendChild(b); }
@@ -343,13 +343,13 @@ new p5(s=>{
     const zmax=Math.max(...D.side.flatMap(p=>p.top.map(q=>q[1])), hz, 5)+2;
     const hreach=(S.HD&&S.HD.diagram.outline)?Math.max(...S.HD.diagram.outline.map(p=>p[1]))*headScale():0;   // how far back the head (its spine) reaches, model mm
     let treach=0, txw=0; for(const q of tailList()){ const yaw=Math.atan2(q.dir[0],q.dir[1])*180/Math.PI; const pts=arcPts([q.root[0],q.root[1],0.6],q.len,yaw,0,q.rise,q.roll,8); for(const p_ of pts){ treach=Math.max(treach,p_[1]); txw=Math.max(txw,Math.abs(p_[0])); } }   // the tail's spines
-    for(const q of freeList()){ const pts=arcPts([q.x,q.y,q.z],q.len,q.yaw,freeAngles(q.rise)[0],freeAngles(q.rise)[1],q.roll,8); for(const p_ of pts){ treach=Math.max(treach,p_[1]); txw=Math.max(txw,Math.abs(p_[0])); } }
+    for(const q of freeList()){ const pts=arcPts([q.x,q.y,q.z],q.len,q.yaw,freeAngles(q.rise)[0],freeAngles(q.rise)[1],q.roll,8,q.hook); for(const p_ of pts){ treach=Math.max(treach,p_[1]); txw=Math.max(txw,Math.abs(p_[0])); } }
     px=Math.min((H-80)/(Math.max(L,hreach,treach)+hl+6), (W-150)/(2*Math.max(xw,txw)+ZX*zmax+30)); ox=46+Math.max(xw,txw)*px; oy=40+hl*px; oxE=ox+Math.max(xw,txw)*px+30; }
   function drawFreeSpines(){ const zS=z=>oxE+z*ZX*px;
     if(S.pending){ for(const m of (S.pending.x<0.75?[1]:[1,-1])){ const sx=X(m*S.pending.x), sy=Y(S.pending.y); s.stroke(246,112,79); s.strokeWeight(1.5); s.noFill(); s.circle(sx,sy,11); s.fill(246,112,79); s.noStroke(); s.circle(sx,sy,4); } }   // the placed dot, waiting for its kind
     const L=freeList(); if(!L.length) return;
     L.forEach((q,j)=>{ const on=S.sel&&S.sel.type==='free'&&S.sel.j===j; const tn=Math.max(1,Math.round(q.tines||1));
-      const pts=tn>1?null:arcPts([q.x,q.y,q.z],q.len,q.yaw,freeAngles(q.rise)[0],freeAngles(q.rise)[1],q.roll,16);   // as free_spine_solid builds it
+      const pts=tn>1?null:arcPts([q.x,q.y,q.z],q.len,q.yaw,freeAngles(q.rise)[0],freeAngles(q.rise)[1],q.roll,24,q.hook);   // as free_spine_solid builds it
       const pr=tn>1?prongPts(q,q.z):null; const lines=tn>1?[...(pr.stem?[pr.stem]:[]),...pr.tines]:[pts];
       if(on) orange(1.3); else hair(255,1.2); for(const m of (q.x<0.75?[1]:[1,-1])) for(const ln of lines){ s.beginShape(); for(const p_ of ln) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); }
       hair(150,1); for(const ln of lines){ s.beginShape(); for(const p_ of ln) s.vertex(zS(p_[2]),Y(p_[1])); s.endShape(); }                            // side view
@@ -427,8 +427,10 @@ new p5(s=>{
   function hornRoot(){ const H=S.HD.diagram.handles||{}; const a=H.angle||[1,0]; return [0.92*a[0], a[1]]; }
   // ---- the body's spines (24 Oct 2026), drawn live from P: the same arc as anatomy/common.curved_spine, in model mm.
   // root [x,y,z]; the spine leaves along +y (rear) yawed toward +x, pitched up, bending by `bend` in a plane rolled about its own axis.
-  function arcPts(root,L,yaw,pit,bend,roll,n){ const phi=bend*Math.PI/180, R=roll*Math.PI/180, P_=pit*Math.PI/180, Yw=yaw*Math.PI/180; const out=[];
-    for(let i=0;i<=n;i++){ const t=i/n; let x=0,y,z; if(Math.abs(phi)<1e-6){ y=t*L; z=0; } else { const rad=L/Math.abs(phi), a=t*phi; y=rad*Math.sin(Math.abs(a)); z=Math.sign(phi)*rad*(1-Math.cos(a)); }
+  function hookYZ(t,L,phi,hook){ const m=200, e=1+3*Math.abs(hook); let y=0,z=0; const f=u=>hook>0?1-Math.pow(1-u,e):Math.pow(u,e);   // = anatomy.common.hook_path
+    for(let j=0;j<m;j++){ const u0=j/m*t, u1=(j+1)/m*t, a=phi*f(0.5*(u0+u1)); y+=Math.cos(a)*(u1-u0)*L; z+=Math.sin(a)*(u1-u0)*L; } return [y,z]; }
+  function arcPts(root,L,yaw,pit,bend,roll,n,hook){ const phi=bend*Math.PI/180, R=roll*Math.PI/180, P_=pit*Math.PI/180, Yw=yaw*Math.PI/180; const out=[]; hook=+hook||0;
+    for(let i=0;i<=n;i++){ const t=i/n; let x=0,y,z; if(Math.abs(phi)<1e-6){ y=t*L; z=0; } else if(Math.abs(hook)>1e-9){ [y,z]=hookYZ(t,L,phi,hook); } else { const rad=L/Math.abs(phi), a=t*phi; y=rad*Math.sin(Math.abs(a)); z=Math.sign(phi)*rad*(1-Math.cos(a)); }
       const x1=x*Math.cos(R)+z*Math.sin(R), z1=-x*Math.sin(R)+z*Math.cos(R); const y2=y*Math.cos(P_)-z1*Math.sin(P_), z2=y*Math.sin(P_)+z1*Math.cos(P_);
       out.push([root[0]+x1*Math.cos(Yw)+y2*Math.sin(Yw), root[1]-x1*Math.sin(Yw)+y2*Math.cos(Yw), root[2]+z2]); } return out; }
   // a prong in plan (25 Oct 2026), as anatomy.common.prong builds it: a stem of stem*len along (yaw, pitch), then `tines` tines fanned by `splay` about it, lifted by `curl`, each arching by the rest of the rise

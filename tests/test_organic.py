@@ -83,3 +83,13 @@ def test_the_genal_piece_is_one_curve():
     q = GN.Piece((10, 0), 40, 2.0, 75, kink=0.3, kink_angle=22, organic=1.0)
     assert q.path is not None and OR.min_bend_radius(q.path) > 0.5 * q.W
     assert GN.Piece((10, 0), 40, 2.0, 0.0, organic=0.0).path is None
+
+def test_a_hook_turns_early_and_keeps_its_length():
+    """hook > 0: most of the turn near the root, then a straight run; the tip is where spine_tip says; hook 0 = the arc."""
+    from anatomy.common import spine_tip, hook_turn
+    assert hook_turn(0.25, 0.8) > 0.6 and abs(hook_turn(0.25, 0.0) - 0.25) < 1e-12
+    s = curved_spine(1.5, 0.5, 60.0, (0, 0, 0), 0.0, 30.0, 150.0, 90.0, hook=0.6, organic=0.0)
+    t = spine_tip(60.0, (0, 0, 0), 0.0, 30.0, 150.0, 90.0, hook=0.6)
+    assert s.is_watertight and len(M.bodies(s)) == 1 and np.min(np.linalg.norm(s.vertices - t, axis=1)) < 1.0
+    a = spine_tip(60.0, (0, 0, 0), 0.0, 30.0, 150.0, 90.0); b = spine_tip(60.0, (0, 0, 0), 0.0, 30.0, 150.0, 90.0, hook=1e-12)
+    assert np.allclose(a, b, atol=1e-6)

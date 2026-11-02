@@ -81,7 +81,7 @@ BODY_KEYS = dict(
     pyg_len=("mm", "length of the pygidium (all pygidial rows together)"),
     term_spine=("mm", "a terminal spine from the pygidium's tip (0 = none)"),
     tail_spines=("list", "the tail's own margin spines (24 Oct 2026): [{phi: deg along the margin (0 front corner .. 90 rear tip), len: mm, rise: deg, roll: deg, blade: 0..1}], right side; absent = the preset's pair + marginals"),
-    spines=("list", "free spines anywhere on the animal (24 Oct 2026): [{x: mm across (>= 0, mirrored unless on the axis), y: mm along the body (0 = the first row's front; negative = on the head), len: mm, rise: deg, roll: deg, yaw: deg (0 straight back, + outward)}]"),
+    spines=("list", "free spines anywhere on the animal (24 Oct 2026): [{x: mm across (>= 0, mirrored unless on the axis), y: mm along the body (0 = the first row's front; negative = on the head), len: mm, rise: deg, roll: deg, yaw: deg (0 straight back, + outward), hook: -1..1 (where it turns: 1 a hook at the root then a straight run, -1 a hooked tip)}]"),
     min_joint_mm=("mm", "the joint minimum at print: a row shorter than this fuses"),
     print_scale=("x", "print mm per model mm (default: 18 mm per median thoracic row)"),
 )
@@ -197,8 +197,8 @@ TAIL_SPINE_DEFAULT = dict(phi=70.0, len=20.0, rise=30.0, roll=0.0, blade=0.0, wi
 MAX_TAIL_SPINES = 24
 
 FREE_SPINE_RANGE = dict(x=(0.0, 400.0), y=(-400.0, 2000.0), len=(0.0, 500.0), rise=(-180.0, 180.0), roll=(-180.0, 180.0), yaw=(-180.0, 180.0),
-                        tines=(1, 5), splay=(0.0, 180.0), stem=(0.0, 0.9), curl=(-60.0, 60.0))   # 25 Oct 2026: a prong -- tines (1 = a plain spine), their fan, the shared stem's share, the tines' lift at the split
-FREE_SPINE_DEFAULT = dict(x=0.0, y=0.0, len=15.0, rise=45.0, roll=0.0, yaw=0.0, tines=1, splay=40.0, stem=0.4, curl=0.0)
+                        tines=(1, 5), splay=(0.0, 180.0), stem=(0.0, 0.9), curl=(-60.0, 60.0), hook=(-1.0, 1.0))   # 25 Oct 2026: a prong -- tines (1 = a plain spine), their fan, the shared stem's share, the tines' lift at the split
+FREE_SPINE_DEFAULT = dict(x=0.0, y=0.0, len=15.0, rise=45.0, roll=0.0, yaw=0.0, tines=1, splay=40.0, stem=0.4, curl=0.0, hook=0.0)   # hook (1 Nov 2026): where the turn happens, -1 tip .. 0 even .. 1 root
 MAX_FREE_SPINES = 64
 
 def validate_free_spines(lst):

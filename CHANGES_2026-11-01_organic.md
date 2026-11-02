@@ -88,3 +88,19 @@ The strength reaches the builders from `P` (`assemble.part`, `body.build`, and e
 - The tail lobes get a round apex, not a slenderness floor (their width is set as an angle on the margin).
 
 Not pushed.
+
+## 2 Nov 2026: hooked spines (Ceratarges' frontal horns)
+
+A spine was always a circular arc (even curvature), so a horn that turns hard near its root and then runs straight back
+could not be drawn. New `hook` (-1..1) on `curved_spine`, `spine_tip` and the studio's free spines (a slider in the
+free-spine panel; `rows.FREE_SPINE_RANGE`): where along the spine the turn happens. 0 = the even arc as before (every
+saved body unchanged); +1 = the turn at the root, then a straight run; -1 = a hooked tip. `anatomy/common.hook_turn` /
+`hook_path`; the studio's drawing (`arcPts`) follows the same curve.
+
+- The spiny prototype's frontal horns are fitted to the Ceratarges drawing (`fit_horns.py`, outside the repo): from
+  the front of the glabella, up and out, round, and back over the cheeks to just behind the head. x 10.7, y -32.7,
+  len 78, rise 155, roll -87, yaw 115, hook 0.2.
+- `body._spine_clear` asks its inside-the-plate question in batches of 128 points: one query over a long hooked tube
+  ran to 6 GB and was killed.
+- `test_curved_spines`' prong equality is relative (1e-9 x volume), not absolute: two identical calls differed by
+  float noise in a longer run. New hook test in `test_organic.py`.
