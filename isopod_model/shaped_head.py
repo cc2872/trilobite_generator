@@ -160,7 +160,7 @@ def _convex_columns(x, yf, yr):
 
 
 class Shape:
-    def __init__(self, outline=None, n=1601):
+    def __init__(self, outline=None, n=1601, organic=None):
         o = self.o = outline_of(outline); tr = o.get("trace"); self.notes = []   # what the silhouette had to refuse (the studio shows them)
         if tr is not None:                                         # a traced margin: its own length, widest line and genal angle
             T = np.array(tr, float) * RO; L1 = self.L1 = float(-T[:, 1].min())
@@ -261,7 +261,7 @@ class Shape:
             if web > 0.01:
                 xa = x0 - web * (x0 - 0.12 * RO); anchor = (xa, float(np.interp(xa, axb, yrb)))
             self.piece = GN.Piece((x0, y0), Lh, w0, o["genal_angle"], kink=o["genal_kink"], kink_angle=o["genal_kink_angle"],
-                                  tip=o["genal_tip"], web=anchor, web_round=o["genal_web_round"], hw_min=0.35, inward=inward)
+                                  tip=o["genal_tip"], web=anchor, web_round=o["genal_web_round"], hw_min=0.35, inward=inward, organic=organic)
             self.notes += self.piece.notes
         self.horn, self.x_in, self.yg, self.xg, self.yw = horn, x_in, yg, xg, yw
         Xmax = self.Xmax = float(RO)                               # the columns hold the head proper; the genal piece is its own solid
@@ -343,7 +343,8 @@ def plan(P, plans, K, outline=None, face=None, z_thorax=None):
     shingle flap behind it, as the classic head lies over segment 0)."""
     from anatomy.common import pitch
     import mesh as M
-    sh = Shape(outline); o = sh.o
+    from anatomy import organic as OR
+    sh = Shape(outline, organic=OR.k_of(P)); o = sh.o
     S1 = plans[1][2]; w_seg = max(abs(S1["outline"](u, v)[0]) for u in np.linspace(-1, 1, 201) for v in (0.0, 0.5, 1.0))
     k = o["width"] * w_seg / RO
     if z_thorax is None:

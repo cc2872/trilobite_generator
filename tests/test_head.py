@@ -4,7 +4,7 @@ import numpy as np, pytest, trimesh
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, ROOT)
 import schema, parts, mesh as M
 REF = os.path.join(ROOT, "tests", "references"); SURF_TOL_MM = 0.30
-def _params(n): return schema.coerce(json.load(open(os.path.join(REF, n, "params.json"))))
+def _params(n): return schema.coerce(dict(json.load(open(os.path.join(REF, n, "params.json"))), organic=0.0))   # the frozen geometry: organic off (1 Nov 2026)
 def _bevel(n): return float(json.load(open(os.path.join(REF, n, "measure_v2.json")))["bevel_built_deg"])
 def _dist(m, p, n=4000):
     r = trimesh.load(p); pts, _ = trimesh.sample.sample_surface(m, n, seed=0); _, d, _ = trimesh.proximity.closest_point(r, pts); return float(np.median(d)), r.volume

@@ -24,7 +24,7 @@ def surface_distance(a, b, n=4000):
 @pytest.mark.parametrize("ref", REFS, ids=[os.path.basename(r) for r in REFS])
 def test_preset_reproduces(ref):
     frozen = json.load(open(os.path.join(ref, "measure_v2.json")))
-    P = schema.coerce(json.load(open(os.path.join(ref, "params.json"))))
+    P = schema.coerce(dict(json.load(open(os.path.join(ref, "params.json"))), organic=0.0))   # the frozen geometry (the instrument measures at 0)
     bevel = float(frozen["bevel_built_deg"])
     B = I.build_animal(P, bevel)
     for name, m in zip(B["names"], B["meshes"]):

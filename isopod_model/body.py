@@ -27,6 +27,7 @@ Checks: every part watertight and one piece; neighbours apart at rest and throug
 import os, sys, math, argparse, gc, json
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import numpy as np, trimesh
+from anatomy import organic as _OR
 import schema, mesh as M
 from anatomy import head as HEAD, thorax as THORAX, tail as TAIL
 from anatomy.common import spine_solid, curved_spine, prong, pitch, smoothstep
@@ -220,6 +221,22 @@ def sample_plan(S, nu, nv):
     return xs, ys, zs
 
 
+def roll_edges(xs, ys, top, bot, strip_w, k):
+    """Organic rule 6 (anatomy/organic.py; 1 Nov 2026) on a part's grid (rows v front .. rear, columns u across): every
+    free edge of the plan -- the front and rear outline of each column, and the two ends -- is rolled. A solid part's
+    top falls through a quarter round of up to EDGE_R (never more than a third of the column's width, so a spine is not
+    rolled flat); a plate lifted off the bed gets a bullnose (top down, underside up, 0.6 left at the edge). The joint
+    column (|x| <= strip_w + 1) keeps its front and rear faces as they are."""
+    width = ys[-1:, :] - ys[:1, :]
+    d_v = np.minimum(ys - ys[:1, :], ys[-1:, :] - ys)
+    d_u = np.minimum(np.abs(xs - xs[:, :1]), np.abs(xs[:, -1:] - xs))
+    plate = bot > 1e-6
+    R = np.where(plate, np.maximum(0.5 * (top - bot) - 0.3, 0.0), np.minimum(np.minimum(_OR.EDGE_R, 0.5 * top), width / 3.0))
+    sw = (strip_w or 0.0) + 1.0
+    drop = np.maximum(_OR.edge_drop(d_v, R, k) * smoothstep(sw, sw + 3.0, np.abs(xs)), _OR.edge_drop(d_u, R, k))   # eased in beside the column
+    return top - drop, np.where(plate, bot + drop, bot)
+
+
 def build_part(k, plans, P, J, PV, U=None, shell=False, strip_w=None):
     """Part k as a height-field solid: top = part_top, bottom = the bed, a WALL-thick plate behind its rear joint
     plane. shell=True (the rows model): a WALL-thick slab everywhere except the joint strip |x| <= strip_w, which
@@ -239,6 +256,8 @@ def build_part(k, plans, P, J, PV, U=None, shell=False, strip_w=None):
     elif k < len(plans) - 1:
         yr = plans[k + 1][3] - 0.5 * ga
         bot = np.where(y > yr, top - WALL, bot)                             # the plate behind the rear joint plane
+    k_or = _OR.strength()
+    if k_or > 0 and kind != "head" and not shell: top, bot = roll_edges(xs, ys, top, bot, strip_w, k_or)
     bot = np.clip(np.minimum(bot, top - 0.6), 0.0, None)
     top = np.maximum(top, bot + 0.6)
     T = np.c_[xs.ravel(), y.ravel(), top.ravel()]; B = np.c_[xs.ravel(), y.ravel(), bot.ravel()]
@@ -809,7 +828,7 @@ def _head_sig():
     if _HEAD_SIG is None:
         import hashlib; h = hashlib.sha1(); here = os.path.dirname(os.path.abspath(__file__))
         for f in ("body.py", "shaped_head.py", "crescent_head.py", "head_styles.py", "../anatomy/head_crescent.py", "../anatomy/head.py", "../mesh.py", "../fields.py",
-                  "../anatomy/common.py", "../anatomy/genal.py"):           # 24 Oct 2026: the spines' builder was missing -- a spine change served stale heads
+                  "../anatomy/common.py", "../anatomy/genal.py", "../anatomy/organic.py"):           # 24 Oct 2026: the spines' builder was missing -- a spine change served stale heads
             try: h.update(open(os.path.join(here, f), "rb").read())
             except OSError: pass
         _HEAD_SIG = h.hexdigest()[:10]
@@ -948,6 +967,7 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
     U = None; H = None; n = len(plans); _progress(0, 0, n)
     LAST_ORNAMENTS.clear(); LAST_AUDIT.clear()
     import anatomy.common as _C; _C.MIN_R = PRINT_MIN_R * float(K["s"])     # model mm (print = model / s)
+    _OR.set_from(P)                                                         # the organic protocol's strength (1 Nov 2026)
     if head in ("isopod", "shaped"): H, U = _head_cached(P, head, face, outline, plans, J, K, PV)
     if H is not None and ROWS_INFO.get("free_spines"):                      # free spines standing on the head (24 Oct 2026): rooted on its built surface
         hs = [free_spine_solid(sd, H, P) for sd in ROWS_INFO["free_spines"] if float(sd["y"]) < plans[1][3]]

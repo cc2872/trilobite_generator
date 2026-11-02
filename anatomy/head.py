@@ -17,6 +17,7 @@ import mesh as M
 from fields import seg_halfwidth, head_halfwidth, furrow_amp
 from anatomy.common import pitch, ring_top, smoothstep, plateau, trough, vault, spine_solid, curved_spine, prong, safe_expr, GRID_HEAD
 from anatomy import genal as GN
+from anatomy import organic as OR
 from anatomy.port import Port
 
 def eye_geometry(P):
@@ -164,7 +165,7 @@ def plan(P, notes=None):
     if web > 0.01:
         xa = root[0] - web * (root[0] - (a + 0.5)); anchor = (xa, float(cheek(np.array([xa / wh]))[0]))
     piece = GN.Piece(root, Lg, W_arm, P["genalAngle"], kink=P["genalKink"], kink_angle=P["genalKinkAngle"], tip=P["genalTip"],
-                     web=anchor, web_round=P["genalWebRound"], hw_min=0.35, inward=(-0.6, -0.8))
+                     web=anchor, web_round=P["genalWebRound"], hw_min=0.35, inward=(-0.6, -0.8), organic=OR.k_of(P))
     if notes is not None:
         for n_ in piece.notes: notes.append(("head", "genal", n_))
     arm_outline = [o for nm, o, _ in piece.bands if nm.startswith("segment")][-1]   # the last capsule: (1, 0.5) is the tip (landmark 16)
@@ -180,6 +181,8 @@ def plan(P, notes=None):
         d_out = np.maximum.reduce([y - yr_, yf_ - y, ax - wh])
         zb = zfun(axc, np.clip(y, yf_, yr_)) - 0.3
         blend = smoothstep(-0.5, 2.5, d_out)
+        if piece.k > 0:                                              # organic rule 4: a rounded ridge along the piece, not a flat strip
+            s_, hw_ = piece.across(ax, y); z = z + OR.dome(s_, hw_, piece.k)
         return (1 - blend) * zb + blend * z
     return dict(outline=outline, zfun=zfun, xmax=xmax, arm_outline=arm_outline, arm_z=arm_z, genal=piece, Lg=Lg, t=t, c=c, h=h, Lc=Lc,
                 wh=wh, a=a, margin=margin, u_a=a / X_tip, eye=G, suture=suture, eye_ridge=ridge,
@@ -344,6 +347,14 @@ def sphere_eye(R, arc_deg, lensD, lensGap, lensRise, stalk=0.0, stalk_r=0.45, le
         r0 = stalk_r * R; root_z = -embed - stalk
         pts, tang = stalk_arc(stalk, bend_deg, root_z)
         n = len(pts) - 1
+        k_ = OR.strength()
+        if k_ > 0:                                                   # organic (1 Nov 2026): one smooth tube on the protocol's taper, a collar at
+            from anatomy.common import sweep_tube                    # its root -- not a chain of cones and balls
+            r0_, rt_ = OR.spine_radii(r0, r0 * STALK_TAPER, stalk, k_); ts_ = np.linspace(0, 1, n + 1)
+            rr = OR.taper(ts_, r0_, rt_, k_); rr = np.maximum(rr, r0_ * (1 + (OR.flare(1.0, k_) - 1) * (1 - np.clip(ts_ / 0.25, 0, 1)) ** 2))
+            ext = np.vstack([pts, pts[-1] + tang * (0.6 * R)])            # on into the eye
+            parts.append(M.to_manifold(sweep_tube(ext, np.r_[rr, rr[-1]])))
+            n = 0
         for i in range(n):
             a, b = pts[i], pts[i + 1]; d = b - a; L = float(np.linalg.norm(d))
             ra = r0 * (1 - (1 - STALK_TAPER) * i / n); rb = r0 * (1 - (1 - STALK_TAPER) * (i + 1) / n)
@@ -420,7 +431,7 @@ def solid(P, S, grid=GRID_HEAD):
 def ornaments(P, S, notes=None):
     """In build order. Each entry is (name, solid, how): how = "union" (with its mirror image where symmetric) or
     "mirror" (the eye: union the right one only, cut the part at x = 0, mirror, weld; see the note on the eye)."""
-    out = []
+    OR.set_from(P); out = []
     arm = genal_solid(S)
     if arm is not None: out.append(("genalArms", [arm, M.mirror_x(arm)], "union"))
     if P.get("eyeSolid", 0) > 0.5 and P["eyeSize"] > 0.01:

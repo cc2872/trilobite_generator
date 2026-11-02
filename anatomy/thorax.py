@@ -17,6 +17,7 @@ import mesh as M
 from fields import seg_halfwidth, pleural_spine_field, furrow_amp
 from anatomy.common import pitch, smoothstep, plateau, trough, vault, spine_solid, curved_spine, GRID_SEG
 from anatomy.port import Port
+from anatomy import organic as OR
 
 TIP_KEEP_MM = 3.0        # (used by the pin joint's band rule via Port.halfwidth; kept here for reference)
 
@@ -44,6 +45,21 @@ def plan(P, i):
     R_TIP = 0.7
     def q_of(x): return np.clip((np.abs(x) - a) / (w - a), 0, 1)
     def p_of(x): return np.clip((np.abs(x) - w) / max(X_tip - w, 1e-6), 0, 1) if Ls > 0.5 else np.zeros_like(np.asarray(x, float))
+    # 1 Nov 2026, the organic protocol (anatomy/organic.py, rules 1, 2, 4): a pleural spine drawn in the plan is no
+    # thinner than its length allows, tapers on a full profile to a round cap (not 0.7 mm cut square), and blends into
+    # the blade over its last stretch; k = 0 is the spine as before
+    k = OR.k_of(P) if Ls > 0.5 else 0.0
+    half_w = 0.5 * min(P["bladeChord"] * d, L0) * (1 - P["tipTaper"])        # the blade's half-chord where the spine leaves it
+    ramp = 0.35 * (w - a)
+    if k > 0:
+        cap = float(P.get("pleuralHorn", 0.0)) <= 0.02                     # a horn continuing the spine takes its end as it is
+        _, r0_or = OR.plan_spine(w, w, X_tip, half_w, Ls, k, cap)
+    def _organic_hb(ax, p, hb_old):
+        hw, _ = OR.plan_spine(ax, w, X_tip, half_w, Ls, k, cap)
+        slope = 1.5 * S_sp * np.sqrt(p) / max(X_tip - w, 1e-6)              # the centreline's slope: the plan's half-width is across y
+        hb_sp = hw * np.sqrt(1 + slope ** 2)
+        hb_new = np.where(ax > w, hb_sp, np.maximum(hb_old, r0_or * smoothstep(w - ramp, w, ax)))
+        return (1 - k) * hb_old + k * hb_new
     def edges(x):
         q = q_of(x); p = p_of(x)
         yc = 0.5 * L0 + sweep * q ** 1.6 + S_sp * p ** 1.5
@@ -51,6 +67,7 @@ def plan(P, i):
         half = 0.5 * L0 * (1 - root) + 0.5 * min(P["bladeChord"] * d, L0) * root
         hb = half * (1 - P["tipTaper"] * q ** 2.5)
         hb = hb * (1 - p) ** 0.5 + R_TIP * p
+        if k > 0: hb = _organic_hb(np.abs(np.asarray(x, float)), p, hb)
         return yc - hb, yc + hb
     def outline(u, v):
         x = u * X_tip
@@ -76,9 +93,15 @@ def plan(P, i):
         if Ls > 0.5:
             p = p_of(x)
             z = np.where(p > 0, np.maximum(margin * (1 - 0.55 * p), t + 0.6), z)
+            if k > 0:                                                      # rule 4: a rounded ridge across the spine, eased in from the blade
+                ye0, ye1 = edges(x); hb_ = np.maximum(0.5 * (ye1 - ye0), 1e-6)
+                hb_ = np.where(ax > w, hb_, np.minimum(hb_, r0_or)); s_ = (y - 0.5 * (ye0 + ye1)) / hb_   # on the blade: the spine's ridge, running in
+                hw_ = hb_ / np.sqrt(1 + (1.5 * S_sp * np.sqrt(p) / max(X_tip - w, 1e-6)) ** 2)
+                z = z + OR.dome(s_, hw_, k) * smoothstep(w - ramp, w, ax)
         yf, _ = edges(x)
         t_prev = t * (P["headWall"] if i == 0 else 1.0)
         drop = np.minimum(t_prev + c + 0.7 * F + 0.3, np.maximum(z - (t + 0.6), 0))
+        if k > 0: drop = drop * (1 - k * smoothstep(w, w + 1.0, ax))   # organic: a spine narrower than the shingle strip keeps its ridge
         z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y - yf))
         return z
     return dict(outline=outline, zfun=zfun, edges=edges, t=t, w=w, a=a, d=d, ovl=ovl, margin=margin, rise=rise, h=h,
@@ -112,7 +135,7 @@ def solid(P, S, grid=GRID_SEG):
 
 def ornaments(P, S):
     """Solids unioned onto the part AFTER the joint, in this order. Plan frame."""
-    out = []
+    OR.set_from(P); out = []
     frac = min(max(S.get("i", 0) / max(S.get("n", 1) - 1, 1), 0.0), 1.0)      # 0 on the first segment, 1 on the last
     A = S.get("axial") or dict(L=float(P["axialSpine"]) * S["h"], pitch=float(P.get("axialPitch", 60.0)), bend=float(P.get("axialBend", 0.0)), grad=float(P.get("axialGrad", 0.0)))
     if A["L"] > 0.02 * S["h"]:

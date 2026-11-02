@@ -12,7 +12,7 @@ import schema, parts, mesh as M
 REF = os.path.join(ROOT, "tests", "references")
 SURF_TOL_MM = 0.30
 
-def _params(name): return schema.coerce(json.load(open(os.path.join(REF, name, "params.json"))))
+def _params(name): return schema.coerce(dict(json.load(open(os.path.join(REF, name, "params.json"))), organic=0.0))   # the frozen geometry: organic off (1 Nov 2026)
 def _bevel(name): return float(json.load(open(os.path.join(REF, name, "measure_v2.json")))["bevel_built_deg"])
 def _dist(m, ref_path, n=4000):
     r = trimesh.load(ref_path)

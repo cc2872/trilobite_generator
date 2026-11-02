@@ -22,6 +22,7 @@ Frame: x across (outward +), y along (rear +), the RIGHT side; the caller mirror
 """
 import math
 import numpy as np
+from anatomy import organic as OR
 
 def dirv(deg):
     """Unit vector for an angle in this frame: 0 = +y (back), +90 = +x (out)."""
@@ -33,19 +34,29 @@ def _wrap(deg):
 
 class Piece:
     def __init__(self, root, L, W, angle, kink=0.0, kink_angle=None, tip=0.0, web=None, web_round=0.0, hw_min=0.3,
-                 inward=(-0.6, -0.8), stub=None):
+                 inward=(-0.6, -0.8), stub=None, organic=None):
         self.notes = []
         R = np.asarray(root, float); L = float(max(L, 0.0)); W = float(max(W, 2 * hw_min)); tip = float(np.clip(tip, 0.0, 1.0))
         kink = float(np.clip(kink, 0.0, 0.9)); a1 = _wrap(angle); a2 = _wrap(a1 if kink_angle is None else kink_angle)
+        # the organic protocol (anatomy/organic.py; 1 Nov 2026): no thinner than its length allows (rule 1), a full taper
+        # to a round tip however pointed it is asked to be (rule 2), a kink bent through a fillet (rule 5)
+        k = OR.strength(organic); self.k = k
+        if k > 0:
+            W1 = max(W, 2 * k * L / OR.SLENDER_PLAN); tip = max(tip, k * OR.TIP_FRAC)
+            if W1 > W:                                             # widened on its outer side only: the inner edge stays where the
+                d0 = dirv(a1); R = R + 0.5 * (W1 - W) * np.array([d0[1], -d0[0]])   # body expects it (a prolongation beside the
+            W = W1                                                 # thorax must not grow into it)
+        e_tp = 1.0 - k * (1.0 - OR.TAPER_EXP)
         self.root, self.L, self.W, self.tip_round = R, L, W, tip
         self.hw_min = hw_min
         rc = 0.5 * W * tip                                         # the round end's radius (0 for a point)
         Ls = max(L - rc, 0.25 * L)                                 # the centreline up to where the round end starts
         rc = min(rc, L - Ls) if L > 0 else 0.0
         self.Ls, self.rc = Ls, rc
+        Lq = [Ls]                                                  # what the taper runs over (the filleted path is a little shorter)
         def hw(s):                                                 # half-width along the centreline, s = 0 .. Ls
-            q = np.clip(np.asarray(s, float) / max(Ls, 1e-9), 0, 1)
-            return np.maximum(0.5 * W * ((1 - tip) * (1 - q) + tip), hw_min)
+            q = np.clip(np.asarray(s, float) / max(Lq[0], 1e-9), 0, 1)
+            return np.maximum(0.5 * W * ((1 - tip) * (1 - q) ** e_tp + tip), hw_min)
         self.hw = hw
         d1 = dirv(a1); d2 = dirv(a2)
         if kink > 0.01 and Ls > 0:
@@ -57,6 +68,12 @@ class Piece:
         self.kink = K; self.end = E
         dl = segs[-1][4]; self.tip = E + rc * dl                   # the furthest point: the round end's apex (or the point)
         self.skeleton = np.vstack([R] + [s[1] for s in segs] + ([self.tip] if rc > 1e-9 else []))
+        self.path = None
+        if self.kinked and k > 0:                                  # rule 5: the corner at the kink becomes an arc
+            self.path = self._fillet(R, K, E, d1, d2, k * OR.BEND_W * W, 0.5 * W)
+            if self.path is not None:
+                Lq[0] = float(np.hypot(*np.diff(self.path, axis=0).T).sum())
+                self.skeleton = np.vstack([self.path] + ([self.tip] if rc > 1e-9 else []))
         self.bands = []
         # the root stub: a short round-ended band from inside the head out to the root, so the piece is joined to the head
         # whichever way it points (a spine aimed forward or out leaves the margin at an angle; the stub fills the corner)
@@ -64,12 +81,16 @@ class Piece:
         if Ls_stub > 1e-6:
             Rin = R + Ls_stub * iv; dstub = -iv; h0 = float(hw(0.0))
             self.bands.append(("root", self._capsule(Rin, dstub, 0.0, Ls_stub, 0.0, h0, hfun=lambda s_: h0), lambda u: 0.0))
-        for i, (p0, p1, s0, s1, d) in enumerate(segs):
-            last = i == len(segs) - 1
-            back = 0.3 * float(hw(s0)) if i == 0 else 0.6 * float(hw(s0))   # each band starts a little inside the one before
-            cap = rc if last else float(hw(s1))                    # every segment ends round: the joint, or the tip
-            if last and rc <= 1e-9: cap = 0.0                      # ... except a pointed tip
-            self.bands.append((f"segment{i + 1}", self._capsule(p0, d, s0, s1, back, cap), self._s_of(s0, s1, back, cap)))
+        if self.path is not None:                                  # one band along the filleted path, ending in the tip
+            back = 0.3 * float(hw(0.0))
+            self.bands.append(("segment1", self._curve(self.path, back, rc), self._s_of(0.0, Lq[0], back, rc, Lq[0])))
+        else:
+            for i, (p0, p1, s0, s1, d) in enumerate(segs):
+                last = i == len(segs) - 1
+                back = 0.3 * float(hw(s0)) if i == 0 else 0.6 * float(hw(s0))   # each band starts a little inside the one before
+                cap = rc if last else float(hw(s1))                    # every segment ends round: the joint, or the tip
+                if last and rc <= 1e-9: cap = 0.0                      # ... except a pointed tip
+                self.bands.append((f"segment{i + 1}", self._capsule(p0, d, s0, s1, back, cap), self._s_of(s0, s1, back, cap)))
         self.anchor = None
         if web is not None:
             A = np.asarray(web, float)
@@ -93,9 +114,63 @@ class Piece:
             return float(c[0] + n[0] * (v - 0.5) * 2 * h), float(c[1] + n[1] * (v - 0.5) * 2 * h)
         return outline
 
-    def _s_of(self, s0, s1, back, cap):
-        Lseg = s1 - s0; T0, T1 = -back, Lseg + cap; Ltot = max(self.Ls + self.rc, 1e-9)
+    def _s_of(self, s0, s1, back, cap, Ltot=None):
+        Lseg = s1 - s0; T0, T1 = -back, Lseg + cap; Ltot = max((self.Ls if Ltot is None else Ltot) + self.rc, 1e-9)
         return lambda u: float(np.clip((s0 + T0 + (T1 - T0) * 0.5 * (u + 1)) / Ltot, -0.5, 1.0))
+
+    # rule 5: the centreline R -> K -> E with the corner at K replaced by a circular arc of radius rf (shrunk to fit the
+    # two legs); None when even the shrunk arc would be tighter than the half-width hw0 (the inner edge would fold)
+    @staticmethod
+    def _fillet(R, K, E, d1, d2, rf, hw0, n=24):
+        th = math.acos(float(np.clip(np.dot(d1, d2), -1.0, 1.0)))
+        if th < math.radians(2.0): return None
+        L1 = float(np.hypot(*(K - R))); L2 = float(np.hypot(*(E - K)))
+        tl_max = 0.8 * min(L1, L2); tl = rf * math.tan(0.5 * th)
+        if tl > tl_max: rf = tl_max / math.tan(0.5 * th); tl = tl_max
+        if rf < 1.05 * hw0: return None
+        A = K - tl * d1; B = K + tl * d2
+        sgn = 1.0 if (d1[0] * d2[1] - d1[1] * d2[0]) > 0 else -1.0
+        nt = sgn * np.array([-d1[1], d1[0]]); C = A + rf * nt
+        v0 = A - C; arc = []
+        for ph in np.linspace(0.0, th, n + 1):
+            c_, s_ = math.cos(sgn * ph), math.sin(sgn * ph)
+            arc.append(C + np.array([c_ * v0[0] - s_ * v0[1], s_ * v0[0] + c_ * v0[1]]))
+        pts = [R] + arc + [E]
+        return np.asarray(pts, float)
+
+    # a band along a polyline (the filleted centreline): starts `back` behind its first point, ends in a round cap
+    def _curve(self, path, back, cap):
+        P_ = np.asarray(path, float); seg = np.hypot(*np.diff(P_, axis=0).T); sc = np.r_[0, np.cumsum(seg)]; Lp = float(sc[-1])
+        Tn = np.diff(P_, axis=0) / np.maximum(seg, 1e-12)[:, None]
+        Tv = np.vstack([Tn[0], 0.5 * (Tn[:-1] + Tn[1:]), Tn[-1]]); Tv /= np.maximum(np.linalg.norm(Tv, axis=1), 1e-12)[:, None]
+        hw, hm = self.hw, self.hw_min; T0, T1 = -back, Lp + cap
+        def outline(u, v):
+            t = T0 + (T1 - T0) * 0.5 * (u + 1)
+            if t <= 0: c = P_[0] + t * Tn[0]; d = Tn[0]; h = float(hw(0.0))
+            elif t <= Lp:
+                i = int(min(np.searchsorted(sc, t, side="right") - 1, len(seg) - 1)); f = (t - sc[i]) / max(seg[i], 1e-12)
+                c = P_[i] * (1 - f) + P_[i + 1] * f; d = Tv[i] * (1 - f) + Tv[i + 1] * f; d = d / max(np.hypot(*d), 1e-12); h = float(hw(t))
+            else:
+                c = P_[-1] + (t - Lp) * Tn[-1]; d = Tn[-1]
+                q = min((t - Lp) / max(cap, 1e-9), 1.0); h = max(float(hw(Lp)) * math.sqrt(max(1 - q * q, 0.0)), hm if q < 1 else 0.0)
+                if cap <= 1e-9: h = float(hw(Lp))
+            n = np.array([d[1], -d[0]])
+            return float(c[0] + n[0] * (v - 0.5) * 2 * h), float(c[1] + n[1] * (v - 0.5) * 2 * h)
+        return outline
+
+    def across(self, x, y):
+        """For a point (or arrays) in the plan: (s, hw) -- s its distance from the centreline / the half-width there
+        (0 on the centreline, 1 on the edge), hw that half-width. For rule 4's section on a surface given as z(x, y)."""
+        x = np.asarray(x, float); y = np.asarray(y, float); sk = self.skeleton
+        seg = np.hypot(*np.diff(sk, axis=0).T); sc = np.r_[0, np.cumsum(seg)]
+        best_d = np.full(np.broadcast(x, y).shape, np.inf); best_s = np.zeros_like(best_d)
+        for i in range(len(seg)):
+            a = sk[i]; d = (sk[i + 1] - a) / max(seg[i], 1e-12)
+            t = np.clip((x - a[0]) * d[0] + (y - a[1]) * d[1], 0, seg[i])
+            dist = np.hypot(x - (a[0] + t * d[0]), y - (a[1] + t * d[1]))
+            m = dist < best_d; best_d = np.where(m, dist, best_d); best_s = np.where(m, sc[i] + t, best_s)
+        h = np.maximum(self.hw(best_s), 1e-6)
+        return best_d / h, h
 
     # the web: inner edge the anchor -> tip curve, outer edge the centreline root -> tip; both run to the tip
     def _web(self, A, rho):

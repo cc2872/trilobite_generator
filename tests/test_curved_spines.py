@@ -18,7 +18,7 @@ def test_bend_zero_is_the_old_spine():
 
 @pytest.mark.parametrize("bend,roll", [(60, 0), (150, 0), (90, 90), (-90, 0), (180, 180), (30, -45)])
 def test_arc_is_one_watertight_body_and_the_tip_is_where_spine_tip_says(bend, roll):
-    s = curved_spine(2.0, 0.4, 30.0, (0, 0, 0), 0.0, 0.0, bend, roll)
+    s = curved_spine(2.0, 0.4, 30.0, (0, 0, 0), 0.0, 0.0, bend, roll, organic=0.0)   # the arc itself (the organic finish: test_organic)
     assert s.is_watertight and len(M.bodies(s)) == 1
     tip = spine_tip(30.0, (0, 0, 0), 0.0, 0.0, bend, roll)
     far = s.vertices[np.argmax(np.linalg.norm(s.vertices, axis=1))]

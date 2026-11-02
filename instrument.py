@@ -40,12 +40,16 @@ PRINT_GRID = (121, 61)
 class MeasureTimeout(Exception): pass
 
 # ---------------------------------------------------------------- building the animal
+ORGANIC = 0.0   # 1 Nov 2026: the instrument measures the animal as pre-registered -- the organic protocol (anatomy/organic.py) off.
+                # Set 1.0 to measure the rounded animal the site prints by default.
+def _measured(P): return dict(schema.coerce(P), organic=ORGANIC)
+
 def part_names(P): return ["head"] + [f"seg{i}" for i in range(int(P["segCount"]))] + ["tail"]
 
 def probe_bound(P, bounds=BOUNDS_PROBE, grid=MEASURE_GRID):
     """Widest bevel in `bounds` at which EVERY segment builds as one body (a wide wedge severs pleural tips — agnostida's
     middle segment at 45, harpetida's seg7 at 45). Returns (bound, {bound: max bodies over segments})."""
-    P = schema.coerce(P); probe = {}
+    P = _measured(P); probe = {}
     for b in bounds:
         worst = 1
         for i in range(int(P["segCount"])):
@@ -60,7 +64,7 @@ def probe_bound(P, bounds=BOUNDS_PROBE, grid=MEASURE_GRID):
 def build_animal(P, bound_deg=BOUND_DEG, grid=MEASURE_GRID, export_dir=None):
     """Every part at one fixed bevel. Returns dict: names, meshes, head_body, bevel_built_deg, unsane_parts, notes, build_seconds.
     unsane_parts = parts that did not come out as one closed body (a severed pleural tip is a body of its own)."""
-    P = schema.coerce(P); t0 = time.time(); notes = []; names = part_names(P); meshes = []; unsane = []
+    P = _measured(P); t0 = time.time(); notes = []; names = part_names(P); meshes = []; unsane = []
     builders = [fn for _, fn in assemble.builders(P, PIN, bevel_deg=bound_deg, grid=grid, notes=notes)]
     for n, fn in zip(names, builders):
         try:
@@ -140,13 +144,13 @@ def closure_gap_deg(P, meshes, theta_deg, deadline=None, head_body=None):
     return float(cm.min_distance_single(tail))
 
 def tail_margin_local(P):
-    P = schema.coerce(P)
+    P = _measured(P)
     return np.array([0.0, P["pygFrac"] * P["length"], P["marginHeight"] * P["relief"] * P["tailRelief"], 1.0])
 
 def closure_geometry(P, theta_deg):
     """s_tail = (y_tip + Lc) / Lc in the head frame: 0 margins meet, > 0 tail margin inside the head's footprint (under
     the cephalon), < 0 past the front of the head."""
-    P = schema.coerce(P); Lc = P["cephFrac"] * P["length"]
+    P = _measured(P); Lc = P["cephFrac"] * P["length"]
     tip = transforms_deg(P, theta_deg)[-1] @ tail_margin_local(P)
     return dict(tail_margin_xyz=[round(float(v), 2) for v in tip[:3]], s_tail=round(float((tip[1] + Lc) / Lc), 4), head_front_y=round(-Lc, 2))
 
@@ -178,7 +182,7 @@ def theta_max(P, meshes, bound_deg=BOUND_DEG, tol_deg=RES_DEG, scan_step_deg=SCA
 
 # ---------------------------------------------------------------- print validity (mesh version of 1.0's)
 def print_validity(P, meshes=None):
-    P = schema.coerce(P); v = []
+    P = _measured(P); v = []
     d = PIN.joint_offsets(P)[1]
     if d < 8.0: v.append(f"pitch {d:.1f} mm < 8")
     Wh = PIN.hinge_width(P); kw = Wh / int(P["nKnuckles"]) - P["clearance"]
@@ -188,7 +192,7 @@ def print_validity(P, meshes=None):
 
 # ---------------------------------------------------------------- the reading
 def measure(P, meshes, bound_deg=BOUND_DEG, budget_s=MEASURE_BUDGET_S, head_body=None, bevel_built_deg=None, unsane_parts=(), allow_unsane=False):
-    P = schema.coerce(P); t0 = time.time(); deadline = t0 + budget_s
+    P = _measured(P); t0 = time.time(); deadline = t0 + budget_s
     joints = int(P["segCount"]) + 1; L = float(P["length"]); names = part_names(P)
     base = dict(instrument=INSTRUMENT_VERSION, params=schema.param_hash(P), bound_deg=bound_deg,
                 bevel_built_deg=(bevel_built_deg if bevel_built_deg is not None else bound_deg), scan_step_deg=SCAN_STEP_DEG,
@@ -228,7 +232,7 @@ def sweep_gap(P, meshes, thetas, head_body=None):
 
 def read(P, bound=None, grid=MEASURE_GRID, export_dir=None, budget_s=MEASURE_BUDGET_S):
     """Build + probe + measure in one call. Returns (result, build)."""
-    P = schema.coerce(P)
+    P = _measured(P)
     b, probe = (bound, {bound: 1}) if bound else probe_bound(P, grid=grid)
     B = build_animal(P, b, grid=grid, export_dir=export_dir)
     r = measure(P, B["meshes"], bound_deg=b, budget_s=budget_s, head_body=B["head_body"], bevel_built_deg=B["bevel_built_deg"], unsane_parts=B["unsane_parts"])
@@ -246,7 +250,7 @@ ROW_COLUMNS = ["preset", "param_hash", "instrument_version", "valid", "reason", 
                "print_valid", "n_violations", "unsane_parts", "schema_notes", "build_seconds", "measure_seconds"]
 
 def row(result, P, preset="", is_control=0, spine_scale=None, unsane_parts=(), schema_notes=(), build_seconds=None):
-    P = schema.coerce(P); valid = result.get("limited_by") in ("closed", "anatomy", "bound"); first = result.get("stopped_by") or []
+    P = _measured(P); valid = result.get("limited_by") in ("closed", "anatomy", "bound"); first = result.get("stopped_by") or []
     unsane = sorted(set(list(unsane_parts) + list(result.get("unsane_parts", []))))
     return dict(preset=preset, param_hash=result.get("params", schema.param_hash(P)), instrument_version=result.get("instrument", INSTRUMENT_VERSION),
                 valid=int(valid), reason=result.get("reason") or "", theta_joint_deg=result.get("theta_joint_deg"), total_deg=result.get("total_deg"),

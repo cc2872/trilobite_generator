@@ -7,7 +7,7 @@ import schema, parts, mesh as M
 REF = os.path.join(ROOT, "tests", "references")
 
 def test_version_and_coverage():
-    assert schema.SCHEMA_VERSION == "6.7"
+    assert schema.SCHEMA_VERSION == "6.8"
     missing, dup = schema.cells_check(); assert missing == [] and dup == []
     for c, d in schema.CELLS.items(): assert len(d["primary"]) == 3, c
 
@@ -40,7 +40,7 @@ def test_whole_animal_reads_like_the_frozen_one(name):
     """The instrument on mesh-built parts must reproduce the frozen 2.1 reading (bevel, class, theta within 0.2 deg).
     Measured 11 Sep 2026: proetida 22.81/22.81, corynexochida 22.66/22.58, harpetida 30.39/30.31."""
     import instrument as I2
-    P = schema.coerce(json.load(open(os.path.join(ROOT, "presets", f"{name}.json")))["params"])
+    P = schema.coerce(dict(json.load(open(os.path.join(ROOT, "presets", f"{name}.json")))["params"], organic=0.0))   # the frozen geometry (1 Nov 2026)
     frozen = json.load(open(os.path.join(REF, name, "measure_v2.json"))); b = float(frozen["bevel_built_deg"])
     meshes = [parts.cephalon(P, bevel_deg=b)] + [parts.segment(P, i, bevel_deg=b) for i in range(int(P["segCount"]))] + [parts.pygidium(P, bevel_deg=b)]
     hb = parts.cephalon(dict(P, genalSpine=0.0), bevel_deg=b) if P["genalSpine"] * P["cephFrac"] * P["length"] > 0.5 else None

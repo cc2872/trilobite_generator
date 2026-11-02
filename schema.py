@@ -8,7 +8,8 @@ artifact — derives from this table. Add a parameter here and it exists everywh
 from dataclasses import dataclass, asdict
 import json, hashlib, warnings
 
-SCHEMA_VERSION = "6.7"      # 1 Nov 2026: the genal piece rebuilt as parts you assemble (anatomy/genal.py): genalAngle (the full circle),
+SCHEMA_VERSION = "6.8"      # 1 Nov 2026 (later): organic -- the protocol that rounds out every thin part (anatomy/organic.py); 0 = 6.7's geometry.
+                            # 6.7, 1 Nov 2026: the genal piece rebuilt as parts you assemble (anatomy/genal.py): genalAngle (the full circle),
                             # genalKink / genalKinkAngle, genalTip (pointed .. round), genalWeb / genalWebRound. genalCurve, genalPath and
                             # genalTaper are gone; coerce() converts them (presets, the library, saved animals). 6.6 is the Dell's sutureFront.
                             # 6.5 (23 Oct 2026): curved spines (occipitalBend/Tines/Splay, genalHorn*, termBend, frontSpine*, headProngBend,
@@ -166,6 +167,7 @@ PARAMS = [
     Param("pygSpineGrow", "Tail spine extra length", 0.0, 0.0, 2.0, 0.05, "Spines", "Each margin spine runs on as a solid spine this much further / shield length (0 = the flat bump as built)"),
     Param("pygSpineBlade", "Tail spine blade fraction", 1.0, 0.0, 1.0, 0.05, "Spines", "How much of each margin spine is the flat blade of the shield (1 = all, as built; 0 = a round spine straight from the margin; 0.6 = a lichid lobe with a spine tip). Only with rise / bend / extra length."),
     Param("printLength", "Print length", 0, 0, 600, 5, "Body", "The printed animal's length, head to tail, mm. 0 (the default) = each segment at the isopod's own 18 mm pitch, so every thoracic segment keeps its own joint and its spines (a 14-segment animal is ~48 cm). A value 80-600 scales the whole animal to that length instead; at a small size the thorax segments can become too short to carry a joint (26 Oct 2026: the thorax no longer auto-fuses, so prefer 0 or a length that keeps segments >= ~16 mm)", unit="mm"),
+    Param("organic", "Organic", 1.0, 0.0, 1.0, 0.05, "Body", "The organic protocol (anatomy/organic.py): every spine no thinner than its length allows, tapering on a full profile to a round tip and growing out of its plate through a collar; spines drawn in the plan rounded ridges with round caps; a kinked genal spine bent through a curve. 1 = on, 0 = the hard-edged geometry as built before (the instrument measures at 0)"),
     Param("jointScale", "Joint size", 0.6, 0.5, 1.0, 0.05, "Body", "The ball-joint kit's size / the isopod's own (1 = its 13 mm ball and 17 mm piece). Smaller joints let a small print keep more of them; the clearances stay at full print size, so they still move"),
     Param("pygSpineWidth", "Tail spine width", 1.0, 0.3, 2.0, 0.05, "Spines", "Width of each margin lobe / spine at its root, as a factor on the built one (1 = as built; 0.5 slim triangles; 1.5 broad lobes)."),
     # 26 Oct 2026: a fringe all round the tail, leaning back (the textbook pygidium). Defaults = the tail as built before.
@@ -270,7 +272,7 @@ def macro_value(P, key):
 #      frame; print/hinge numbers are the ruler's and never appear as morphology. Every parameter is in exactly one place.
 CELLS = {
     "frame": dict(label="Body", doc="whole-animal size", primary=["length", "width", "relief"],
-                  more=["segCount", "cephFrac", "pygFrac", "wall", "widthMaxPos", "widthHeadFront", "widthThoraxFront", "widthThoraxRear", "widthTail"]),
+                  more=["segCount", "cephFrac", "pygFrac", "wall", "widthMaxPos", "widthHeadFront", "widthThoraxFront", "widthThoraxRear", "widthTail", "organic"]),
     "b1": dict(label="Glabella + occipital ring", doc="the raised axial part of the head", primary=["glabInflate", "glabRise", "glabLobes"],
                more=["glabFront", "preglabField", "headDomeExp", "headDomeFill", "headOutlineExp", "cephParallel", "headRelief", "headWall", "occipitalSpine", "occipitalTines", "occipitalSplay", "occipitalBend", "frontSpine", "frontSpineBend"]),
     "a1": dict(label="Cheek + genal angle", doc="the side of the head: eye, border, genal spine or prolongation", primary=["eyeSize", "genalSpine", "headRearArc"],

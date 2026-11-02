@@ -3,6 +3,7 @@ anatomy/tail.py: the pygidium, joint-free. Same six functions as anatomy/thorax.
 """
 import math
 import numpy as np
+from anatomy import organic as OR
 import mesh as M
 from fields import tail_halfwidth, furrow_amp
 from anatomy.common import pitch, ring_top, smoothstep, plateau, trough, vault, spine_solid, curved_spine, prong, GRID_TAIL
@@ -78,9 +79,12 @@ def plan(P):
         room = min(1.0, 0.8 * (sd["hh"] - sd["skew"]) * r0 / (sd["e"] * Lk_))   # the rear flank's steepest slope is e * Lk / (hh - skew), at the root
         sd["lean"] = min(sw_, math.asin(room))
         sd["lean_dir"] = min(sw_, sd["lean"] + math.atan(sd["skew"] * r0 / Lk_))    # the tip's direction from the base's middle
+    k_or = OR.k_of(P)                                           # 1 Nov 2026, organic rule 2: a lobe ends round, not in a cusp
     def bump(phi, phi_k, hh, e, skew=0.0, s=0.0):
         d = phi - (phi_k + s * skew); w = np.where(s * d < 0, hh + skew, hh - skew) if s != 0.0 else hh
-        return np.clip(1 - np.abs(d) / w, 0, 1) ** e
+        ad = np.abs(d)
+        if k_or > 0: ep = k_or * OR.LOBE_ROUND * w; ad = np.sqrt(d * d + ep * ep) - ep   # |d| eased at the apex
+        return np.clip(1 - ad / w, 0, 1) ** e
     def radial_extra(phi, lean_out=False):
         ex = np.zeros_like(phi); ln = np.zeros_like(phi)
         for sd in spines:
@@ -159,7 +163,7 @@ def solid(P, S, grid=GRID_TAIL):
 def ornaments(P, S):
     """Terminal spine, then the posterior prong. Forks and marginal spines are the margin itself (in the plan); with
     pygSpineRise / Bend / Grow (24 Oct 2026) each of them runs on as a curved solid spine that continues the bump."""
-    out = []
+    OR.set_from(P); out = []
     rise0, bend0, grow = float(P.get("pygSpineRise", 0.0)), float(P.get("pygSpineBend", 0.0)), float(P.get("pygSpineGrow", 0.0))
     if S.get("tube") and S.get("spines"):
         for sd in S["spines"]:
@@ -186,7 +190,7 @@ def ornaments(P, S):
             L = (1 - s_root) * Lk + (L_full - Lk) + grow_k * S["Lp"] + (0.0 if blade else 1.0)       # to the bump's planned tip, the length cut from the plan, the growth
             r_leave = max(float(half_w[-1]), 0.6) if blade else max(0.45 * S["margin"] + 0.5, 0.6)   # the bump's half-width where the solid takes over; or a spine's own root
             h = curved_spine(r_leave, 0.45, L, (rx, ry, 0.5 * zr + 0.075), yaw_deg=yaw, pitch_deg=0.0, bend_deg=turn, roll_deg=roll,
-                             flare=1.0, plate=max(zr + 0.15, 0.8), profile=bump_section)            # tangent to the bump, curving up from it; root ellipse from the bed to 0.15 above the crest
+                             flare=1.0, plate=max(zr + 0.15, 0.8), profile=bump_section, slender=not blade)            # tangent to the bump, curving up from it; root ellipse from the bed to 0.15 above the crest
             out.append(("pygSpineHorns", [h, M.mirror_x(h)], "union"))
     if P["termSpine"] > 0.02:
         out.append(("termSpine", curved_spine(0.5 * S["margin"], 0.6, P["termSpine"] * S["Lp"], (0, 0.85 * S["Lp"], 0.5 * S["margin"]), 0, 0.0,

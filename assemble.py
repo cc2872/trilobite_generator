@@ -21,6 +21,7 @@ import mesh as M
 import joints
 from anatomy import head as HEAD, thorax as THORAX, tail as TAIL
 from anatomy.common import GRID_SEG, GRID_TAIL, GRID_HEAD
+from anatomy import organic as OR
 from manifold3d import Manifold, OpType
 
 # ---------------------------------------------------------------- naming
@@ -67,6 +68,7 @@ def part(P, name, joint="pin", bevel_deg=None, grid=None, notes=None, opts=None,
     printed stop). opts: joint options (flexi gaps ...). skip: ornament names left out; None = the joint's own rule
     (a trimming joint's overhang pass supplies the ornaments that reach over later parts)."""
     J = joints.get(joint) if isinstance(joint, str) else joint
+    OR.set_from(P)                                     # the organic protocol's strength for this build (anatomy/organic.py)
     if skip is None: skip = _skip_for(J, opts)
     mod, S, ports, g, i = _module_and_plan(P, name, notes); grid = grid or g
     if J.BASE == "shell": body, env = mod.shell(P, S, grid)
