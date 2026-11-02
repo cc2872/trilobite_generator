@@ -539,7 +539,7 @@ def free_spine_solid(sd, mesh, P, others=(), zone=None):
     def make(rb, rt_, zr, pitch):                                            # a plain curved spine, or a prong (25 Oct 2026): a shared stem that
         if tines <= 1:                                                       # splits into `tines` tines fanned by `splay`, lifted by `curl` at the split
             return curved_spine(rb, rt_, L, (x, y, zr), yaw_deg=float(sd.get("yaw", 0.0)), pitch_deg=pitch, bend_deg=rise - pitch, roll_deg=float(sd.get("roll", 0.0)), flare=1.4,
-                                hook=float(sd.get("hook", 0.0)))
+                                hook=float(sd.get("hook", 0.0)), turn_at=float(sd.get("turn_at", -1.0)))
         return prong(tines, L, float(sd.get("splay", 40.0)), rb, rt_, (x, y, zr), yaw_deg=float(sd.get("yaw", 0.0)), pitch_deg=pitch, root_r=rb,
                      stem_frac=float(sd.get("stem", 0.4)), curl_deg=float(sd.get("curl", 0.0)), bend_deg=rise - pitch, roll_deg=float(sd.get("roll", 0.0)))
     tried = None

@@ -93,3 +93,12 @@ def test_a_hook_turns_early_and_keeps_its_length():
     assert s.is_watertight and len(M.bodies(s)) == 1 and np.min(np.linalg.norm(s.vertices - t, axis=1)) < 1.0
     a = spine_tip(60.0, (0, 0, 0), 0.0, 30.0, 150.0, 90.0); b = spine_tip(60.0, (0, 0, 0), 0.0, 30.0, 150.0, 90.0, hook=1e-12)
     assert np.allclose(a, b, atol=1e-6)
+
+def test_a_turn_gathered_mid_spine_is_a_hairpin():
+    """turn_at: the turn gathered round one point -- straight, a bend, straight; the tip where spine_tip says."""
+    from anatomy.common import spine_tip, hook_turn
+    f = hook_turn(np.array([0.2, 0.5, 0.8]), 0.8, 0.5)
+    assert f[0] < 0.05 and abs(f[1] - 0.5) < 0.05 and f[2] > 0.95
+    s = curved_spine(1.5, 0.6, 80.0, (0, 0, 0), 0.0, 40.0, 180.0, 30.0, hook=0.6, turn_at=0.5, organic=0.0)
+    t = spine_tip(80.0, (0, 0, 0), 0.0, 40.0, 180.0, 30.0, hook=0.6, turn_at=0.5)
+    assert s.is_watertight and len(M.bodies(s)) == 1 and np.min(np.linalg.norm(s.vertices - t, axis=1)) < 1.0

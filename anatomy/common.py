@@ -84,7 +84,7 @@ def spine_solid(base_r, tip_r, length, at, yaw_deg, pitch_deg=0, organic=None):
 SPINE_SEGMENTS = 24      # 24 Oct 2026: was 10 (a visibly beaded arc at print size); the joints are finer spheres too
 
 def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0, roll_deg=0.0, n=SPINE_SEGMENTS, flare=0.0, plate=None, profile=None,
-                 flare_len=0.12, extend=0.0, organic=None, rooted=True, slender=None, curve_toward=None, hook=0.0):
+                 flare_len=0.12, extend=0.0, organic=None, rooted=True, slender=None, curve_toward=None, hook=0.0, turn_at=-1.0):
     """A tapered spine along a circular arc: `bend_deg` is the total turn of the tangent from root to tip (0 = straight,
     180 = a half circle, tip pointing back at the root), `roll_deg` the plane it bends in about the spine's own axis
     (0 up, 90 toward +x, -90 toward -x, 180 down). Root at `at`, leaving along (yaw, pitch) as spine_solid does.
@@ -121,10 +121,11 @@ def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0
     R = trimesh.transformations.rotation_matrix
     n = max(2, int(n)); phi = math.radians(bend_deg); rad = length / abs(phi) if abs(phi) > 1e-9 else 0.0
     # the arc in its own frame: along +y from the origin, bending toward +z (roll 0); then rolled about y, pitched, yawed
-    if abs(hook) > 1e-9 and abs(phi) > 1e-9: n = max(n, 40)                # a hook bends hard in a short stretch: finer rings
+    shaped = (abs(hook) > 1e-9 or turn_at >= 0) and abs(phi) > 1e-9
+    if shaped: n = max(n, 48)                                              # a hook bends hard in a short stretch: finer rings
     ts = np.linspace(0.0, 1.0, n + 1); ang = ts * phi
     pts = np.c_[np.zeros(n + 1), rad * np.sin(np.abs(ang)), np.sign(phi) * rad * (1 - np.cos(ang))] if abs(phi) > 1e-9 else np.c_[np.zeros(n + 1), ts * length, np.zeros(n + 1)]
-    if abs(hook) > 1e-9 and abs(phi) > 1e-9: pts = np.c_[np.zeros(n + 1), hook_path(ts, length, phi, hook)]
+    if shaped: pts = np.c_[np.zeros(n + 1), hook_path(ts, length, phi, hook, at=turn_at)]
     Mrot = R(math.radians(-yaw_deg), (0, 0, 1)) @ R(math.radians(pitch_deg), (1, 0, 0)) @ R(math.radians(roll_deg), (0, 1, 0))
     W = (np.c_[pts, np.ones(n + 1)] @ Mrot.T)[:, :3] + np.asarray(at, float)
     radii = base_r + (tip_r - base_r) * ts if k <= 0 else OR.taper(ts, base_r, tip_r, k); ra = radii.copy()
@@ -142,16 +143,22 @@ def curved_spine(base_r, tip_r, length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0
     if profile is not None: ra, rb = profile(W, ts, ra, rb)
     return sweep_tube(W, ra, rb=rb, round_tip=True)
 
-def hook_turn(ts, hook):
+def hook_turn(ts, hook, at=-1.0):
     """The share of a spine's total turn made by t (0..1). hook 0: evenly (a circular arc, as always); hook > 0: the turn
     comes early -- a hook at the root, then a long straight run (Ceratarges' frontal horns); hook < 0: late, a hooked tip.
-    1 Nov 2026 (later)."""
-    ts = np.asarray(ts, float); e = 1.0 + 3.0 * abs(hook)
+    1 Nov 2026 (later). at (2 Nov) in 0..1: the turn is gathered round that point instead -- straight, a bend, straight (a
+    hairpin: Dicranurus' horns); |hook| is then how tight (0 spread out .. 1 a sharp turn)."""
+    ts = np.asarray(ts, float)
+    if at is not None and at >= 0:
+        from math import erf, sqrt
+        sg = 0.03 + 0.3 * (1.0 - min(abs(hook), 1.0)); cdf = np.vectorize(lambda u: 0.5 * (1 + erf((u - at) / (sg * sqrt(2)))))
+        a0, a1 = cdf(0.0), cdf(1.0); return (cdf(ts) - a0) / max(a1 - a0, 1e-12)
+    e = 1.0 + 3.0 * abs(hook)
     return 1.0 - (1.0 - ts) ** e if hook > 0 else ts ** e
 
-def hook_path(ts, length, phi, hook, m=600):
+def hook_path(ts, length, phi, hook, m=600, at=-1.0):
     """(y, z) of the centreline in the spine's own bend plane at ts, turning by phi (radians) with the hook's profile."""
-    tf = np.linspace(0.0, 1.0, m + 1); th = phi * hook_turn(tf, hook)
+    tf = np.linspace(0.0, 1.0, m + 1); th = phi * hook_turn(tf, hook, at)
     dy, dz = np.cos(th), np.sin(th); h = length / m
     y = np.r_[0.0, np.cumsum(0.5 * (dy[1:] + dy[:-1]) * h)]; z = np.r_[0.0, np.cumsum(0.5 * (dz[1:] + dz[:-1]) * h)]
     return np.c_[np.interp(ts, tf, y), np.interp(ts, tf, z)]
@@ -206,12 +213,12 @@ def sweep_tube(path, radii, rb=None, sections=32, round_tip=False):
     if mesh.volume < 0: mesh.invert()
     return mesh
 
-def spine_tip(length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0, roll_deg=0.0, hook=0.0):
+def spine_tip(length, at, yaw_deg, pitch_deg=0.0, bend_deg=0.0, roll_deg=0.0, hook=0.0, turn_at=-1.0):
     """Where curved_spine()'s tip lands (for clearances and the sheet)."""
     import trimesh
     R = trimesh.transformations.rotation_matrix
     if abs(bend_deg) < 1e-9: p = np.array([0.0, length, 0.0, 1.0])
-    elif abs(hook) > 1e-9: yz = hook_path(np.array([1.0]), length, math.radians(bend_deg), float(np.clip(hook, -1, 1)))[0]; p = np.array([0.0, yz[0], yz[1], 1.0])
+    elif abs(hook) > 1e-9 or turn_at >= 0: yz = hook_path(np.array([1.0]), length, math.radians(bend_deg), float(np.clip(hook, -1, 1)), at=turn_at)[0]; p = np.array([0.0, yz[0], yz[1], 1.0])
     else:
         phi = math.radians(bend_deg); rad = length / abs(phi)
         p = np.array([0.0, rad * math.sin(abs(phi)), math.copysign(rad * (1 - math.cos(phi)), phi), 1.0])

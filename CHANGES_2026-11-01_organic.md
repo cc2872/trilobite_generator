@@ -109,3 +109,6 @@ saved body unchanged); +1 = the turn at the root, then a straight run; -1 = a ho
   in the roll's plane, on top of the rise's; the leave angle stays. Studio slider and drawing follow it.
 - The horns refitted to the outline traced on the render: over the head's front, down its sides, ending at the rear
   corners. x 10.7, y -33.0, len 116, rise 12.6, roll -50, yaw -173.5, hook 0.23, bend 204.
+- (2 Nov) `turn_at` on curved spines and free spines (0..1; -1 = off, the default): the turn is gathered round that
+  point -- straight, a bend, straight, a hairpin -- with `hook` then setting how tight. Studio slider and drawing follow.
+  Dicranurus' horns are fitted with it: back alongside the body, a round turn, forward up the outside.
