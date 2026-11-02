@@ -61,3 +61,17 @@ def test_prong_keys_validate_and_default():
     assert info[0]["cover"] >= 1.0
     import pytest
     with pytest.raises(ValueError): RW.validate_free_spines([dict(x=1, y=1, tines=9)])
+
+
+def test_shield_sets_an_oval_and_snaps_spines_to_its_margin():
+    """2 Nov 2026: the shield component -- every row's width from one oval, no plan spines, margin spines as their own
+    pieces (one pair per thoracic row), graded front to back."""
+    import rows as RW
+    rows = [dict(len=8.0, width=20.0, tip=30.0, kind="thorax") for _ in range(7)] + [dict(len=6.0, width=15.0, tip=0.0, kind="pyg") for _ in range(2)]
+    out, sp, sh = RW.shield_rows(rows, dict(w=40.0, widest=0.3, front=0.8, spines=dict(len=[50, 60], yaw=[90, 20])))
+    ws = [r["width"] for r in out]
+    assert all(r["tip"] == 0.0 for r in out if r["kind"] == "thorax")
+    assert max(ws) <= 40.0 + 1e-9 and ws[0] < max(ws) and ws[-1] < ws[3]           # an oval: narrower at both ends
+    assert [s["row"] for s in sp] == list(range(7)) and sp[0]["yaw"] == 90 and abs(sp[-1]["yaw"] - 20) < 1e-9
+    import pytest
+    with pytest.raises(KeyError): RW.validate_shield(dict(nope=1))

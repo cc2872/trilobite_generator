@@ -74,6 +74,7 @@ ROW_KEYS = dict(
 )
 ROW_EXTRA = dict(ax_own=0.0, ax_len=0.0, ax_pitch=60.0, ax_bend=0.0, horn_own=0.0, horn_len=0.0, horn_rise=45.0, horn_roll=0.0, horn_yaw=0.0)   # optional keys: a row without them gets these (saved bodies predate them)
 BODY_KEYS = dict(
+    shield=("dict", "2 Nov 2026: the body as an oval SHIELD with spines snapped onto its margin, instead of each row's width and plan-drawn spine: {w: max half-width mm, widest: where along the body 0..1, exp: roundness (2 an ellipse), front: half-width at the head / w, taper: how much each pleura rounds off at its end 0..0.9, spines: {len, yaw, rise, bend, w: [front, back], hook} or absent}; see rows.shield_rows"),
     model=("", "'thorax': the generator's own segments and tail, as the site already prints them (default); 'slab': the tergite slab"),
     thorax_rows=("n", "number of thoracic rows (the preset's segCount); rows are re-spaced over the thorax length"),
     pyg_rows=("n", "number of pygidial rows (ribs); re-spaced over the pygidium length"),
@@ -468,6 +469,56 @@ def split_rows(rows):
     return rows[:k], rows[k:]
 
 
+SHIELD_DEFAULT = dict(w=40.0, widest=0.35, exp=2.0, front=0.85, taper=0.35, spines=None)
+SHIELD_RANGE = dict(w=(1.0, 400.0), widest=(0.0, 0.95), exp=(1.0, 8.0), front=(0.05, 1.0), taper=(0.0, 0.9))
+SHIELD_SPINE_DEFAULT = dict(len=[40.0, 40.0], yaw=[80.0, 30.0], rise=[0.0, 0.0], bend=[30.0, 30.0], w=[1.6, 1.6], hook=0.0)
+SHIELD_SPINE_RANGE = dict(len=(0.0, 500.0), yaw=(-180.0, 180.0), rise=(-60.0, 90.0), bend=(-360.0, 360.0), w=(0.3, 20.0))
+
+def validate_shield(sh):
+    """The shield spec with defaults filled; ranges checked. Pairs are [front row, back row], graded between."""
+    if not isinstance(sh, dict): raise ValueError("shield is not an object")
+    bad = set(sh) - set(SHIELD_DEFAULT)
+    if bad: raise KeyError(f"shield: unknown keys {sorted(bad)} (have {sorted(SHIELD_DEFAULT)})")
+    out = dict(SHIELD_DEFAULT); out.update(sh)
+    for k, (lo, hi) in SHIELD_RANGE.items(): out[k] = _num(out[k], k, lo, hi, "shield")
+    if out["spines"] is not None:
+        sp = out["spines"]
+        if not isinstance(sp, dict): raise ValueError("shield.spines is not an object")
+        bad = set(sp) - set(SHIELD_SPINE_DEFAULT)
+        if bad: raise KeyError(f"shield.spines: unknown keys {sorted(bad)} (have {sorted(SHIELD_SPINE_DEFAULT)})")
+        q = dict(SHIELD_SPINE_DEFAULT); q.update(sp)
+        for k, (lo, hi) in SHIELD_SPINE_RANGE.items():
+            v = q[k] if isinstance(q[k], (list, tuple)) else [q[k], q[k]]
+            if len(v) != 2: raise ValueError(f"shield.spines.{k}: [front, back]")
+            q[k] = [_num(v[0], k, lo, hi, "shield.spines"), _num(v[1], k, lo, hi, "shield.spines")]
+        q["hook"] = _num(q["hook"], "hook", -1.0, 1.0, "shield.spines"); out["spines"] = q
+    return out
+
+def shield_rows(rows, sh):
+    """2 Nov 2026, the shield component: the body's outline as ONE oval -- a superellipse of exponent `exp` along the
+    thorax and pygidium, widest (w) at `widest` of the way back, `front` x w where it meets the head, closing at the
+    tail's end -- instead of each row's own width and plan-drawn spine. Every row takes its width from the oval at its
+    middle, the thorax's plan spines are off (tip 0), and the margin spines (if any) are returned as their own pieces:
+    [{row, len, yaw, rise, bend, w, hook}], graded front to back. Returns (rows, margin_spines)."""
+    sh = validate_shield(sh); rows = [dict(r) for r in rows]
+    L = sum(r["len"] for r in rows); e = sh["exp"]; c = sh["widest"]
+    a = (1.0 - sh["front"] ** e) ** (1.0 / e)                               # where the head joint sits on the oval's front half
+    def hw(t):
+        u = (t - c) / max(c, 1e-6) * a if t < c else (t - c) / max(1.0 - c, 1e-6)
+        return sh["w"] * max(1.0 - abs(u) ** e, 0.0) ** (1.0 / e)
+    y = 0.0; th = [i for i, r in enumerate(rows) if r.get("kind") != "pyg"]
+    for r in rows:
+        t = (y + 0.5 * r["len"]) / L; y += r["len"]
+        r["width"] = max(hw(t), 1.5)
+        if r.get("kind") != "pyg": r["tip"] = 0.0
+    spines = []
+    if sh["spines"] is not None:
+        q = sh["spines"]; n = max(len(th) - 1, 1)
+        for j, i in enumerate(th):
+            f = j / n; g = lambda k: q[k][0] + (q[k][1] - q[k][0]) * f
+            if g("len") > 0.5: spines.append(dict(row=i, len=g("len"), yaw=g("yaw"), rise=g("rise"), bend=g("bend"), w=g("w"), hook=q["hook"]))
+    return rows, spines, sh
+
 def plans(P, spec=None, strict=True):
     """The body as body.py plans: [(name, mod, S, offset)] for every printed piece (the head is body.py's), the
     offsets, the print scale and the groups. spec: {"model": "thorax"|"slab", "list": [...], "rows": {...edits...},
@@ -475,6 +526,10 @@ def plans(P, spec=None, strict=True):
     fit a bed -- the build path; the editor's drawing passes strict=False and shows `problems` instead."""
     spec = spec or {}; model = spec.get("model") or "thorax"
     rows = apply(rows_from_P(P, spec, model), spec)
+    margin_spines = []
+    if spec.get("shield") is not None:                                      # the shield component (2 Nov 2026)
+        rows, margin_spines, shv = shield_rows(rows, spec["shield"])
+        P = dict(P, tipTaper=shv["taper"], bladeChord=1.3)                   # full pleural bands, their ends rounded off by `taper`
     pl = float(P.get("printLength", 0.0) or 0.0)                           # 25 Oct 2026: the animal printed at printLength mm, head to tail
     scale = float(spec.get("print_scale") or (pl / float(P["length"]) if pl > 0 else default_scale(rows)))
     kit = float(P.get("jointScale", 1.0) or 1.0)                           # 25 Oct 2026: the joint kit's print size / the isopod's
@@ -502,7 +557,7 @@ def plans(P, spec=None, strict=True):
             S = tail_plan(P, pg, th[-1]["len"], spec.get("tail_spines")); out.append(("tail", TAIL, S, y)); offsets.append(y); y += S["d"]
             gs = gs + [list(range(len(th), len(rows)))]
     return dict(rows=rows, groups=gs, scale=scale, min_joint_mm=min_mm, parts=out, offsets=offsets, length=y, model=model, problems=problems(rows, scale, term, kit),
-                free_spines=validate_free_spines(spec["spines"]) if spec.get("spines") is not None else [],
+                free_spines=validate_free_spines(spec["spines"]) if spec.get("spines") is not None else [], margin_spines=margin_spines,
                 term_spine=float(spec.get("term_spine") or 0.0), mode=("list" if spec.get("list") is not None else "preset"))
 
 

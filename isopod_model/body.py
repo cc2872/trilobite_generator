@@ -592,6 +592,7 @@ def body_ornaments(P, plans, parts, skip=()):
                         SKIPPED.append(f"{name}: axial spine (ring covered by the part ahead)"); continue
                 solids.append(x); LAST_ORNAMENTS.append(dict(part=k, name=nm, solid=x, before=before))
         if solids: parts[k] = M.union(parts[k], *solids)
+    margin_spine_solids(plans, parts, skip)                                  # the shield's margin spines (2 Nov 2026)
     # the free spines (24 Oct 2026): each stands on the part whose plate is under its (x, y) -- found on the built parts
     free = ROWS_INFO.get("free_spines") or []
     if free:
@@ -620,6 +621,27 @@ def body_ornaments(P, plans, parts, skip=()):
             sols = free_spine_solid(sd, parts[best[0]], P, others, zone=RW.free_zone(plans, best[0]))
             for h in sols: LAST_ORNAMENTS.append(dict(part=best[0], name="free spine", solid=h, before=parts[best[0]]))
             if sols: parts[best[0]] = M.union(parts[best[0]], *sols)
+
+
+def margin_spine_solids(plans, parts, skip=()):
+    """The shield's margin spines (rows.shield_rows, 2 Nov 2026): each on its own row's part, rooted just inside the
+    pleura's end at the plate's mid-height so it is the plate continuing, leaving at its yaw (0 back, 90 out) and rise,
+    bending by `bend` toward the rear (in the horizontal plane), hooked by `hook`. Unioned onto the part, both sides."""
+    from anatomy import organic as OR
+    for sd in ROWS_INFO.get("margin_spines") or []:
+        k = 1 + int(sd["row"])
+        if k >= len(plans) or k in skip or plans[k][0] == "head": continue
+        name, mod, S, off = plans[k]
+        w = float(S.get("X_tip", S["w"])); r = float(sd["w"])
+        yf, yr_ = (float(v[0]) for v in S["edges"](np.array([0.995 * w]))); yc = 0.5 * (yf + yr_)
+        xr = w - 1.6 * r; zt = _surface_z(parts[k], xr, yc + off)
+        if zt is None: zt = float(S["zfun"](np.array([xr]), np.array([yc]))[0])
+        yaw = float(sd["yaw"]); pitch = float(sd["rise"]); at = (xr, yc + off, 0.5 * zt)
+        roll = OR.curve_roll(yaw, pitch, at, toward=(0.0, 1.0, 0.0))
+        h = curved_spine(r, 0.4 * r, float(sd["len"]) + 1.6 * r, at, yaw_deg=yaw, pitch_deg=pitch, bend_deg=float(sd["bend"]), roll_deg=roll,
+                         plate=max(zt, 0.8), hook=float(sd.get("hook", 0.0)))
+        for x in (h, M.mirror_x(h)): LAST_ORNAMENTS.append(dict(part=k, name="margin spine", solid=x, before=parts[k]))
+        parts[k] = M.union(parts[k], h, M.mirror_x(h))
 
 
 def genal_piece_solids(S, plans, off, ga, yr, face):
@@ -735,7 +757,14 @@ def shaped_head(P, plans, PV, K, J, outline, face):
     o = np.c_[FX.ravel(), FY.ravel(), np.full(FX.size, 1e3)]
     locs, ri, _ = head.ray.intersects_location(o, np.tile((0, 0, -1.0), (len(o), 1)), multiple_hits=True)
     ht = np.full(len(o), -1.0); np.maximum.at(ht, ri, np.asarray(locs).reshape(-1, 3)[:, 2] if len(locs) else np.zeros(0))
-    fz = np.where(ht > 0.3, np.minimum(ht, Z_f), Z_lo).reshape(FX.shape)
+    over = (ht > 0.3).reshape(FX.shape)
+    # 2 Nov 2026: the block stands at Z_lo only BEHIND the head (between its rear margin and the rear face, where the socket
+    # needs it); beside or ahead of a short, narrow-fronted head the old rule stood it up as tall slabs outside the head
+    behind = np.zeros_like(over)
+    for j in range(over.shape[1]):
+        rows_ = np.nonzero(over[:, j])[0]
+        if len(rows_): behind[rows_.max() + 1:, j] = True                   # FY increases toward the rear face
+    fz = np.where(over, np.minimum(ht.reshape(FX.shape), Z_f), np.where(behind, Z_lo, 0.3))
     fill = M._closed(np.c_[FX.ravel(), FY.ravel(), fz.ravel()], np.c_[FX.ravel(), FY.ravel(), np.zeros(FX.size)], FX.shape[0], FX.shape[1])
     head = M.from_manifold(_force(M.to_manifold(head) + M.to_manifold(fill)))
     head = max(head.split(only_watertight=False), key=lambda b: b.volume)
@@ -823,7 +852,8 @@ def build(P, head=None, face=None, outline=None, rows=None, preview=False):
         ga = BALL.GAP_AXIAL_FRAC * BALL.ISO_PITCH * s                          # the joint gaps: constant in print mm
         J = dict(gap_axial=ga, gap_vertical=BALL.GAP_VERT_FRAC * BALL.ISO_PITCH * s, gap_lateral=BALL.GAP_LAT_FRAC * BALL.ISO_PITCH * s)
         K = iso_kit(P, s=s, kit=float(P.get("jointScale", 1.0) or 1.0)); PV = pivots(plans, J, K)
-        ROWS_INFO.clear(); ROWS_INFO.update(groups=R["groups"], scale=R["scale"], term_spine=R["term_spine"], rows=R["rows"], model=R["model"], free_spines=R.get("free_spines", []))
+        ROWS_INFO.clear(); ROWS_INFO.update(groups=R["groups"], scale=R["scale"], term_spine=R["term_spine"], rows=R["rows"], model=R["model"], free_spines=R.get("free_spines", []),
+                                            margin_spines=R.get("margin_spines", []))
         return _build(P, head, face, outline, plans, J, K, PV, shell=(R["model"] == "slab"), term_spine=R["term_spine"])
     ROWS_INFO.clear()
     plans = placed_plans(P)
