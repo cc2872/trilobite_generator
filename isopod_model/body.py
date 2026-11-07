@@ -673,10 +673,32 @@ def genal_piece_solids(S, plans, off, ga, yr, face):
             reach = np.where(m, np.maximum(reach, w_), reach)
             zz = np.full_like(Y, -np.inf); zz[m] = np.asarray(zf(np.minimum(np.abs(X[m]), w_), Y[m] - offk), float)   # its top at |x|, held at its edge beyond
             zth = np.maximum(zth, zz)
+        # 7 Nov 2026: a piece that only GRAZES the body (its inner edge over the pleural tips, most of its width beside them)
+        # no longer climbs over it -- that lifted its whole width into a box standing on a step at the root. Its inner edge
+        # is pulled out to just clear the body instead (each cross-section squeezed outward, the clearance line smoothed
+        # along the piece), and it stays at the head's own height, running straight on from the margin. A piece that lies
+        # over the body for most of its width still climbs over it as before.
+        lim = reach + 0.8 * ga + 0.6; behind = (Y > yr + 1.0) & (reach > 0)
+        share = (behind & (np.abs(X) < lim)).mean(axis=0)                  # per cross-section: how much of it is over the body
+        beside = share < 0.6
+        limc = np.where(behind, lim, 0.0).max(axis=0) * beside              # the clearance line, per cross-section
+        lo_c = np.abs(X).min(axis=0); hi_c = np.abs(X).max(axis=0)
+        inner = np.maximum(lo_c, limc)                                      # where each cross-section's inner edge must be
+        trimmed = np.zeros(nu_b, bool)
+        if (limc > lo_c).any():                                             # one smooth inner edge along the piece (its upper envelope
+            from scipy.ndimage import maximum_filter1d, gaussian_filter1d   # over ~1/6 of the piece, smoothed), never inside the body
+            w_ = max(3, nu_b // 6) | 1
+            inner_s = np.maximum(gaussian_filter1d(maximum_filter1d(inner, size=w_, mode="nearest"), w_ / 3.0, mode="nearest"), inner)
+            inner_s = np.where(beside, np.minimum(inner_s, hi_c - 1.0), lo_c)
+            for j in range(nu_b):
+                if inner_s[j] <= lo_c[j] + 0.02: continue
+                a = np.abs(X[:, j]); lo, hi = lo_c[j], hi_c[j]
+                X[:, j] = np.sign(X[:, j] + 1e-12) * (inner_s[j] + (a - lo) * (hi - inner_s[j]) / max(hi - lo, 1e-9)); trimmed[j] = True
+        stay = np.repeat((beside & (share > 0) | trimmed)[None, :], nv_b, 0)   # cross-sections that stay at the head's height
         # over the body (behind the rear joint plane, inside a part's reach): a WALL-thick plate clear of the thorax's top;
         # beside it: solid to the bed. The change between them is eased over ~2 mm (a hard switch per grid point left a comb).
         ease = 1.0 + 6.0 * _OR.strength()                                   # organic rule 7: the climb over the body is a long curve, not a step
-        w_over = smoothstep(ease, -1.0, np.abs(X) - (reach + 0.8 * ga + 0.6)) * smoothstep(yr - 1.0, yr + 1.0, Y)
+        w_over = smoothstep(ease, -1.0, np.abs(X) - (reach + 0.8 * ga + 0.6)) * smoothstep(yr - 1.0, yr + 1.0, Y) * ~stay
         lift = np.where(np.isfinite(zth), np.maximum(zth + 0.6 + WALL - Z, 0.0), 0.0) * smoothstep(yr + 1.0, yr + 5.0, Y)   # not on the head's own flap
         top = np.maximum(Z + w_over * lift, 0.6)
         for _ in range(2):                                                  # soften the lift (3-tap, both ways), as the head's grid is
@@ -689,7 +711,7 @@ def genal_piece_solids(S, plans, off, ga, yr, face):
             lift_all = (top - Z).max(axis=0)
             env = gaussian_filter1d(maximum_filter1d(lift_all, size=win, mode="nearest"), sigma=0.5 * win, mode="nearest")
             env = np.maximum(env, lift_all)
-            top = np.maximum(top, Z + env[None, :] * smoothstep(yr + 1.0, yr + 5.0, Y))
+            top = np.maximum(top, Z + env[None, :] * smoothstep(yr + 1.0, yr + 5.0, Y) * ~stay)
         for i in (0, nu_b - 1):
             if np.ptp(x1[:, i]) < 1e-9 and np.ptp(y1[:, i]) < 1e-9: top[:, i] = top[:, i].mean()
         bot = np.clip(w_over * (top - WALL), 0.0, top - 0.6)
