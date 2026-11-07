@@ -146,7 +146,7 @@ const RH={
   eye_size:[0,0.5], eye_pos:[0.2,0.95], eye_height:[0.2,2.5], eye_lat:[0,0.95], axis_frac:[0.15,0.45], glab_inflate:[0.5,2.0], glab_rise:[0,0.6],
   glab_front:[1,6], glab_lobes:[0,6,1], furrow:[0,2.5], border_w:[0,0.3], suture_end:[-1,1], suture_depth:[0,0.6], eye_ridge:[0,1.5],
   glab_len:[0.3,1.2], glab_bulge:[-0.3,0.3], glab_round:[0,1], glab_boss:[0,0.45], boss_rise:[0,1], furrow_cross:[0,1], furrow_splay:[0,1],
-  bullae:[0,0.3], node:[0,1.5], eye_len:[0.5,3], caeca:[0,1], brim:[0,0.5], brim_drop:[0,1.5], tubercles:[0,1], tub_all:[0,1,1], efface:[0,1]};
+  dot_r:[0.02,0.3], bullae:[0,0.3], node:[0,1.5], eye_len:[0.5,3], caeca:[0,1], brim:[0,0.5], brim_drop:[0,1.5], tubercles:[0,1], tub_all:[0,1,1], efface:[0,1]};
 
 // ---------- head key helpers ----------
 const isFace=k=>S.headMeta && (k in S.headMeta.face_defaults);
@@ -233,6 +233,9 @@ function renderContext(rebuild=true){ const box=$('context');
     box.appendChild(row); return; }
   if(!S.sel){ if(rebuild){ box.innerHTML='<div class="hint">Click the head or a row on the drawing to edit it.</div>'; $('ctxname').textContent='Nothing selected'; $('ctxtools').innerHTML=''; } return; }
   if(S.sel.type==='head'){ $('ctxname').textContent='Head - '+(S.savedHead||S.head); $('ctxtools').innerHTML='';
+    { const n=(S.headOutline.dots||[]).length; const t=document.createElement('span'); t.className='mono'; t.style.cssText='color:var(--mid);text-transform:none;letter-spacing:0';
+      t.textContent=n?`${n} dot${n>1?'s':''} - `:'click the outline to add a dot'; $('ctxtools').appendChild(t);
+      if(n){ const b=document.createElement('button'); b.textContent='clear dots'; b.onclick=()=>{ delete S.headOutline.dots; S.headSel=null; sendHead(); }; $('ctxtools').appendChild(b); } }
     const keys=[...Object.keys(S.headMeta.outline_defaults),...Object.keys(S.headMeta.face_defaults)];
     if(rebuild||box.dataset.k!=='head'){ box.innerHTML=''; box.dataset.k='head';
       for(const k of keys){ const r=RH[k]||[0,1]; slider(box,k,headCur(k),r[0],r[1],r[2]||((r[1]-r[0])/200),val=>setHeadKey(k,val),isOut(k)?'':'face'); }
@@ -366,6 +369,7 @@ new p5(s=>{
   function poly(pts,mir,sc,dy){ s.beginShape(); for(const p of pts) s.vertex(X((mir?-1:1)*p[0]*(sc||1)), Y(p[1]*(sc||1)+(dy||0))); s.endShape(); }
   const HEADDY=-0.5;
   const headSX=v=>X(v[0]*headScale()), headSY=v=>Y(v[1]*headScale()+HEADDY);   // a head-diagram point [across,foreaft] -> screen
+  window.studioHeadPoint=v=>[headSX(v),headSY(v)];                                    // (for the browser tests: a head point on the canvas)
   s.draw=()=>{ s.background(0); if(!S.BD||!S.HD) return; fit(); const D=S.BD; const headOn=S.sel&&S.sel.type==='head';
     hair(60); s.line(X(0), 30, X(0), H-20);
     // the head (edited), composed onto the first row
@@ -404,6 +408,13 @@ new p5(s=>{
     for(const [k,v] of Object.entries(HH)){ if(HEADHANDLE_SKIP.has(k)) continue; const sx=headSX(v), sy=headSY(v); const on=headOn&&S.headSel===k;
       s.stroke(headOn?s.color(246,112,79):s.color(255,210)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):0); s.circle(sx,sy,on?8:5); HP.push({kind:'head',k,sx,sy});
       if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(k+'  '+headKeysFor(k).join(' - '), sx+9, sy-6); } }
+    // 7 Nov 2026: the head's dots -- click the head's outline (head selected) to add one, drag it, double-click it to remove it
+    { const DD=HD.dots||[]; const DOT=s.color(120,220,200);
+      DD.forEach((p_,j)=>{ for(const side of [1,-1]){ const sx=headSX([side*p_[0],p_[1]]), sy=headSY(p_); const on=headOn&&S.headSel==='dot'+j;
+        s.stroke(DOT); s.strokeWeight(1); s.fill(on?DOT:(side>0?0:s.color(0,0))); s.push(); s.translate(sx,sy); s.rotate(Math.PI/4); s.rectMode(s.CENTER); s.rect(0,0,on?8:6,on?8:6); s.pop();
+        HP.push({kind:'hdot',j,side,sx,sy}); }
+        if(headOn&&S.headSel==='dot'+j){ s.noStroke(); s.fill(DOT); s.textAlign(s.LEFT,s.BOTTOM); s.text('dot '+(j+1)+'  drag it - double-click to remove', headSX(p_)+9, headSY(p_)-6); } });
+      if(headOn&&!S.drag){ const r=rimNearest(s.mouseX,s.mouseY,8); if(r&&!nearest(s.mouseX,s.mouseY)){ s.stroke(DOT); s.strokeWeight(1); s.noFill(); s.circle(r.sx,r.sy,9); s.line(r.sx-3,r.sy,r.sx+3,r.sy); s.line(r.sx,r.sy-3,r.sx,r.sy+3); } } }
     // the P-eye side editor: drawn from P with draggable stalk / lean / height handles (these drive the BUILT eye)
     if(headOn && S.P) drawEye();
     drawHorn(headOn);                                                                // the genal horn (P.genalHorn*), drawn live from P, with its handles
@@ -492,6 +503,8 @@ new p5(s=>{
     const minB=HS.outline.reduce((m,p)=>Math.min(m,p[1]),0);
     drawProng('head', X(0), Y(minB*hsc+HEADDY), -1, headLen()*px);                            // at the head front, fanning forward (up)
     drawProng('tail', X(0), Y((D.length||0)+(D.term_spine||0)), 1, (D.length||1)*px*0.28); }  // at the tail tip, fanning back (down)
+  function rimNearest(mx,my,tol){ const R=(S.HD&&S.HD.diagram.rim)||[]; let best=null,bd=tol||8;     // the head's outline under the mouse (either side)
+    for(let i=0;i<R.length;i++){ const r=R[i]; for(const side of [1,-1]){ const sx=headSX([side*r[0],r[1]]), sy=headSY(r); const d=Math.hypot(sx-mx,sy-my); if(d<bd){ bd=d; best={i,side,sx,sy,r}; } } } return best; }
   function nearest(mx,my){ let best=null,bd=12; for(const h of HP){ const d=Math.hypot(h.sx-mx,h.sy-my); if(d<bd){ bd=d; best=h; } } return best; }
   s.mouseMoved=()=>{ const h=nearest(s.mouseX,s.mouseY); const hi=h&&h.kind==='row'?h.i:null; if(hi!==S.hover){ S.hover=hi; } stage.style.cursor=h?'grab':'default'; };
   s.mousePressed=()=>{ if(s.mouseX<0||s.mouseY<0||s.mouseX>W||s.mouseY>H) return; const h=nearest(s.mouseX,s.mouseY);
@@ -504,10 +517,20 @@ new p5(s=>{
     else if(h&&h.kind==='ax'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; ownAxial(h.i); S.drag={kind:'ax',i:h.i,k:h.k,root:h.root}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='ph'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; ownHorn(h.i); S.drag={kind:'ph',i:h.i,k:h.k,root:h.root}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='ts'){ ownTail(); S.sel={type:'tailspine',j:h.j}; S.drag={kind:'ts',j:h.j,k:h.k}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
+    else if(h&&h.kind==='hdot'){ const d_=(S.headOutline.dots||[])[h.j]; if(!d_) return; S.sel={type:'head'}; S.headSel='dot'+h.j; S.drag={kind:'hdot',j:h.j,side:h.side,x0:s.mouseX,y0:s.mouseY,d0:[d_[1],d_[2]]}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
+    else if(!h&&rimNearest(s.mouseX,s.mouseY,8)){ const r=rimNearest(s.mouseX,s.mouseY,8);
+      if(!(S.sel&&S.sel.type==='head')){ S.sel={type:'head'}; S.headSel=null; renderContext(); renderTable(); status('head selected - click its outline to add a dot',false); return; }
+      const dots=(S.headOutline.dots||[]).slice(); if(dots.length>=40){ status('a head takes at most 40 dots',true); return; }
+      dots.push([+r.r[2].toFixed(5), +r.r[3].toFixed(5), +r.r[4].toFixed(5)]); S.headOutline.dots=dots; const j=dots.length-1;
+      S.headSel='dot'+j; S.drag={kind:'hdot',j,side:r.side,x0:s.mouseX,y0:s.mouseY,d0:[dots[j][1],dots[j][2]]}; sendHead(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='head'){ S.sel={type:'head'}; S.headSel=h.k; S.drag={kind:'head',k:h.k,elev:!!h.elev,x0:s.mouseX,y0:s.mouseY,start:headSnapshot(),H0:JSON.parse(JSON.stringify((S.HD&&S.HD.diagram.handles)||{}))}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else { S.sel=null; S.drag=null; renderContext(); renderTable(); } };
+  s.doubleClicked=()=>{ const h=nearest(s.mouseX,s.mouseY); if(!h||h.kind!=='hdot') return; const dots=(S.headOutline.dots||[]).slice(); dots.splice(h.j,1);
+    if(dots.length) S.headOutline.dots=dots; else delete S.headOutline.dots; S.headSel=null; S.drag=null; sendHead(); };
   s.mouseReleased=()=>{ if(S.drag){ if(['ax','ph','ts','fs'].includes(S.drag.kind)) sendBody(); S.drag=null; stage.style.cursor='grab'; } };
   s.mouseDragged=()=>{ if(!S.drag) return;
+    if(S.drag.kind==='hdot'){ const d=S.drag, pxH=headScale()*px, dots=S.headOutline.dots||[]; const q=dots[d.j]; if(!q) return;
+      const cl=v=>Math.max(-1.5,Math.min(1.5,v)); q[1]=+cl(d.d0[0]+d.side*(s.mouseX-d.x0)/pxH).toFixed(5); q[2]=+cl(d.d0[1]+(s.mouseY-d.y0)/pxH).toFixed(5); sendHead(); return; }
     if(S.drag.kind==='row'){ const d=S.drag, st=d.start, i=d.i; const dx=(s.mouseX-d.x0)/px, dy=(s.mouseY-d.y0)/px;
       switch(d.k){
         case 'rear': setRow(i,'len',st.len+dy,true); break;
