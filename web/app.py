@@ -89,13 +89,14 @@ def _head_custom(spec):
     for the cache key; `saved` the saved head's record when `style` named one."""
     HS = _head_styles(); import shaped_head as SH; from anatomy import head_crescent as HC
     style = spec.get("style") or "crescent"; saved = None
-    o_edits = {k: (v if k == "trace" else float(v)) for k, v in (spec.get("outline") or {}).items()}   # 20 Oct 2026: "trace" is a point list
+    o_edits = {k: (v if k in ("trace", "dots") else float(v)) for k, v in (spec.get("outline") or {}).items()}   # 20 Oct 2026: "trace" is a point list (7 Nov: "dots" too)
     if spec.get("trace") is not None: o_edits["trace"] = spec.get("trace")                               # (also accepted at the top level)
     f_edits = {k: float(v) for k, v in (spec.get("face") or {}).items()}
     if style in _saved_heads():
         saved = _saved_heads()[style]; style = saved.get("style") or "crescent"
         o_edits = dict(saved.get("outline") or {}, **o_edits); f_edits = dict(saved.get("face") or {}, **f_edits)
     if o_edits.get("trace") in ([], None) and "trace" in o_edits: o_edits.pop("trace")                  # [] = "drop the trace"
+    if o_edits.get("dots") in ([], None) and "dots" in o_edits: o_edits.pop("dots")                     # [] = "no dots"
     # the base face is what the BUILD would use: the default preset with the style's schema values (eyeSize, glabInflate ...)
     # mapped through body.face_of, then the style's own face keys on top -- so the drawing matches the solid
     IBODY = _isopod_body(); P0 = schema.coerce(dict(schema.preset(schema.DEFAULT_PRESET), **(HS.style(style)[1] if style in HS.STYLES else {})), base=schema.table_defaults())

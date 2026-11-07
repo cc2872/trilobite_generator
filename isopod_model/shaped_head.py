@@ -55,6 +55,7 @@ OUTLINE = dict(
     fringe_from=0.35,  # ... where the row starts and ends along the front-and-side margin, from the axis (0) to the
     fringe_to=0.9,     #     genal angle (1)
     fringe_rise=8.0,   # ... how far they lift as they leave, deg
+    dot_r=0.08,        # 7 Nov 2026: how far along the margin each of the user's dots (`dots`) pulls it, / the half-outline's length
     # ---- 3 Oct 2026: four more shape groups. Every default is "off".
     genal_at=0.0,      # where the spine leaves the margin: 0 the genal angle; +1 moved inward along the rear margin
                        # (intergenal spine); -1 moved forward along the side (a lateral cephalic spine)
@@ -79,7 +80,102 @@ OUTLINE_RANGE = dict(   # what the silhouette is drawn for (11 Oct 2026: a 0.2-l
     notch=(0.0, 1.0), notch_exp=(1.0, 8.0), dome_fill=(0.3, 1.0), horn_h=(0.0, 1.0), height=(0.2, 3.0), genal_at=(-1.0, 1.0),
     front_flat=(0.0, 0.9), front_dent=(0.0, 0.5), point_w=(0.02, 1.0), point_fork=(0.0, 0.9), brim_w=(0.0, 1.0), brim_rise=(-0.5, 1.0),
     brim_curve=(-1.0, 1.0), brim_roll=(0.0, 0.5), brim_pits=(0, 10), fringe_n=(0, 24), fringe_len=(0.02, 1.0), fringe_w=(0.005, 0.15),
-    fringe_from=(0.0, 1.0), fringe_to=(0.0, 1.0), fringe_rise=(-30.0, 60.0))
+    fringe_from=(0.0, 1.0), fringe_to=(0.0, 1.0), fringe_rise=(-30.0, 60.0), dot_r=(0.02, 0.3))
+DOTS_MAX = 40       # dots a head may carry
+
+def dots_of(d):
+    """The user's dots on the head's margin (7 Nov 2026): [[u, dx, dy], ...]. u is where the dot sits along the head's
+    right half-outline (0 the front on the axis, round the side, 1 the rear margin on the axis), measured on the outline
+    the sliders draw; (dx, dy) is how far the dot has been dragged from there, in half-widths (x out, y toward the rear).
+    The margin passes through every dot and eases back to the drawn outline over dot_r on either side; dots closer than
+    that make one smooth curve through them all. None or [] = no dots. The client's order is kept (the studio indexes
+    them). Raises ValueError on anything else."""
+    if d is None or (isinstance(d, (list, tuple)) and len(d) == 0): return None
+    if not isinstance(d, (list, tuple)) or len(d) > DOTS_MAX: raise ValueError(f"dots: a list of at most {DOTS_MAX} [u, dx, dy]")
+    out = []
+    for p in d:
+        try: u, dx, dy = float(p[0]), float(p[1]), float(p[2])
+        except (TypeError, ValueError, IndexError): raise ValueError("dots: each dot is [u, dx, dy]")
+        if not all(math.isfinite(v) for v in (u, dx, dy)): raise ValueError("dots: not finite")
+        if not 0.0 <= u <= 1.0: raise ValueError("dots: u (where along the margin) is 0 .. 1")
+        if abs(dx) > 1.5 or abs(dy) > 1.5: raise ValueError("dots: a dot moves at most 1.5 half-widths")
+        out.append([round(u, 5), round(dx, 5), round(dy, 5)])
+    return out
+
+
+def dot_field(dots, r, us, length=None, slope=2.5):
+    """How far the margin is pushed out along its normal (n,) at positions us (0 .. 1 along the half-outline), for dots
+    [[u, d]] (d > 0 out, < 0 in): a monotone cubic through every dot, back to 0 over its reach either side of a lone dot,
+    straight through neighbours closer than that. A dot's reach is r (a fraction of the half-outline), or, when `length`
+    (the half-outline's length, in d's unit) is given, at least slope x |d| along it -- a dot dragged far pulls a wide
+    bump, never an overhang. The rear margin on the axis (u = 1, the joint) never moves."""
+    from scipy.interpolate import PchipInterpolator
+    us = np.asarray(us, float)
+    if not dots: return np.zeros(len(us))
+    d = sorted(([float(a), float(b)] for a, b in dots), key=lambda p: p[0])
+    m = []                                                         # dots at one u: the last one wins
+    for p in d:
+        if m and p[0] - m[-1][0] < 1e-4: m[-1] = p
+        else: m.append(p)
+    m = [p for p in m if p[0] < 1 - 1e-4] or [[1 - 2e-4, 0.0]]
+    rr = [max(r, slope * abs(p[1]) / length) if length else r for p in m]
+    ku, kv = [], []
+    u0 = m[0][0]
+    if u0 > 1e-4:                                                  # the front on the axis
+        if u0 > rr[0] + 1e-4: ku += [0.0, u0 - rr[0]]; kv += [0.0, 0.0]
+        else: ku.append(0.0); kv.append(m[0][1])
+    for i, p in enumerate(m):
+        ku.append(p[0]); kv.append(p[1])
+        if i + 1 < len(m) and m[i + 1][0] - p[0] > rr[i] + rr[i + 1] + 1e-4: ku += [p[0] + rr[i], m[i + 1][0] - rr[i + 1]]; kv += [0.0, 0.0]
+    u1 = m[-1][0]
+    if 1 - u1 > rr[-1] + 1e-4: ku += [u1 + rr[-1], 1.0]; kv += [0.0, 0.0]
+    else: ku.append(1.0); kv.append(0.0)                           # the rear margin on the axis stays put
+    return PchipInterpolator(np.array(ku), np.array(kv))(np.clip(us, 0, 1))
+
+
+def _normals(ring):
+    """Outward unit normals of the right half-outline (front on the axis -> side -> rear on the axis), smoothed so a
+    corner (the genal angle) turns them gradually instead of fanning them out."""
+    from scipy.ndimage import gaussian_filter1d
+    t = np.gradient(ring, axis=0); t = gaussian_filter1d(t, 6, axis=0, mode="nearest")
+    t /= np.maximum(np.hypot(t[:, 0], t[:, 1]), 1e-12)[:, None]
+    return np.c_[t[:, 1], -t[:, 0]]                                # the tangent turned -90 deg: out of the head
+
+
+def dot_targets(ring0, u_ring, N, dots, window=0.25):
+    """Each dot [u, dx, dy] (scale 1) as [u*, d]: dragged to T = the outline at u + (dx, dy), it sits at u*, the point of
+    the outline nearest T within `window` of u, and pushes the margin out (d > 0) or in by its distance there. A dot
+    dragged along the margin slides; dragged across it, it pushes."""
+    out = []
+    for u, dx, dy in dots:
+        i0 = int(np.argmin(np.abs(u_ring - u))); T = ring0[i0] + (dx, dy)
+        lo, hi = np.searchsorted(u_ring, [u - window, u + window]); lo = max(lo, 0); hi = max(min(hi, len(u_ring)), lo + 1)
+        j = lo + int(np.argmin(np.hypot(*(ring0[lo:hi] - T).T)))
+        out.append([float(u_ring[j]), float(np.dot(T - ring0[j], N[j]))])
+    return out
+
+
+def _ring(axb, yfb, yrb, n=900):
+    """The head proper's right half-outline from its columns: the front edge out to the widest column, down its side,
+    the rear edge back to the axis -- resampled to n points evenly along its length. (points (n, 2), u (n,))."""
+    P = np.r_[np.c_[axb, yfb], np.c_[axb[::-1], yrb[::-1]]]
+    s = np.r_[0, np.cumsum(np.hypot(*np.diff(P, axis=0).T))]
+    keep = np.r_[True, np.diff(s) > 1e-9]; P, s = P[keep], s[keep]
+    u = np.linspace(0, 1, n); t = u * s[-1]
+    return np.c_[np.interp(t, s, P[:, 0]), np.interp(t, s, P[:, 1])], u
+
+
+def _columns_of(poly, axb):
+    """Front (min y) and rear (max y) edge of a closed polygon at each column x = axb (NaN where it has none)."""
+    poly = np.vstack([poly, poly[:1]]); yf = np.full(len(axb), np.nan); yr = np.full(len(axb), np.nan)
+    for (x0_, y0_), (x1_, y1_) in zip(poly[:-1], poly[1:]):
+        lo_, hi_ = min(x0_, x1_), max(x0_, x1_)
+        if hi_ - lo_ < 1e-9: continue
+        m = (axb >= lo_ - 1e-9) & (axb <= hi_ + 1e-9)
+        if not m.any(): continue
+        yy = y0_ + (axb[m] - x0_) * (y1_ - y0_) / (x1_ - x0_)
+        yf[m] = np.fmin(yf[m], yy); yr[m] = np.fmax(yr[m], yy)
+    return yf, yr
 
 def trace_of(t):
     """A traced head margin (20 Oct 2026): the RIGHT half, from the front on the axis back to the genal angle, as [[x, y], ...]
@@ -117,8 +213,8 @@ OLD_SPREAD = 4.0        # the old default genal_spread
 
 def outline_of(o=None):
     o = migrate_outline(o)
-    f = dict(OUTLINE, **(o or {})); tr = f.pop("trace", None); bad = set(f) - set(OUTLINE)
-    if bad: raise KeyError(f"unknown outline keys {sorted(bad)} (have {sorted(OUTLINE)} and 'trace')")
+    f = dict(OUTLINE, **(o or {})); tr = f.pop("trace", None); dots = f.pop("dots", None); bad = set(f) - set(OUTLINE)
+    if bad: raise KeyError(f"unknown outline keys {sorted(bad)} (have {sorted(OUTLINE)}, 'trace' and 'dots')")
     for k, v in f.items():
         try: v = float(v)
         except (TypeError, ValueError): raise ValueError(f"outline {k} is not a number")
@@ -128,6 +224,8 @@ def outline_of(o=None):
         f[k] = v
     tr = trace_of(tr)
     if tr is not None: f["trace"] = tr
+    dots = dots_of(dots)
+    if dots is not None: f["dots"] = dots
     return f
 
 def _dense(pts, step=0.15):
@@ -245,6 +343,36 @@ class Shape:
             # forward (notch 0) -- a bowed rear margin is concave by design and is left as drawn.
             if o["notch"] <= 1e-9 and not horn: yfb, yrb = _convex_columns(axb, yfb, yrb)   # the whole rounded silhouette is convex: its 2-D hull
             else: yfb = _convex_floor(axb, yfb)
+        # ---- 7 Nov 2026: the user's dots. The outline drawn so far (sliders, rounding, or a trace) is the base; each dot sits at
+        # its place u along it and pulls the margin to where it was dragged, easing back over dot_r either side. The pulled
+        # outline is read back into columns (its front and rear edge at each x), so everything below -- the surface, the
+        # brim, the fields, the genal piece -- follows it.
+        ring0, u_ring = _ring(axb, yfb, yrb); dots = o.get("dots") or []; Nr = _normals(ring0)
+        self.dot_at = dot_targets(ring0, u_ring, Nr, [[u, dx * RO, dy * RO] for u, dx, dy in dots]) if dots else []
+        Lring = float(np.hypot(*np.diff(ring0, axis=0).T).sum())
+        dd = dot_field(self.dot_at, o["dot_r"], u_ring, length=Lring)
+        if dots:                                                   # the margin may not fold over itself: |d'| <= 0.7 along it
+            dd = dd * (1 - smoothstep(0.93, 1.0, u_ring))          # ... and meets the axis at the joint flat (no cusp in the mirrored margin)
+            ds = 0.7 * Lring / (len(u_ring) - 1)
+            for k in range(1, len(dd)): dd[k] = np.clip(dd[k], dd[k - 1] - ds, dd[k - 1] + ds)
+            for k in range(len(dd) - 2, -1, -1): dd[k] = np.clip(dd[k], dd[k + 1] - ds, dd[k + 1] + ds)
+        Dr = dd[:, None] * Nr
+        ring = ring0 + Dr
+        self.ring0, self.u_ring, self.ring_D = ring0, u_ring, Dr; self._T_ring0 = cKDTree(ring0)
+        if dots:
+            ring[:, 0] = np.maximum(ring[:, 0], 0.0)
+            reach = float(ring[:, 0].max())
+            if abs(reach - RO) > 0.002 * RO:                       # the head's half-width is the width handle's: the dots set its shape
+                ring[:, 0] *= RO / reach
+                self.notes.append(f"the dots made the head {'wider' if reach > RO else 'narrower'} at its widest; it is drawn at the width the width handle sets")
+            poly = np.r_[[[0.0, ring[0, 1]]], ring, [[0.0, ring[-1, 1]]]]
+            yf_d, yr_d = _columns_of(poly, axb); ok_d = np.isfinite(yf_d) & np.isfinite(yr_d)
+            if ok_d.sum() > 10:
+                from scipy.ndimage import gaussian_filter1d
+                yfb = gaussian_filter1d(np.interp(axb, axb[ok_d], yf_d[ok_d]), 1.5, mode="nearest")
+                yrb = gaussian_filter1d(np.interp(axb, axb[ok_d], yr_d[ok_d]), 1.5, mode="nearest")
+                yrb = np.maximum(yrb, yfb + 0.12)
+        self.ring = ring
         # the front's median features go on after the rounding (it would erase anything this narrow)
         if tr is None and o["front_dent"] > 0: yfb = yfb + o["front_dent"] * L1 * np.exp(-(axb / (0.30 * RO)) ** 2)
         if o["front_point"] > 0:
@@ -264,6 +392,8 @@ class Shape:
                 if y0 >= yw: x0 = RO - (RO - xg) * ((y0 - yw) / max(yg - yw, 1e-6)) ** 2
                 else: x0 = RO * (1 - fl) * np.clip(1 - ((yw - y0) / Lf) ** nF, 0, 1) ** (1 / nF) + fl * RO
                 x0 = x0 - 0.3 * w0; inward = (-1.0, 0.0)
+            if at <= 0.01:                                         # a dot near the genal angle carries the spine's root with it
+                dxy = self.dot_shift(x0, y0); x0, y0 = x0 + dxy[0], y0 + dxy[1]
             anchor = None; web = float(o["genal_web"])
             if web > 0.01:
                 xa = x0 - web * (x0 - 0.12 * RO); anchor = (xa, float(np.interp(xa, axb, yrb)))
@@ -271,6 +401,7 @@ class Shape:
                                   tip=o["genal_tip"], web=anchor, web_round=o["genal_web_round"], hw_min=0.35, inward=inward, organic=organic)
             self.notes += self.piece.notes
         self.horn, self.x_in, self.yg, self.xg, self.yw = horn, x_in, yg, xg, yw
+        gd = self.dot_shift(xg, yg); self.xg_d, self.yg_d = xg + gd[0], yg + gd[1]   # the genal angle where the dots put it (its handle)
         Xmax = self.Xmax = float(RO)                               # the columns hold the head proper; the genal piece is its own solid
         ax = self.ax = np.linspace(0, Xmax, n); body = ax <= RO
         yf = np.where(body, np.interp(ax, axb, yfb), np.inf); yr = np.where(body, np.interp(ax, axb, yrb), -np.inf)
@@ -296,6 +427,11 @@ class Shape:
         self.arc = np.r_[0, np.cumsum(np.hypot(*np.diff(out, axis=0).T))]
         inn = np.vstack(segs_i) if segs_i else np.array([[0.0, 1e4]]); self.T_in = cKDTree(inn)
         self.Lh = Lh
+
+    def dot_shift(self, x, y):
+        """How far the dots moved the margin nearest (x, y) (scale 1): (0, 0) without dots."""
+        if not (self.o.get("dots")): return np.zeros(2)
+        return self.ring_D[self._T_ring0.query([float(x), float(y)])[1]]
 
     def edges(self, x):
         a = np.abs(np.asarray(x, float)); return np.interp(a, self.ax, self.yf), np.interp(a, self.ax, self.yr)
@@ -448,7 +584,7 @@ def diagram(outline=None, face=None, n=260):
     X, Y = np.meshgrid(np.linspace(0, sh.Xmax, 90), ys); yf_, yr_ = sh.edges(X)
     prof = np.where((Y >= yf_) & (Y <= yr_), sh.z(X, Y, face), 0.0).max(1)
     kz = 0.85 * o["height"] * 0.42 / max(sec.max(), 1e-6)         # drawn at the model's usual head height / half-width
-    H = dict(front=(0.0, float(sh.yf[0]) * u), widest=(1.0, sh.yw * u), angle=(sh.xg * u, sh.yg * u),
+    H = dict(front=(0.0, float(sh.yf[0]) * u), widest=(1.0, sh.yw * u), angle=(sh.xg_d * u, sh.yg_d * u),
              notch=(0.5 * sh.x_in * u, float(np.interp(0.5 * sh.x_in, ax, sh.yr)) * u),
              glabella=(0.0, -min(0.92 * gl, 1.0) * sh.L1 * u))
     if o.get("trace") is not None:                                 # a traced margin: the front, side and rear handles have nothing to drag
@@ -462,6 +598,12 @@ def diagram(outline=None, face=None, n=260):
     if b > 0.02: H["brim"] = (0.7 * (1 - b), float(np.interp(0.7 * RO, ax, sh.yf)) * (1 - b) * u + sh.yw * b * u)
     if eye is not None: H["eye"] = (E["xe"] * u, float(eye[:, 1].mean()))
     reach = float(np.abs(plan_[:, 0]).max()) if len(plan_) else sh.Xmax * u
+    # 7 Nov 2026: the margin the user's dots sit on. rim: [x, y, u, dx, dy] every few points along the pulled outline (u where
+    # along it, (dx, dy) how far the dots have moved it there) -- a click on it adds a dot that keeps the outline where it is;
+    # dots: each dot's position, in the order given.
+    rim = np.c_[sh.ring * u, sh.u_ring, (sh.ring - sh.ring0) * u][::4]
+    dpos = [sh.ring[int(np.argmin(np.abs(sh.u_ring - ua)))] * u for ua, _ in sh.dot_at]   # where each dot landed, on the pulled outline
     return dict(outline=plan_, glabella=glab, eye=eye, brim=brim, boss=boss, section=np.c_[ys * u, sec * kz], profile=np.c_[ys * u, prof * kz],
                 handles=H, size=dict(length=sh.L1 * u, halfwidth=max(sh.Xmax * u, reach), width_vs_thorax=o["width"]), notes=list(sh.notes),
-                trace=(np.array(o["trace"], float) if o.get("trace") is not None else None))
+                trace=(np.array(o["trace"], float) if o.get("trace") is not None else None),
+                rim=rim, dots=(np.array(dpos) if dpos else None))
