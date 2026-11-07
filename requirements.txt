@@ -5,6 +5,7 @@ networkx>=3.0       # trimesh graph ops (mesh .split) — the isopod model build
 manifold3d==3.0.1
 python-fcl>=0.7
 rtree>=1.0
+shapely>=2.0        # genal pieces + shaped-head silhouettes (schema 6.7/6.8 organic): polygon union / projected outline
 matplotlib>=3.8
 pandas>=2.0
 pytest>=8.0
