@@ -1,0 +1,17 @@
+{
+ "name": "agnostida-drawing",
+ "preset": "agnostida",
+ "head": "agnostida-drawing",
+ "spec": {
+  "rows": {
+   "0": {
+    "width": 18.3
+   },
+   "1": {
+    "width": 26.0
+   }
+  }
+ },
+ "doc": "the agnostida preset's drawing block (2026-11-09); its parameters live on /agnostida",
+ "saved_at": "2026-11-09T03:24:49"
+}

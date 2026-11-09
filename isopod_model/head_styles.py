@@ -16,7 +16,7 @@ itself (its "params" overrides do, as any parameter edit does). Nothing here is 
 import os, sys
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, os.path.join(HERE, "..")); sys.path.insert(0, HERE)
 
-HOLO = dict(eyeSolid=1, eyeSphere=1, lensD=0.05, lensGap=0.0)    # holochroal: a smooth globe set in the cheek
+HOLO = dict(eyeSolid=1, eyeSphere=0, lensD=0.16, lensGap=0.3)    # holochroal: 9 Nov 2026 the faceted lobed drum (was a smooth globe: lensD 0.05 is under the 0.5 mm print floor, so it carried no lenses)
 LOBE = dict(eyeSolid=0)                                          # no eye solid: the eye is the palpebral lobe sculpted in the cheek (eye_len stretches it)
 SCHIZO = dict(eyeSolid=1, lensD=0.16, lensGap=0.3, eyeProfile=6.0)
 BLIND = dict(eyeSize=0.0, eyeSolid=0)

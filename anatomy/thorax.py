@@ -60,15 +60,34 @@ def plan(P, i):
         hb_sp = hw * np.sqrt(1 + slope ** 2)
         hb_new = np.where(ax > w, hb_sp, OR.smax(hb_old, r0_or * smoothstep(w - ramp, w, ax), 0.3 * r0_or))   # rule 7: no crease
         return (1 - k) * hb_old + k * hb_new
+    # 7 Nov 2026 (schema 6.9): pleural lobes -- the pleura scalloped into rounded bosses (the agnostid look).
+    # nL = 0 is the smooth blade as built; the lobes ride between the axis and the tip, fading at the root so the
+    # ring chain and the joints are untouched, and fading at the tip so the blade's end keeps its full chord.
+    nL = int(P.get("pleuralLobes", 0))
+    tipR = float(P.get("tipRound", 0.0))
+    lobeC = float(P.get("pleuralLobeCut", 0.25))
+    lobeR = float(P.get("pleuralLobeRelief", 0.8)) * 0.1 * h               # relief-scaled, like bladeCamber / ringArch
+    def lobe_m(q):
+        return np.abs(np.sin(np.pi * nL * np.clip(q, 0, 1))) ** 1.4 * smoothstep(0.04, 0.22, q)
     def edges(x):
         q = q_of(x); p = p_of(x)
         yc = 0.5 * L0 + sweep * q ** 1.6 + S_sp * p ** 1.5
         root = smoothstep(0.0, 0.3, q)
         half = 0.5 * L0 * (1 - root) + 0.5 * min(P["bladeChord"] * d, L0) * root
         hb = half * (1 - P["tipTaper"] * q ** 2.5)
+        if tipR > 0.005:                                                    # 8 Nov 2026 (schema 6.9): a blunt round end --
+            qq = np.clip((q - (1 - tipR)) / tipR, 0, 1)                     # the chord closes on a half-ellipse over the
+            hb = np.maximum(hb * np.sqrt(np.clip(1 - qq * qq, 0, 1)), 0.6)  # outer tipRound of the pleura (agnostid pleurae)
         hb = hb * (1 - p) ** 0.5 + R_TIP * p
+        if nL > 0 and lobeC > 0.005:                                        # the scallop: full chord at each lobe's crest,
+            dip = (1 - np.abs(np.sin(np.pi * nL * np.clip(q, 0, 1)))) ** 1.2   # pinched between lobes; eased off at root and tip
+            hb = hb * (1 - lobeC * dip * smoothstep(0.08, 0.28, q) * (1 - smoothstep(0.82, 1.0, q)) * (1 - p) ** 0.5)
         if k > 0: hb = _organic_hb(np.abs(np.asarray(x, float)), p, hb)
         return yc - hb, yc + hb
+    if int(P.get("pleuraFlip", 0)):                                          # 8 Nov 2026 (schema 6.9): the pleura mirrored
+        _edges0 = edges                                                      # fore-aft about the band's midline -- the straight
+        def edges(x):                                                        # edge tucks in front, the swept, sculpted edge
+            yf0, yr0 = _edges0(x); return L0 - yr0, L0 - yf0                 # with its round tips faces the tail (agnostids)
     def outline(u, v):
         x = u * X_tip
         yf, yr = edges(np.array([abs(x)]))
@@ -90,6 +109,9 @@ def plan(P, i):
         ax_w = plateau(x, a + 1.0, 1.5)
         window = smoothstep(ovl - 1.5, ovl + 0.5, y - yf_b)
         z += window * (ax_w * ring_hump + (1 - ax_w) * blade_hump)
+        if nL > 0 and lobeR > 0.005:                                       # the bosses: domed on the blade's fore-aft arch,
+            boss = np.clip(1 - ((y - yc_b) / hb_b) ** 2, 0, 1) ** 1.2      # peaking at each lobe's crest (schema 6.9)
+            z += window * (1 - ax_w) * lobeR * boss * lobe_m(q_of(x)) * (1 - p_of(x))
         if Ls > 0.5:
             p = p_of(x)
             z = np.where(p > 0, np.maximum(margin * (1 - 0.55 * p), t + 0.6), z)

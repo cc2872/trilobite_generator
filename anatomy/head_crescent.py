@@ -52,6 +52,8 @@ FACE = dict(eye_size=EYE_SIZE, eye_pos=EYE_POS, eye_height=EYE_HEIGHT, eye_lat=0
             furrow_cross=0.0,    # glabellar furrows: 0 paired (approved), 1 transglabellar (Paradoxides, Agnostina)
             furrow_splay=0.0,    # splayed furrows: hind pair slants back, front pairs forward (Corynexochida), 0..1
             bullae=0.0,          # a pair of bullar lobes beside the glabella, radius / half-width (Lichoidea ~0.18)
+            bullae_at=0.60,      # 7 Nov 2026: where along the glabella they sit (0 rear .. 1 front; 0.60 = as built)
+            bullae_rise=0.22,    # 7 Nov 2026: their height / relief (0.22 = as built; agnostid basal lobes ~0.10)
             node=0.0,            # median tubercle on the rear of the glabella, mm (Asaphoidea's preoccipital tubercle)
             eye_len=1.0,         # fore-aft stretch of the eye lobe: 2+ is the long crescentic / band eye
             caeca=0.0,           # genal caeca: low ridges radiating over the cheek, mm (Olenidae)
@@ -60,7 +62,19 @@ FACE = dict(eye_size=EYE_SIZE, eye_pos=EYE_POS, eye_height=EYE_HEIGHT, eye_lat=0
             brim_pits=0,         # ... rows of pits on it (the harpetid / trinucleid fringe)
             tubercles=0.0,       # tubercle height, mm (Encrinurus, Lichida); 0 = smooth
             tub_all=0,           # 0 = on the glabella only, 1 = cheeks too
-            efface=0.0)          # effacement of this head: furrows AND the glabella's rise fade (Illaenina, Asaphida)
+            efface=0.0,          # effacement of this head: furrows AND the glabella's rise fade (Illaenina, Asaphida)
+            dome_exp=DOME_EXP,   # 7 Nov 2026: the dome's superellipsoid exponent. 1.5 = the approved head (a sagittal
+                                 # ridge with faceted shoulders); 2 = a smooth ball (agnostids); higher = flatter-topped
+            front_cap=1.0,       # 9 Nov 2026: the closed capsule's front cap, length / half-width (1 = semicircle, 0.6 = flatter)
+            rim=RIM,             # 9 Nov 2026: the margin's height (the dorsal surface at the outline's edge), head units; 1.5 = as
+                                 # built (a wall 15 % of the relief tall all round). ~0.4 brings the edge down near the doublure
+            front_furrow=0.0,    # 9 Nov 2026: the axial furrow carried round the glabella's front (the preglabellar furrow),
+                                 # depth / furrow; 0 = the capsule fades into the dome, as built (agnostids: 1)
+            furrow_at=-1.0,      # 8 Nov 2026: where the first glabellar furrow sits along the glabella (0 rear .. 1 front);
+                                 # -1 = 0.28, as built. With glab_lobes 1 this is THE furrow (agnostids: ~0.65)
+            node_at=0.21,        # 8 Nov 2026: where the median node sits along the head (0 rear .. 1 front; 0.21 = as built)
+            collar=0.0)          # 8 Nov 2026: the border band widening into a T at the front midline, with a median groove
+                                 # back to the glabella's front (agnostids); half-width of the T's base / head half-width
                                                                            # (schema sutureEnd / sutureDepth / eyeRidge), mm at
                                                                            # scale 1; 0 = not drawn, the head is unchanged
                                                                            # scale 1); border width / half-width.
@@ -120,7 +134,7 @@ def _z_base(x, y, face=None, geom=None):
     geom (isopod_model/shaped_head.py): another OUTLINE's fields at these points, replacing the crescent's own: do / dn
     (distance to the outer and the rear margin), behind / taper / hw (the genal spine: where, how tall, half-width),
     front (1 on the head proper), arc (distance along the margin), dome_fill, horn_h. None = the crescent."""
-    F_ = face_of(face); h, rim, F = RELIEF, RIM, F_["furrow"]; AF = F_["axis_frac"]
+    F_ = face_of(face); h, rim, F = RELIEF, float(F_.get("rim", RIM)), F_["furrow"]; AF = F_["axis_frac"]
     eff = float(F_["efface"]); gl = float(F_["glab_len"])
     if eff > 0: F = F * (1 - eff)
     ax = np.abs(np.asarray(x, float)); y = np.broadcast_to(np.asarray(y, float), ax.shape)
@@ -128,9 +142,10 @@ def _z_base(x, y, face=None, geom=None):
     fg = f if gl == 1.0 else f / gl                              # position along the glabella (1 = its approved front)
     sg = 1.0 / LC if gl == 1.0 else 1.0 / (LC * gl)             # 1 mm along the head, in fg
     dfill = DOME_FILL if geom is None else geom["dome_fill"]
+    dE = float(F_["dome_exp"])                                  # 7 Nov 2026: settable; DOME_EXP evaluates as before
     yc = Y0 - 0.19 * LC; aD = dfill * RO; bD = 0.88 * dfill * LC; bw = F_["border_w"] * RO
-    rD = (ax / aD) ** DOME_EXP + (np.abs(y - yc) / bD) ** DOME_EXP
-    z = rim + (h - rim) * np.clip(1 - rD, 0, 1) ** (1 / DOME_EXP)
+    rD = (ax / aD) ** dE + (np.abs(y - yc) / bD) ** dE
+    z = rim + (h - rim) * np.clip(1 - rD, 0, 1) ** (1 / dE)
     g = _glab_half(fg, face)
     rise = GLAB_RISE_GAIN * F_["glab_rise"] * h * ((1 - 0.85 * eff) if eff > 0 else 1.0)
     gr = float(F_["glab_round"])
@@ -140,13 +155,27 @@ def _z_base(x, y, face=None, geom=None):
     if gr > 0:                                                   # rounded: a hump along its length too, easing down to the front
         ramp = (1 - gr) * ramp + gr * (0.45 + 0.55 * np.sin(0.9 * np.pi * np.clip(fg, 0, 1)))
         nose = (1 - gr) * nose + gr * (1 - smoothstep(0.62, 1.0, fg))
-    z = z + rise * ramp * top * nose
-    z = z - F * trough(ax - (g + 0.7), 0.9) * (fg < 0.9)
+    ff = float(F_.get("front_furrow", 0.0))
+    if ff < 0.005:
+        z = z + rise * ramp * top * nose
+        z = z - F * trough(ax - (g + 0.7), 0.9) * (fg < 0.9)
+    else:                                                        # 9 Nov 2026: a CLOSED capsule (agnostids). The glabella's outline
+        kc = float(F_.get("front_cap", 1.0)); f0 = 0.85           # is the flanks +-g(fg) up to f0 and an elliptical cap, half-width
+        for _ in range(3): f0 = max(1.0 - kc * float(_glab_half(f0, face)) / (gl * LC), 0.5)   # g(f0) x length kc g(f0), ending at fg 1.0 (fixed point,
+        g0 = float(_glab_half(f0, face))                        # so the cap's radius IS the local half-width: no step at f0);
+        dy = np.clip(fg - f0, 0, None) * gl * LC                 # the rise and the furrow both follow ONE normalised radius u
+        u_cap = np.sqrt(ax ** 2 + (dy / kc) ** 2) / g0           # ahead of f0), so the top is continuous at f0 and the furrow runs
+        u = np.where(fg <= f0, ax / np.maximum(g, 1e-6), u_cap)  # round the front without a break
+        gE = np.where(fg <= f0, g, g0)                           # the local half-width the profile is measured against
+        top_c = plateau(u * gE, gE) if gr == 0.0 else (1 - gr) * plateau(u * gE, gE) + gr * np.sqrt(np.clip(1 - (u * gE / (gE + 0.6)) ** 2, 0, 1))
+        z = z + rise * ramp * top_c
+        z = z - F * (1 - ff + ff * 1.0) * trough((u - 1) * gE - 0.7, 0.9) * np.where(fg <= f0, 1.0, ff)
     z = z - 0.8 * F * trough(f - 0.13, 0.8 / LC) * plateau(ax, g + 1.5, 1.0)
     n_l = int(F_["glab_lobes"]); cross = float(F_["furrow_cross"]); splay = float(F_["furrow_splay"])
     step = 0.16 if n_l <= 4 else 0.62 / n_l
+    f_at = float(F_["furrow_at"]); sk0 = 0.28 if f_at < 0 else f_at      # 8 Nov 2026: settable; -1 evaluates as before
     for k in range(n_l):
-        sk = 0.28 + step * k
+        sk = sk0 + step * k
         if cross == 0.0 and splay == 0.0:
             z = z - 0.7 * F * trough(fg - sk, 0.9 * sg) * trough(ax - (g - 1.2), 2.2) * (ax > 0.3 * g)
         else:
@@ -158,11 +187,12 @@ def _z_base(x, y, face=None, geom=None):
         rb = np.hypot(ax, (f - fc) * LC)
         z = z + F_["boss_rise"] * h * np.sqrt(np.clip(1 - (rb / Rb) ** 2, 0, 1))
     if F_["bullae"] > 0:                                         # bullar lobes: ovals against the glabella's sides
-        Rb = F_["bullae"] * RO; fc = 0.60 * gl; xc = float(_glab_half(0.60, face)) + 0.55 * Rb
+        b_at = float(F_["bullae_at"])                           # 7 Nov 2026: settable place and height; the defaults
+        Rb = F_["bullae"] * RO; fc = b_at * gl; xc = float(_glab_half(b_at, face)) + 0.55 * Rb   # evaluate as before
         q = np.hypot((ax - xc) / Rb, (f - fc) * LC / (1.35 * Rb))
-        z = z + 0.22 * h * np.sqrt(np.clip(1 - q ** 2, 0, 1))
+        z = z + float(F_["bullae_rise"]) * h * np.sqrt(np.clip(1 - q ** 2, 0, 1))
     if F_["node"] > 0:
-        z = z + F_["node"] * np.exp(-(np.hypot(ax, (f - 0.21) * LC) / 0.9) ** 2)
+        z = z + F_["node"] * np.exp(-(np.hypot(ax, (f - float(F_["node_at"])) * LC) / 0.9) ** 2)   # 8 Nov 2026: node_at
     E = _eye(face); el = float(F_["eye_len"])
     if E["eR"] > 1e-6:
         ye_ = (y - E["ye"]) if el == 1.0 else (y - E["ye"]) / el
@@ -182,6 +212,14 @@ def _z_base(x, y, face=None, geom=None):
         if int(F_["tub_all"]): zone = np.maximum(zone, smoothstep(bw + 0.8, bw + 2.2, do) * (f > 0.05))
         z = z + tb * np.exp(-d2 / (0.42 * tb + 0.28) ** 2) * zone
     z = z - 0.8 * F * trough(do - bw, 0.8 + 0.2 * bw) + 0.35 * F * plateau(do, 0.45 * bw, 0.4 * bw)
+    if F_["collar"] > 0.005:                                     # 8 Nov 2026: the collar -- the band's inner edge pushed
+        cw = float(F_["collar"]) * RO                            # inward at the front midline (a T), and a median groove
+        front = smoothstep(0.55, 0.75, f)                        # from the T back to the glabella's front
+        inset = cw * np.clip(1 - ax / cw, 0, 1) ** 1.5 * front
+        z = z - 0.8 * F * trough(do - (bw + inset), 0.8 + 0.2 * bw) * smoothstep(0.15 * cw, 0.5 * cw, inset)
+        closed = F_.get("front_furrow", 0.0) > 0.005               # 9 Nov 2026: with the closed capsule the median line is a
+        stem0 = (gl + 0.6 / LC, gl + 1.6 / LC) if closed else (0.90 * gl, 0.96 * gl)   # THIN groove from the capsule's front
+        z = z - (0.45 if closed else 0.6) * F * trough(ax, 0.4 if closed else 0.7) * smoothstep(stem0[0], stem0[1], f) * (do > 0.6 * bw)   # furrow to the band
     dn = _NOTCH.query(np.column_stack([ax.ravel(), y.ravel()]))[0].reshape(ax.shape) if geom is None else geom["dn"]
     cheek = smoothstep(0.0, 1.5, ax - (AF * RO + 1.0))
     z = z + cheek * (0.35 * F * plateau(dn, 0.45 * bw, 0.4 * bw) - 0.8 * F * trough(dn - bw, 0.8 + 0.2 * bw))

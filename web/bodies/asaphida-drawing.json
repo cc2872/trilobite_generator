@@ -1,0 +1,8 @@
+{
+ "name": "asaphida-drawing",
+ "preset": "asaphida",
+ "head": "asaphida-drawing",
+ "spec": {},
+ "doc": "the asaphida preset's drawing block (2026-11-09); its parameters live on /asaphida",
+ "saved_at": "2026-11-09T05:33:18"
+}

@@ -731,8 +731,11 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
     if isinstance(head, dict): head_s = f"{head.get('style', 'custom')} (editor {head.get('id', '')})" + (f" · {len(head.get('outline') or {})} outline keys" if head.get("outline") else "")
     else: head_s = str(head or "crescent")
     if isinstance(body, dict) and body.get("rows"):
-        rw = [float(r.get("width", 0)) for r in body["rows"]]
-        body_s = [f"BODY     {body.get('model', 'thorax')} · {len(rw)} rows · width {min(rw):.0f}–{max(rw):.0f} mm", f"         {_spark(rw)}"]
+        edited = isinstance(body["rows"], dict)                      # 8 Nov 2026: {"<i>": {edits}} (per-row edits) as well as [full rows]
+        rows_ = list(body["rows"].values()) if edited else list(body["rows"])
+        rw = [float(r.get("width", 0)) for r in rows_ if isinstance(r, dict) and r.get("width") is not None]
+        body_s = [f"BODY     {body.get('model', 'thorax')} · {len(rows_)} rows{' edited' if edited else ''}" + (f" · width {min(rw):.0f}–{max(rw):.0f} mm" if rw else "")]
+        if rw: body_s.append(f"         {_spark(rw)}")
     elif isinstance(body, dict): body_s = ["BODY     " + ", ".join(f"{k} {v}" for k, v in body.items() if k != "rows")[:46]]
     else: body_s = ["BODY     preset rows (segCount %d)" % int(gv("segCount", 0))]
     lines = [f"LENGTH {L:6.1f}  WIDTH {W:6.1f}  RELIEF {H:5.1f}", f"CLEAR  {gv('clearance'):5.2f}  PIECES {n:2d}  JOINTS {nj} ball",

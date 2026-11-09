@@ -264,7 +264,7 @@ def _polyline_dist(x, y, pts):
     return np.sqrt(d2)
 
 def eye_solid(R, H, slope_deg, shade, arc_deg, lensD, lensGap, lensRise, stalk=0.0, stalk_r=0.45, lean=0.0, embed=1.0, max_lenses=400, clip_x=None,
-              sphere=False, bend_deg=30.0, axial=1.0, tall=1.0, sink_frac=0.55):
+              sphere=False, bend_deg=30.0, axial=1.0, tall=1.0, sink_frac=0.55, lobe=True):
     """The eye as its own solid (eye_solid.py on Manifold): revolved drum over the visual arc, a palpebral lobe inward,
     spherical-cap lenses on a hex lattice within +-arc/2 of the outward (+x) direction. Frame: axis z, outward +x,
     base at z = -embed. Returns (mesh, n_lenses).
@@ -282,12 +282,16 @@ def eye_solid(R, H, slope_deg, shade, arc_deg, lensD, lensGap, lensRise, stalk=0
     ak = math.radians(a_keep / 2)
     sector = Manifold.extrude(CrossSection([[(0, 0), (big * math.cos(ak), -big * math.sin(ak)), (big, -big * 0.2), (big, big * 0.2),
                                              (big * math.cos(ak), big * math.sin(ak))]]), 2 * H + 4).translate((0, 0, -embed - 1))
-    lobe_pts = [(0, -embed), (1.8 * R, -embed)] + [(R + 0.8 * R * math.sin(tt), -embed + (H + embed) * math.cos(tt))
-                                                     for tt in [math.radians(aa) for aa in (80, 65, 50, 35, 20, 8, 0)]] + [(0, H)]
-    lobe = Manifold.revolve(CrossSection([lobe_pts]), 64) - sector
-    if clip_x is not None:
-        lobe = lobe ^ M.to_manifold(M.box(2 * big, 4 * big, 4 * big, at=(clip_x - big, 0, 0)))
-    body = (drum ^ sector) + lobe
+    if lobe:                                                          # the palpebral lobe inward of the visual arc, as built
+        lobe_pts = [(0, -embed), (1.8 * R, -embed)] + [(R + 0.8 * R * math.sin(tt), -embed + (H + embed) * math.cos(tt))
+                                                         for tt in [math.radians(aa) for aa in (80, 65, 50, 35, 20, 8, 0)]] + [(0, H)]
+        lobe_ = Manifold.revolve(CrossSection([lobe_pts]), 64) - sector
+        if clip_x is not None:
+            lobe_ = lobe_ ^ M.to_manifold(M.box(2 * big, 4 * big, 4 * big, at=(clip_x - big, 0, 0)))
+        body = (drum ^ sector) + lobe_
+    else:                                                             # 9 Nov 2026 (eyeLobe 0): the whole drum, lenses all round
+        body = drum
+        if arc_deg >= 359: arc = 2 * math.pi
     D = lensD * R; rise = lensRise * D / 2; rho = max((rise ** 2 + (D / 2) ** 2) / (2 * rise), 0.35)
     if D < 0.5: return M.from_manifold(body), 0                       # holochroal facets below FDM relief: smooth band
     nx, nz = math.cos(slope), math.sin(slope)
@@ -297,8 +301,8 @@ def eye_solid(R, H, slope_deg, shade, arc_deg, lensD, lensGap, lensRise, stalk=0
         if s > H - 0.5 * D: break
         r = R + (H - s) * math.tan(slope); n = max(1, int(arc * r / pitch_)); off = 0.5 * (i % 2)
         for k in range(n):
-            th = -arc / 2 + (k + off + 0.5) * arc / (n + 0.5)
-            if abs(th) <= arc / 2: cs.append((th, s, r))
+            th = -arc / 2 + (k + off + 0.5) * arc / (n + 0.5) if arc < 2 * math.pi - 1e-6 else -math.pi + (k + off) * 2 * math.pi / n
+            if abs(th) <= arc / 2 + 1e-9: cs.append((th, s, r))
     cs = cs[:max_lenses]
     import trimesh
     sph = trimesh.creation.icosphere(subdivisions=2, radius=rho)
@@ -415,7 +419,8 @@ def eye_params(P, eR):
                 arc_deg=P.get("eyeArc", 110.0), lensD=P.get("lensD", 0.16), lensGap=P.get("lensGap", 0.3), lensRise=P.get("lensRise", 0.35),
                 stalk=P.get("eyeStalk", 0.0) * eR, stalk_r=P.get("eyeStalkR", 0.45), lean=P.get("eyeLean", 0.0),
                 sphere=P.get("eyeSphere", 0.0) > 0.5, bend_deg=P.get("eyeStalkBend", 30.0),
-                axial=P.get("eyeAxial", 1.0), tall=P.get("eyeTall", 1.0), sink_frac=P.get("eyeSink", 0.55))
+                axial=P.get("eyeAxial", 1.0), tall=P.get("eyeTall", 1.0), sink_frac=P.get("eyeSink", 0.55),
+                lobe=P.get("eyeLobe", 1) > 0.5)
 
 def _base(S): return (S.get("zfun_base", S["zfun"]), S.get("detail"))   # a replacement head may give zfun alone
 

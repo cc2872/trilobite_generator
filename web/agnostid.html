@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agnostid plan editor</title>
+<style>
+ :root{--ink:#fff;--bg:#000;--dim:#9a9a9a;--grid:#1c1c1c;}
+ *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;display:flex;min-height:100vh}
+ #left{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:10px;gap:10px}
+ canvas{background:var(--bg);max-width:100%;height:auto;border:1px solid var(--grid);touch-action:none}
+ #right{width:330px;max-width:45vw;border-left:1px solid var(--grid);padding:10px 14px;overflow-y:auto;height:100vh}
+ @media (max-width:700px){ body{flex-direction:column} #left{padding:6px}
+  #right{width:100%;max-width:none;height:auto;border-left:none;border-top:1px solid var(--grid)} }
+ h1{font-size:13px;letter-spacing:.14em;font-weight:400;margin:4px 0 2px}
+ .sub{color:var(--dim);font-size:11px;margin-bottom:10px}
+ .nav{display:flex;gap:6px;margin:0 0 8px} .nav a{flex:1;color:var(--dim);border:1px solid var(--grid);text-decoration:none;text-align:center;padding:5px 0;font-size:10px;letter-spacing:.08em;text-transform:uppercase} .nav a:hover{color:var(--ink);border-color:var(--ink)}
+ details{border-top:1px solid var(--grid);padding:5px 0}
+ summary{cursor:pointer;letter-spacing:.1em;padding:4px 0;text-transform:uppercase;font-size:11px}
+ .row{margin:8px 0}
+ label{display:flex;justify-content:space-between;color:var(--dim);font-size:11px;margin-bottom:2px}
+ .key{color:#555;font-size:10px}
+ .ctl{display:flex;align-items:center;gap:8px}
+ input[type=range]{flex:1;accent-color:#fff;height:26px;margin:0}
+ .val{color:var(--ink);font-size:11px;min-width:42px;text-align:right}
+ button{background:var(--bg);color:var(--ink);border:1px solid var(--ink);font:inherit;letter-spacing:.1em;padding:9px 10px;width:100%;margin:6px 0;cursor:pointer}
+ button:hover{background:#181818} button:disabled{color:#555;border-color:#333;cursor:default}
+ #json{width:100%;height:110px;background:#0a0a0a;color:var(--dim);border:1px solid var(--grid);font:10px/1.4 ui-monospace,monospace;display:none}
+ #status{color:var(--dim);font-size:11px;min-height:16px;margin:4px 0} #status.err{color:#f66}
+ #result{width:100%;max-width:680px;color:var(--dim);font-size:11px} #result table{border-collapse:collapse;width:100%} #result td{padding:2px 6px;border-bottom:1px solid var(--grid)} #result a{color:var(--ink)}
+ #result img{width:100%;border:1px solid var(--grid);margin-top:8px}
+</style></head><body>
+<div id="left"><canvas id="cv" width="680" height="920"></canvas><div id="result"></div></div>
+<div id="right">
+ <h1>AGNOSTID &middot; PLAN EDITOR</h1>
+ <div class="nav"><a href="/">studio</a><a href="/head">head</a><a href="/body">body</a><a href="/tree">tree</a></div>
+ <div class="sub">Drag the dots on the drawing (right side) &mdash; each is a generator parameter, clamped to its real range. Sliders reach everything else. BUILD makes the real pieces (STL links and the blueprint sheet appear under the drawing). SAVE writes the state into the agnostida preset&rsquo;s drawing block and the studio&rsquo;s saved head/body <i>agnostida-drawing</i>. COPY EDITS JSON is the same state as an edits file.</div>
+ <div id="status"></div>
+ <button id="build">BUILD (real pieces + sheet)</button><button id="save">SAVE TO THE PRESET</button>
+ <details ><summary>Proportions</summary><div class="row"><label><span>Body length (mm)</span><span class="key">P.length</span></label><div class="ctl"><input type="range" data-d="P" data-k="length" min="80" max="130" step="1"><span class="val"></span></div></div>
+<div class="row"><label><span>Body width (mm)</span><span class="key">P.width</span></label><div class="ctl"><input type="range" data-d="P" data-k="width" min="40" max="70" step="1"><span class="val"></span></div></div>
+<div class="row"><label><span>Head fraction</span><span class="key">P.cephFrac</span></label><div class="ctl"><input type="range" data-d="P" data-k="cephFrac" min="0.3" max="0.5" step="0.005"><span class="val"></span></div></div>
+<div class="row"><label><span>Tail fraction</span><span class="key">P.pygFrac</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygFrac" min="0.3" max="0.4" step="0.005"><span class="val"></span></div></div>
+</details><details ><summary>Head outline</summary><div class="row"><label><span>Head length</span><span class="key">outline.length</span></label><div class="ctl"><input type="range" data-d="outline" data-k="length" min="1.2" max="2.4" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Head width</span><span class="key">outline.width</span></label><div class="ctl"><input type="range" data-d="outline" data-k="width" min="0.7" max="1.1" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Front roundness</span><span class="key">outline.front_exp</span></label><div class="ctl"><input type="range" data-d="outline" data-k="front_exp" min="1.6" max="3.5" step="0.05"><span class="val"></span></div></div>
+<div class="row"><label><span>Widest at (0 rear .. 1 front)</span><span class="key">outline.widest</span></label><div class="ctl"><input type="range" data-d="outline" data-k="widest" min="0.0" max="0.8" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Rear corner tuck</span><span class="key">outline.rear_taper</span></label><div class="ctl"><input type="range" data-d="outline" data-k="rear_taper" min="0.0" max="0.5" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Rear corners drop (notch)</span><span class="key">outline.notch</span></label><div class="ctl"><input type="range" data-d="outline" data-k="notch" min="0.0" max="0.6" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Rear corner rounding</span><span class="key">outline.corner</span></label><div class="ctl"><input type="range" data-d="outline" data-k="corner" min="0.0" max="0.5" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Straight side run</span><span class="key">outline.side</span></label><div class="ctl"><input type="range" data-d="outline" data-k="side" min="0.0" max="0.6" step="0.01"><span class="val"></span></div></div>
+</details><details ><summary>Genal spines</summary><div class="row"><label><span>Length</span><span class="key">outline.genal</span></label><div class="ctl"><input type="range" data-d="outline" data-k="genal" min="0.0" max="0.5" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Root width</span><span class="key">outline.genal_w</span></label><div class="ctl"><input type="range" data-d="outline" data-k="genal_w" min="0.02" max="0.3" step="0.005"><span class="val"></span></div></div>
+<div class="row"><label><span>Root angle (deg)</span><span class="key">outline.genal_angle</span></label><div class="ctl"><input type="range" data-d="outline" data-k="genal_angle" min="-90" max="120" step="1"><span class="val"></span></div></div>
+<div class="row"><label><span>Kink at</span><span class="key">outline.genal_kink</span></label><div class="ctl"><input type="range" data-d="outline" data-k="genal_kink" min="0.05" max="0.9" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Angle after kink</span><span class="key">outline.genal_kink_angle</span></label><div class="ctl"><input type="range" data-d="outline" data-k="genal_kink_angle" min="-120" max="120" step="1"><span class="val"></span></div></div>
+<div class="row"><label><span>Tip: point-round</span><span class="key">outline.genal_tip</span></label><div class="ctl"><input type="range" data-d="outline" data-k="genal_tip" min="0.0" max="1.0" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Root along rear margin (0 corner .. 1 inward)</span><span class="key">outline.genal_at</span></label><div class="ctl"><input type="range" data-d="outline" data-k="genal_at" min="-1.0" max="1.0" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Web into corner</span><span class="key">outline.genal_web</span></label><div class="ctl"><input type="range" data-d="outline" data-k="genal_web" min="0.0" max="1.0" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Web edge (-bulge..+hug)</span><span class="key">outline.genal_web_round</span></label><div class="ctl"><input type="range" data-d="outline" data-k="genal_web_round" min="-1.0" max="1.0" step="0.05"><span class="val"></span></div></div>
+</details><details ><summary>Head face</summary><div class="row"><label><span>Border band width</span><span class="key">face.border_w</span></label><div class="ctl"><input type="range" data-d="face" data-k="border_w" min="0.03" max="0.3" step="0.005"><span class="val"></span></div></div>
+<div class="row"><label><span>Glabella width</span><span class="key">P.glabInflate</span></label><div class="ctl"><input type="range" data-d="P" data-k="glabInflate" min="0.3" max="1.3" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Glabella length</span><span class="key">face.glab_len</span></label><div class="ctl"><input type="range" data-d="face" data-k="glab_len" min="0.5" max="1.1" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Furrow depth (mm)</span><span class="key">face.furrow</span></label><div class="ctl"><input type="range" data-d="face" data-k="furrow" min="0.2" max="2.5" step="0.05"><span class="val"></span></div></div>
+<div class="row"><label><span>Node (mm)</span><span class="key">face.node</span></label><div class="ctl"><input type="range" data-d="face" data-k="node" min="0.0" max="2.0" step="0.05"><span class="val"></span></div></div>
+<div class="row"><label><span>Node at (0 rear .. 1 front)</span><span class="key">face.node_at</span></label><div class="ctl"><input type="range" data-d="face" data-k="node_at" min="0.05" max="0.9" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Glabellar furrow at (-1 = default)</span><span class="key">face.furrow_at</span></label><div class="ctl"><input type="range" data-d="face" data-k="furrow_at" min="-1.0" max="0.95" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Front collar (T) size</span><span class="key">face.collar</span></label><div class="ctl"><input type="range" data-d="face" data-k="collar" min="0.0" max="0.4" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Glabella vault (0 flat .. 1 round)</span><span class="key">face.glab_round</span></label><div class="ctl"><input type="range" data-d="face" data-k="glab_round" min="0.0" max="1.0" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Glabella side bulge</span><span class="key">face.glab_bulge</span></label><div class="ctl"><input type="range" data-d="face" data-k="glab_bulge" min="-0.15" max="0.3" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Basal lobes size</span><span class="key">face.bullae</span></label><div class="ctl"><input type="range" data-d="face" data-k="bullae" min="0.0" max="0.25" step="0.005"><span class="val"></span></div></div>
+<div class="row"><label><span>Basal lobes at</span><span class="key">face.bullae_at</span></label><div class="ctl"><input type="range" data-d="face" data-k="bullae_at" min="0.0" max="0.9" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Basal lobes height</span><span class="key">face.bullae_rise</span></label><div class="ctl"><input type="range" data-d="face" data-k="bullae_rise" min="0.0" max="0.4" step="0.01"><span class="val"></span></div></div>
+</details><details ><summary>Segments</summary><div class="row"><label><span>Seg 1 half-width (model mm; rows spec)</span><span class="key">row0.width</span></label><div class="ctl"><input type="range" data-d="row0" data-k="width" min="10" max="35" step="0.1"><span class="val"></span></div></div>
+<div class="row"><label><span>Seg 2 half-width (model mm; rows spec)</span><span class="key">row1.width</span></label><div class="ctl"><input type="range" data-d="row1" data-k="width" min="10" max="35" step="0.1"><span class="val"></span></div></div>
+<div class="row"><label><span>Flip pleura fore-aft</span><span class="key">P.pleuraFlip</span></label><div class="ctl"><input type="range" data-d="P" data-k="pleuraFlip" min="0" max="1" step="1"><span class="val"></span></div></div>
+<div class="row"><label><span>Blunt round end</span><span class="key">P.tipRound</span></label><div class="ctl"><input type="range" data-d="P" data-k="tipRound" min="0.0" max="1.0" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Tip taper</span><span class="key">P.tipTaper</span></label><div class="ctl"><input type="range" data-d="P" data-k="tipTaper" min="0.0" max="0.95" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Axial ring arch</span><span class="key">P.ringArch</span></label><div class="ctl"><input type="range" data-d="P" data-k="ringArch" min="0.0" max="0.8" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Lobes per side</span><span class="key">P.pleuralLobes</span></label><div class="ctl"><input type="range" data-d="P" data-k="pleuralLobes" min="0" max="4" step="1"><span class="val"></span></div></div>
+<div class="row"><label><span>Lobe scallop</span><span class="key">P.pleuralLobeCut</span></label><div class="ctl"><input type="range" data-d="P" data-k="pleuralLobeCut" min="0.0" max="0.6" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Lobe relief</span><span class="key">P.pleuralLobeRelief</span></label><div class="ctl"><input type="range" data-d="P" data-k="pleuralLobeRelief" min="0.0" max="2.0" step="0.05"><span class="val"></span></div></div>
+<div class="row"><label><span>Tip sweep</span><span class="key">P.tipSweep</span></label><div class="ctl"><input type="range" data-d="P" data-k="tipSweep" min="0.0" max="2.0" step="0.01"><span class="val"></span></div></div>
+</details><details ><summary>Tail</summary><div class="row"><label><span>Tail width / last segment</span><span class="key">P.pygWidth</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygWidth" min="0.5" max="2.0" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Outline squareness</span><span class="key">P.tailOutlineExp</span></label><div class="ctl"><input type="range" data-d="P" data-k="tailOutlineExp" min="1.5" max="4.0" step="0.05"><span class="val"></span></div></div>
+<div class="row"><label><span>Neck pinch</span><span class="key">P.pygNeck</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygNeck" min="0.0" max="0.5" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Neck length</span><span class="key">P.pygNeckLen</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygNeckLen" min="0.05" max="0.6" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Axis width</span><span class="key">P.pygAxisFrac</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygAxisFrac" min="0.1" max="0.6" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Axis length</span><span class="key">P.pygAxisLen</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygAxisLen" min="0.25" max="0.97" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Axis rings</span><span class="key">P.pygRings</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygRings" min="0" max="4" step="1"><span class="val"></span></div></div>
+<div class="row"><label><span>First ring at (-1 = default)</span><span class="key">P.pygRingAt</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygRingAt" min="-1.0" max="0.95" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Axis node</span><span class="key">P.pygNode</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygNode" min="0.0" max="3.0" step="0.05"><span class="val"></span></div></div>
+<div class="row"><label><span>Node at</span><span class="key">P.pygNodePos</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygNodePos" min="0.05" max="0.95" step="0.01"><span class="val"></span></div></div>
+</details><details ><summary>Tail spines</summary><div class="row"><label><span>Pair length</span><span class="key">P.pygSpine</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygSpine" min="0.0" max="1.0" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Pair splay (deg)</span><span class="key">P.pygSplay</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygSplay" min="0" max="45" step="1"><span class="val"></span></div></div>
+<div class="row"><label><span>Pair lean back (deg)</span><span class="key">P.pygSpineSweep</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygSpineSweep" min="0" max="80" step="1"><span class="val"></span></div></div>
+<div class="row"><label><span>Pair base width</span><span class="key">P.pygSpineWidth</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygSpineWidth" min="0.3" max="2.0" step="0.05"><span class="val"></span></div></div>
+<div class="row"><label><span>Pair flank (straight-concave)</span><span class="key">P.pygLobePoint</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygLobePoint" min="1.0" max="3.0" step="0.1"><span class="val"></span></div></div>
+<div class="row"><label><span>Extra marginals (count)</span><span class="key">P.pygMarginal</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygMarginal" min="0" max="6" step="1"><span class="val"></span></div></div>
+<div class="row"><label><span>Marginal length</span><span class="key">P.pygMarginalLen</span></label><div class="ctl"><input type="range" data-d="P" data-k="pygMarginalLen" min="0.0" max="0.25" step="0.005"><span class="val"></span></div></div>
+</details><details open><summary>Overlay</summary><div class="row"><label><span>Reference opacity</span><span class="key">view.refOpacity</span></label><div class="ctl"><input type="range" data-d="view" data-k="refOpacity" min="0.0" max="1.0" step="0.01"><span class="val"></span></div></div>
+<div class="row"><label><span>Reference scale</span><span class="key">view.refScale</span></label><div class="ctl"><input type="range" data-d="view" data-k="refScale" min="0.7" max="1.4" step="0.005"><span class="val"></span></div></div>
+<div class="row"><label><span>Reference y-shift</span><span class="key">view.refY</span></label><div class="ctl"><input type="range" data-d="view" data-k="refY" min="-80" max="80" step="1"><span class="val"></span></div></div>
+</details>
+ <button id="copy">COPY EDITS JSON</button><span id="copied"></span>
+ <button id="reset">RESET TO SAVED</button>
+ <textarea id="json" readonly></textarea>
+</div>
+<script>
+const SITE = true;                      // true on the site: load/build/save through /api/drawing/<order>
+const ORDER = "agnostida";
+const REF_IMG = "data:image/png;base64,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";
+let FULL = {"P": {"length": 107.0, "width": 55.0, "relief": 17.1, "segCount": 2.0, "cephFrac": 0.42, "pygFrac": 0.4, "marginHeight": 0.22, "fulcrum": 0.55, "overlap": 0.45, "wall": 2.0, "widthMaxPos": 0.5, "widthHeadFront": 0.75, "widthThoraxFront": 0.62, "widthThoraxRear": 0.58, "widthTail": 0.8, "axisFrac": 0.28, "axisRise": 0.18, "furrowDepth": 1.2, "effacement": 0.0, "vaultRound": 1.0, "tent": 0.0, "axisSigma": 0.55, "pleuralSlope": 0.74, "ringArch": 0.12, "bladeCamber": 0.05, "headOutlineExp": 2.15, "headDomeExp": 2.2, "headDomeFill": 0.95, "headWall": 1.0, "tailWall": 1.0, "headRelief": 1.04, "tailRelief": 1.24, "tailDomeExp": 2.6, "cephParallel": 0.05, "glabInflate": 0.96, "glabRise": 0.1, "glabLobes": 1.0, "glabFront": 2.5, "preglabField": 0.1, "eyeSize": 0.0, "eyePos": 0.45, "eyeArc": 150.0, "eyeHeight": 0.8, "eyeLat": 0.0, "eyeProfile": 4.0, "eyeSolid": 0.0, "eyeSlope": 15.0, "eyeShade": 0.0, "lensD": 0.16, "lensGap": 0.3, "lensRise": 0.35, "eyeStalk": 0.0, "eyeStalkR": 0.45, "eyeLean": 0.0, "eyeStalkBend": 30.0, "eyeSphere": 0.0, "eyeAxial": 1.0, "eyeTall": 1.0, "eyeCollar": 0.0, "eyeSink": 0.55, "genalSweep": 0.3, "borderWidth": 0.22, "genalSpine": 0.0, "headRearArc": 0.0, "headRearExp": 2.2, "genalWidth": 0.12, "genalTip": 0.0, "genalWidthMM": 0.0, "genalAngle": 5.1, "genalKink": 0.5, "genalKinkAngle": 14.9, "genalWeb": 0.0, "genalWebRound": 0.5, "sutureEnd": 0.0, "sutureDepth": 0.0, "eyeRidge": 0.0, "tipSweep": 0.15, "bladeChord": 1.0, "tipTaper": 0.0, "spineBase": 0.0, "spineGrad": 0.0, "macroIndex": -1.0, "macroAmp": 0.8, "spineSweep": 32.0, "pleuraFlip": 1.0, "tipRound": 0.6, "pleuralLobes": 0.0, "pleuralLobeRelief": 1.6, "pleuralLobeCut": 0.35, "pygWidth": 1.55, "tailOutlineExp": 2.75, "pygAxisLen": 0.79, "pygAxisFrac": 0.34, "pygNode": 3.0, "pygNodePos": 0.506, "pygAxisEnd": 1.0, "pygAxisCap": 0.6, "pygAxisTaper": 0.04, "pygAxisRound": 0.7, "pygRingAt": 0.587, "pygNeck": 0.28, "pygNeckLen": 0.45, "pygBorderWidth": 0.12, "pygRings": 1.0, "pygSpine": 0.3, "pygSplay": 24.0, "termSpine": 0.0, "axialSpine": 0.0, "axialPitch": 60.0, "axialBend": 0.0, "axialGrad": 0.0, "pleuralHorn": 0.0, "pleuralHornPitch": 45.0, "pleuralHornBend": 0.0, "pleuralHornRoll": 0.0, "pleuralHornGrad": 0.0, "occipitalSpine": 0.0, "pygMarginal": 0.0, "pygMarginalLen": 0.1, "pygRibRelief": 0.0, "pygFurrowScale": 3.8, "pygSpineRise": 0.0, "pygSpineBend": 0.0, "pygSpineGrow": 0.0, "pygSpineBlade": 1.0, "printLength": 0.0, "organic": 1.0, "jointScale": 0.6, "pygSpineWidth": 0.42, "pygMarginalFrom": 32.0, "pygMarginalTo": 148.0, "pygSpineSweep": 48.0, "pygLobePoint": 1.3, "pygLobeBand": 0.3, "occipitalBend": 0.0, "occipitalTines": 1.0, "occipitalSplay": 40.0, "genalHorn": 0.0, "genalHornPitch": 40.0, "genalHornBend": 0.0, "genalHornRoll": 0.0, "genalHornYaw": 10.0, "genalHornWidth": 1.0, "genalHornFlare": 1.8, "termBend": 0.0, "frontSpine": 0.0, "frontSpineBend": 0.0, "headProngs": 0.0, "headProngLen": 0.6, "headProngSplay": 30.0, "headProngStem": 0.0, "headProngCenter": 1.0, "headProngWidth": 0.45, "headProngCurl": 0.0, "headProngBend": 0.0, "tailProngs": 0.0, "tailProngLen": 0.5, "tailProngSplay": 30.0, "tailProngStem": 0.0, "tailProngCenter": 1.0, "tailProngWidth": 0.45, "tailProngCurl": 0.0, "tailProngBend": 0.0, "maxAngle": 18.0, "clearance": 0.3, "boreDia": 1.95, "barrelR": 2.6, "nKnuckles": 3.0}, "outline": {"width": 1.52, "length": 1.92, "front_exp": 2.0, "front_point": 0.0, "widest": 0.4, "side": 0.1, "rear_taper": 0.16, "corner": 0.45, "genal": 0.34, "genal_w": 0.16, "genal_tip": 0.15, "genal_angle": 6.0, "genal_kink": 0.45, "genal_kink_angle": -14.0, "genal_web": 0.0, "genal_web_round": 0.8, "notch": 0.18, "notch_exp": 2.0, "dome_fill": 0.97, "horn_h": 0.32, "height": 1.0, "fringe_n": 0.0, "fringe_len": 0.25, "fringe_w": 0.035, "fringe_from": 0.35, "fringe_to": 0.9, "fringe_rise": 8.0, "genal_at": 0.0, "front_flat": 0.0, "front_dent": 0.0, "point_w": 0.1, "point_fork": 0.0, "brim_w": 0.0, "brim_rise": 0.12, "brim_curve": 0.0, "brim_roll": 0.0, "brim_pits": 0.0}, "face": {"glab_len": 0.76, "glab_round": 1.0, "furrow_cross": 1.0, "node": 1.6, "border_w": 0.09, "glab_bulge": 0.06, "bullae": 0.1160681540007157, "bullae_at": 0.1146441988965925, "bullae_rise": 0.1, "collar": 0.05, "dome_exp": 2.0, "front_cap": 0.6, "front_furrow": 1.0, "furrow": 0.8, "furrow_at": 0.69, "node_at": 0.36}, "rows": {"rows": {"0": {"width": 18.3}, "1": {"width": 26.0}}}};                        // every resolved parameter: the drawing reads these (the block as saved when this page was written)
+let BASE = {"P": {"axisRise": 0.18, "bladeCamber": 0.05, "borderWidth": 0.22, "effacement": 0.0, "glabInflate": 0.96, "glabLobes": 1, "glabRise": 0.1, "headDomeFill": 0.95, "headRelief": 1.04, "length": 107.0, "marginHeight": 0.22, "pleuraFlip": 1, "pleuralLobeCut": 0.35, "pleuralLobeRelief": 1.6, "pygAxisCap": 0.6, "pygAxisEnd": 1.0, "pygAxisFrac": 0.34, "pygAxisLen": 0.79, "pygAxisRound": 0.7, "pygAxisTaper": 0.04, "pygBorderWidth": 0.12, "pygFurrowScale": 3.8, "pygLobeBand": 0.3, "pygLobePoint": 1.3, "pygMarginalFrom": 32.0, "pygMarginalLen": 0.1, "pygMarginalTo": 148.0, "pygNeck": 0.28, "pygNeckLen": 0.45, "pygNode": 3.0, "pygNodePos": 0.506, "pygRingAt": 0.587, "pygRings": 1, "pygSpine": 0.3, "pygSpineSweep": 48.0, "pygSpineWidth": 0.42, "pygSplay": 24.0, "pygWidth": 1.55, "ringArch": 0.12, "spineSweep": 32.0, "tailDomeExp": 2.6, "tailOutlineExp": 2.75, "tailRelief": 1.24, "tent": 0.0, "tipRound": 0.6, "tipSweep": 0.15, "tipTaper": 0.0, "widthThoraxFront": 0.62, "widthThoraxRear": 0.58}, "outline": {"corner": 0.45, "dome_fill": 0.97, "front_exp": 2.0, "genal": 0.34, "genal_angle": 6, "genal_kink": 0.45, "genal_kink_angle": -14, "genal_tip": 0.15, "genal_w": 0.16, "genal_web_round": 0.8, "length": 1.92, "notch": 0.18, "rear_taper": 0.16, "side": 0.1, "widest": 0.4, "width": 1.52}, "face": {"border_w": 0.09, "bullae": 0.1160681540007157, "bullae_at": 0.1146441988965925, "bullae_rise": 0.1, "collar": 0.05, "dome_exp": 2, "front_cap": 0.6, "front_furrow": 1.0, "furrow": 0.8, "furrow_at": 0.69, "glab_bulge": 0.06, "glab_len": 0.76, "glab_round": 1.0, "node": 1.6, "node_at": 0.36}, "rows": {"rows": {"0": {"width": 18.3}, "1": {"width": 26.0}}}};                         // the block's edits: COPY EDITS JSON = BASE + the editable keys
+const state = {view:{refOpacity:0.35, refScale:1.0, refY:0}};
+const copyOf=o=>JSON.parse(JSON.stringify(o));
+function initState(full){ for(const d of ['P','outline','face']) state[d]=copyOf(full[d]);
+  const rr=(full.rows&&full.rows.rows)||{}; for(const k in state){ if(/^row\d+$/.test(k)) delete state[k]; }
+  for(const k in rr) state['row'+k]=copyOf(rr[k]); }
+initState(FULL);
+const cv = document.getElementById('cv'), cx = cv.getContext('2d');
+const img = new Image(); img.src = REF_IMG; img.onload = ()=>safeDraw();
+const clamp=(v,lo,hi)=>Math.min(Math.max(v,lo),hi);
+const smooth=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);};
+function solveMono(f,target,lo,hi){ for(let i=0;i<24;i++){const m=(lo+hi)/2; (f(m)<target)?lo=m:hi=m;} return (lo+hi)/2; }
+function segHalf(si,Wh){ const r=state['row'+si]; if(r&&r.width!==undefined) return r.width;   // the rows spec's half-width (model mm) ...
+  const P=state.P; return (si===0?P.widthThoraxFront:P.widthThoraxRear)*Wh; }                   // ... or the width curve's
+function rowsSpec(){ const out={}; const rr=(BASE.rows&&BASE.rows.rows)||{};
+  for(const k in rr) out[k]=Object.assign({},rr[k],state['row'+k]||{});
+  for(const k in state){ const m=k.match(/^row(\d+)$/); if(m&&!out[m[1]]) out[m[1]]=copyOf(state[k]); }
+  return {rows:out}; }
+
+let G={};                                    // geometry of the last draw (model mm + transform)
+function geom(){
+  const P=state.P,O=state.outline;
+  const Wh=P.width/2;
+  const A=O.width*Wh*1.02, Lh=O.length*Wh*0.92;
+  const Lth=(1-P.cephFrac-P.pygFrac)*P.length, d=Lth/2;
+  const Lp=P.pygFrac*P.length, wp=P.widthThoraxRear*Wh*P.pygWidth;
+  const total=Lh+Lth+Lp+6;
+  const sc=Math.min(cv.height*0.92/total, cv.width*0.9/(2*Math.max(A,wp,segHalf(1,Wh))+10));
+  const X=cv.width/2, Y0=cv.height*0.04;
+  return {Wh,A,Lh,Lth,d,Lp,wp,total,sc,X,Y0, yT:Lh+Lth+3};
+}
+const px=(x,y)=>[G.X+x*G.sc, G.Y0+y*G.sc];
+const inv=(cxp,cyp)=>[(cxp-G.X)/G.sc,(cyp-G.Y0)/G.sc];
+
+// ---- handles: the studio's pattern (sketch_controls.handles): name -> {pos, apply(x,y), word}
+function handles(){
+  const P=state.P,O=state.outline,F=state.face,g=G;
+  const set=(d,k,v,lo,hi)=>{if(!state[d])state[d]={}; state[d][k]=clamp(v,lo,hi);};
+  const tw=(1-O.widest)*g.Lh;
+  const gw=0.30*g.A*P.glabInflate, glL=F.glab_len*g.Lh*0.92, gy0=g.Lh*0.995;
+  const rc=[g.A*0.97*(1-O.rear_taper), g.Lh*0.995];
+  const gl=O.genal*g.A, a1=O.genal_angle*Math.PI/180, a2=O.genal_kink_angle*Math.PI/180;
+  const L1=gl*O.genal_kink, L2=gl*(1-O.genal_kink);
+  const dir=an=>[Math.sin(an),Math.cos(an)];
+  const d1=dir(a1), d2=dir(a2);
+  const k1=[rc[0]+d1[0]*L1, rc[1]+d1[1]*L1];
+  const gt=[k1[0]+d2[0]*L2, k1[1]+d2[1]*L2];
+  const nO=P.tailOutlineExp, nk=P.pygNeck;
+  const neckf=yy=>1-nk*(1-smooth(0,P.pygNeckLen,yy));
+  const tx=ph=>{const by=g.Lp*Math.pow(Math.sin(ph),2/nO);
+    return [g.wp*Math.pow(Math.cos(ph),2/nO)*neckf(by/g.Lp), g.yT+by];};
+  const aw=P.pygAxisFrac*g.wp, al=P.pygAxisLen*g.Lp;
+  const {pb,pt,radLean}=pairGeom(P,g);
+  const segSet=(si,x)=>{ if(state['row'+si]) set('row'+si,'width',Math.abs(x),10,35); else set('P',si===0?'widthThoraxFront':'widthThoraxRear',Math.abs(x)/g.Wh,0.4,1.0); };
+  const H={
+   headLen:{pos:[0,0],word:'length',apply:(x,y)=>set('outline','length',(g.Lh-y)/(g.Wh*0.92),1.2,2.4)},
+   headWide:{pos:[g.A,tw],word:'width / widest',apply:(x,y)=>{set('outline','width',Math.abs(x)/(g.Wh*1.02),0.7,1.1); set('outline','widest',1-y/g.Lh,0.0,0.8);}},
+   front:{pos:(()=>{const yy=tw*0.45;return [g.A*Math.pow(1-Math.pow((tw-yy)/tw,O.front_exp),1/O.front_exp),yy];})(),word:'front',
+     apply:(x,y)=>{const yy=tw*0.45, t=clamp(Math.abs(x)/g.A,0.05,0.98);
+       set('outline','front_exp',solveMono(fe=>Math.pow(1-Math.pow((tw-yy)/tw,fe),1/fe),t,1.6,3.5),1.6,3.5);}},
+   rear:{pos:[rc[0],rc[1]-2],word:'corner',apply:(x,y)=>set('outline','rear_taper',1-Math.abs(x)/(g.A*0.97),0,0.5)},
+   genKink:{pos:k1,word:'spine root/kink',apply:(x,y)=>{const dx=Math.abs(x)-rc[0], dy=y-rc[1];
+       set('outline','genal_angle',Math.atan2(dx,dy)*180/Math.PI,-90,120);
+       set('outline','genal_kink',Math.hypot(dx,dy)/Math.max(gl,1e-3),0.05,0.9);}},
+   genTip:{pos:gt,word:'spine tip',apply:(x,y)=>{const dx=Math.abs(x)-k1[0], dy=y-k1[1];
+       set('outline','genal_kink_angle',Math.atan2(dx,dy)*180/Math.PI,-120,120);
+       set('outline','genal',(L1+Math.hypot(dx,dy))/g.A,0,0.5);}},
+   glabW:{pos:[gw,gy0-glL*0.5],word:'glabella',apply:(x,y)=>set('P','glabInflate',Math.abs(x)/(0.30*g.A),0.3,1.3)},
+   glabLen:{pos:[0,gy0-glL],word:'glabella front',apply:(x,y)=>set('face','glab_len',(gy0-y)/(g.Lh*0.92),0.5,1.1)},
+   border:{pos:[g.A-F.border_w*g.A,tw*1.25],word:'border',apply:(x,y)=>set('face','border_w',(g.A-Math.abs(x))/g.A,0.03,0.3)},
+   bullae:{pos:[gw+F.bullae*g.A*0.75+2,gy0-F.bullae_at*glL],word:'basal lobe',apply:(x,y)=>{
+       set('face','bullae',Math.max(Math.abs(x)-gw-2,0)/(g.A*0.75),0,0.25);
+       set('face','bullae_at',(gy0-y)/Math.max(glL,1e-3),0,0.9);}},
+   seg1:{pos:[segHalf(0,g.Wh),g.Lh+1.5+g.d*0.5],word:'seg 1',apply:(x,y)=>segSet(0,x)},
+   seg2:{pos:[segHalf(1,g.Wh),g.Lh+1.5+g.d*1.5+P.tipSweep*g.d],word:'seg 2 / sweep',apply:(x,y)=>{
+       segSet(1,x);
+       set('P','tipSweep',(y-(g.Lh+1.5+g.d*1.5))/g.d,0,2);}},
+   neck:{pos:[g.wp*neckf(0),g.yT+1],word:'neck',apply:(x,y)=>set('P','pygNeck',1-Math.abs(x)/g.wp,0,0.5)},
+   tailWide:{pos:tx(Math.PI*0.22),word:'tail width',apply:(x,y)=>{}},
+   tailShape:{pos:tx(Math.PI*0.37),word:'tail shape',apply:(x,y)=>{const t=clamp(Math.abs(x)/g.wp,0.05,0.98);
+       set('P','tailOutlineExp',solveMono(n=>Math.pow(Math.cos(Math.PI*0.37),2/n)*neckf(Math.pow(Math.sin(Math.PI*0.37),2/n)),t,1.5,4.0),1.5,4.0);}},
+   tailLen:{pos:[0,g.yT+g.Lp],word:'tail length',apply:(x,y)=>set('P','pygFrac',(y-g.yT)/P.length,0.3,0.4)},
+   axis:{pos:[aw,g.yT+al],word:'tail axis',apply:(x,y)=>{set('P','pygAxisFrac',Math.abs(x)/g.wp,0.1,0.6);
+       set('P','pygAxisLen',(y-g.yT)/g.Lp,0.25,0.97);}},
+   node:{pos:[0,g.yT+P.pygNodePos*al],word:'node',apply:(x,y)=>set('P','pygNodePos',(y-g.yT)/Math.max(al,1e-3),0.05,0.95)},
+   pairBase:{pos:pb,word:'tail spine root',apply:(x,y)=>{const ph=Math.atan2(clamp(y-g.yT,0.5,1e9),Math.max(Math.abs(x),0.5));
+       set('P','pygSplay',90-Math.atan(Math.tan(ph)*g.Lp/g.wp)*180/Math.PI,0,45);}},
+   pairTip:{pos:pt,word:'tail spine tip / lean',apply:(x,y)=>{const dx=Math.abs(x)-pb[0], dy=y-pb[1];
+       set('P','pygSpine',Math.hypot(dx,dy)/g.Lp,0,1.0);
+       const ang=Math.atan2(dx,dy)-Math.atan2(pb[0],pb[1]-g.yT);   // direction relative to the radial
+       set('P','pygSpineSweep',-ang*180/Math.PI+radLean*180/Math.PI,0,80);}},
+  };
+  return H;
+}
+
+// tail-wide: direct and stable
+function fixTailWide(H){ H.tailWide.apply=(x,y)=>{ const P=state.P;
+  state.P.pygWidth=clamp(Math.abs(x)/(Math.pow(Math.cos(Math.PI*0.22),2/P.tailOutlineExp)*P.widthThoraxRear*(state.P.width/2)),0.5,2.0); }; return H; }
+
+function pairGeom(P,g){                        // the paired pygidial spines (anatomy/tail.py: phi_f, sweep lean)
+  const nO=P.tailOutlineExp, nk=P.pygNeck, sp=P.pygSplay*Math.PI/180;
+  const neckf=yy=>1-nk*(1-smooth(0,P.pygNeckLen,yy));
+  const phi=Math.atan(g.wp/g.Lp*Math.tan(Math.PI/2-sp));
+  const by=g.Lp*Math.pow(Math.sin(phi),2/nO), bx=g.wp*Math.pow(Math.cos(phi),2/nO)*neckf(by/g.Lp);
+  const pb=[bx,g.yT+by]; const rad=Math.atan2(bx,by);        // radial direction (angle from straight back)
+  const radLean=rad; const lean=P.pygSpineSweep*Math.PI/180;
+  const dirA=rad-lean;                                          // leaned toward the rear
+  const L=P.pygSpine*g.Lp;
+  const pt=[bx+Math.sin(dirA)*L, g.yT+by+Math.cos(dirA)*L];
+  const hw=Math.hypot(bx,by)*(13*Math.PI/180)*P.pygSpineWidth*0.5;
+  return {pb,pt,radLean,hw,dirA};
+}
+let hover=null, dragging=null;
+function draw(){
+  const P=state.P,O=state.outline,F=state.face,V=state.view;
+  G=geom();
+  cx.clearRect(0,0,cv.width,cv.height);
+  if(V.refOpacity>0 && img.width){ cx.save(); cx.globalAlpha=V.refOpacity;
+    const ih=G.total*G.sc*V.refScale, iw=ih*img.width/img.height;
+    cx.drawImage(img, G.X-iw/2, G.Y0+V.refY, iw, ih); cx.restore(); }
+  cx.strokeStyle='#fff'; cx.lineWidth=1.6; cx.lineJoin='round'; cx.lineCap='round';
+  const M=pts=>{cx.beginPath();pts.forEach((p,i)=>{const q=px(p[0],p[1]);i?cx.lineTo(q[0],q[1]):cx.moveTo(q[0],q[1]);});cx.stroke();};
+  const Mir=pts=>{M(pts);M(pts.map(p=>[-p[0],p[1]]));};
+  const {A,Lh,d,Lp,wp,Wh,yT}=G;
+  // head
+  const fe=O.front_exp, tw=(1-O.widest)*Lh, rt=O.rear_taper, headPts=[];
+  for(let i=0;i<=60;i++){const t=i/60, yy=t*Lh; let a;
+    if(yy<=tw) a=A*Math.pow(1-Math.pow((tw-yy)/tw,fe),1/fe);
+    else{const u=(yy-tw)/(Lh-tw); a=A*Math.pow(1-Math.pow(u,2.6),1/2.6)*(1-rt*u*u);}
+    headPts.push([a,yy]);}
+  Mir(headPts);
+  const bw=F.border_w*A;
+  Mir(headPts.map(p=>[Math.max(p[0]-bw,0),p[1]]).filter(p=>p[0]>1));
+  const gw=0.30*A*P.glabInflate, glL=F.glab_len*Lh*0.92, gy0=Lh*0.995, cap=[];
+  if(F.collar>0.005){const cw=F.collar*A; M([[-cw,bw+cw*0.6],[0,bw+1.2*cw],[cw,bw+cw*0.6]]); M([[0,bw+1.2*cw],[0,gy0-F.glab_len*Lh*0.92-2]]);}
+  for(let i=0;i<=40;i++){const t=i/40, yy=gy0-t*glL;
+    let w=gw*(1-0.12*t); const tt=smooth(0.78,1,t); w*=Math.sqrt(Math.max(1-tt*tt,1e-4));
+    cap.push([w,yy]);}
+  Mir(cap);
+  const fAt=(F.furrow_at>=0?F.furrow_at:0.28); cx.setLineDash([4,4]); M([[-gw*0.92,gy0-glL*fAt],[gw*0.92,gy0-glL*fAt]]); cx.setLineDash([]);
+  if(F.node>0.02){cx.setLineDash([2,3]);cx.beginPath();const n=px(0,gy0-(F.node_at!==undefined?F.node_at:0.21)*Lh);
+    cx.arc(n[0],n[1],Math.max(F.node*2.2,3),0,6.283);cx.stroke();cx.setLineDash([]);}
+  if(F.bullae>0.005){const Rb=F.bullae*A, fy=gy0-F.bullae_at*glL;
+    [1,-1].forEach(m=>{cx.beginPath();const c=px(m*(gw+Rb*0.75),fy);
+      cx.ellipse(c[0],c[1],Rb*G.sc*0.8,Rb*G.sc*1.25,m*0.5,0,6.283);cx.stroke();});}
+  // genal
+  const rc=[A*0.97*(1-rt),Lh*0.995], gl=O.genal*A, gwd=O.genal_w*A;
+  const dirf=an=>[Math.sin(an),Math.cos(an)];
+  const d1=dirf(O.genal_angle*Math.PI/180), d2=dirf(O.genal_kink_angle*Math.PI/180);
+  const L1=gl*O.genal_kink, L2=gl*(1-O.genal_kink);
+  const k1=[rc[0]+d1[0]*L1,rc[1]+d1[1]*L1], gt=[k1[0]+d2[0]*L2,k1[1]+d2[1]*L2];
+  if(O.genal_web>0.01){ [1,-1].forEach(m=>{ const wa=px(m*(rc[0]-O.genal_web*g_A(A)),rc[1]), wb=px(m*k1[0],k1[1]);
+      cx.beginPath(); cx.moveTo(wa[0],wa[1]); cx.lineTo(wb[0],wb[1]); cx.stroke(); }); }
+  [1,-1].forEach(m=>{cx.beginPath();
+    const q0=px(m*(rc[0]-gwd/2),rc[1]),q1=px(m*(k1[0]-gwd*0.3),k1[1]),q2=px(m*gt[0],gt[1]),
+          q3=px(m*(k1[0]+gwd*0.3),k1[1]),q4=px(m*(rc[0]+gwd/2),rc[1]);
+    cx.moveTo(q0[0],q0[1]);cx.quadraticCurveTo(q1[0],q1[1],q2[0],q2[1]);
+    cx.quadraticCurveTo(q3[0],q3[1],q4[0],q4[1]);cx.stroke();});
+  // segments
+  const nL=Math.round(P.pleuralLobes), cut=P.pleuralLobeCut, sw=P.tipSweep*d;
+  for(let si=0;si<2;si++){
+    const wseg=segHalf(si,Wh), ytop=Lh+si*d+1.5;
+    const edge=v=>{const pts=[];
+      for(let i=0;i<=48;i++){const q=i/48; let hb=d*0.42;
+        if(nL>0&&cut>0){const dip=Math.pow(1-Math.abs(Math.sin(Math.PI*nL*q)),1.2);
+          hb*=1-cut*dip*smooth(0.08,0.28,q)*(1-smooth(0.82,1,q));}
+        if(P.tipRound>0.005){const qq=clamp((q-(1-P.tipRound))/P.tipRound,0,1); hb=Math.max(hb*Math.sqrt(Math.max(1-qq*qq,0)),0.6);}
+        hb*=1-P.tipTaper*Math.pow(q,2.5);
+        const yc=ytop+d*0.5+(P.pleuraFlip>0.5?-1:1)*sw*Math.pow(q,1.6);
+        pts.push([q*wseg,yc+v*hb]);}
+      return pts;};
+    Mir(edge(-1));Mir(edge(1));
+    Mir([[P.pygAxisFrac*Wh*0.9,ytop+d*0.15],[P.pygAxisFrac*Wh*0.9,ytop+d*0.85]]);
+  }
+  // tail
+  const nO=P.tailOutlineExp, nk=P.pygNeck;
+  const neckf=yy=>1-nk*(1-smooth(0,P.pygNeckLen,yy));
+  const tPts=[];
+  for(let i=0;i<=70;i++){const ph=(i/70)*Math.PI/2;
+    const xx=wp*Math.pow(Math.cos(ph),2/nO), yy=Lp*Math.pow(Math.sin(ph),2/nO);
+    tPts.push([xx*neckf(yy/Lp),yT+yy]);}
+  Mir(tPts);
+  Mir(tPts.map(p=>[Math.max(p[0]-0.16*wp,0),p[1]]).filter(p=>p[0]>0.5));
+  const aw=P.pygAxisFrac*wp, al=P.pygAxisLen*Lp, ax=[];
+  for(let i=0;i<=30;i++){const t=i/30;
+    ax.push([aw*(1-0.8*t)*Math.sqrt(Math.max(1-Math.pow(smooth(0.75,1,t),2),0.01)),yT+t*al]);}
+  Mir(ax);
+  for(let k=0;k<Math.round(P.pygRings);k++){const n_=Math.round(P.pygRings); const yy=yT+(P.pygRingAt>=0? Lp*(P.pygAxisLen/0.85)*(P.pygRingAt+k/(n_+1.5)) : al*(k+1)/(n_+1.5));
+    Mir([[aw*(1-0.8*((yy-yT)/al))*0.95,yy],[0,yy]]);}
+  if(P.pygNode>0.05){cx.setLineDash([2,3]);cx.beginPath();
+    const n=px(0,yT+P.pygNodePos*al);cx.arc(n[0],n[1],Math.max(P.pygNode*1.4,3),0,6.283);cx.stroke();cx.setLineDash([]);}
+  if(P.pygSpine>0.01){ const pg=pairGeom(P,G); const nx=Math.cos(pg.dirA), ny=-Math.sin(pg.dirA);
+    [1,-1].forEach(m=>{cx.beginPath();
+      const q0=px(m*(pg.pb[0]-nx*pg.hw),pg.pb[1]-ny*pg.hw), q1=px(m*pg.pt[0],pg.pt[1]), q2=px(m*(pg.pb[0]+nx*pg.hw),pg.pb[1]+ny*pg.hw);
+      cx.moveTo(q0[0],q0[1]);cx.lineTo(q1[0],q1[1]);cx.lineTo(q2[0],q2[1]);cx.stroke();});}
+  const mf=P.pygMarginalFrom*Math.PI/180, mt=P.pygMarginalTo*Math.PI/180, ml=P.pygMarginalLen*Lp, mw=P.pygSpineWidth;
+  if(Math.round(P.pygMarginal)>0) [0,1].forEach(k=>{const ph=mf+(mt-mf)*(k+0.5)/2;
+    const bx=wp*Math.pow(Math.abs(Math.cos(ph)),2/nO)*Math.sign(Math.cos(ph));
+    const by=Lp*Math.pow(Math.sin(ph),2/nO);
+    const x0=Math.abs(bx)*neckf(by/Lp), y0=yT+by, r=Math.hypot(x0,by)||1, ux=x0/r, uy=by/r;
+    [1,-1].forEach(m=>{cx.beginPath();
+      const q0=px(m*(x0-2.4*mw),y0),q1=px(m*(x0+ux*ml),y0+uy*ml*1.2),q2=px(m*(x0+2.4*mw),y0-1);
+      cx.moveTo(q0[0],q0[1]);cx.lineTo(q1[0],q1[1]);cx.lineTo(q2[0],q2[1]);cx.stroke();});});
+  // handles (right side only, like the studio sketch)
+  const H=fixTailWide(handles());
+  for(const name in H){const h=H[name], q=px(h.pos[0],h.pos[1]);
+    cx.beginPath(); cx.arc(q[0],q[1],(name===hover||name===dragging)?8:5.5,0,6.283);
+    cx.fillStyle=(name===hover||name===dragging)?'#fff':'#000';
+    cx.fill(); cx.strokeStyle='#fff'; cx.lineWidth=1.4; cx.stroke();}
+  if(hover||dragging){const h=H[dragging||hover], q=px(h.pos[0],h.pos[1]);
+    cx.fillStyle='#9a9a9a'; cx.font='12px monospace'; cx.fillText(h.word, q[0]+12, q[1]-10);}
+  cx.strokeStyle='#fff';
+}
+function g_A(A){return A*0.6;}
+function safeDraw(){try{draw();}catch(e){cx.setTransform(1,0,0,1,0,0);cx.fillStyle='#f66';
+  cx.font='12px monospace';cx.fillText('draw error: '+e.message,12,20);}}
+
+// ---- pointer: nearest handle within tolerance (the studio's _nearest/_motion)
+function canvasPt(ev){const r=cv.getBoundingClientRect();
+  return [(ev.clientX-r.left)*cv.width/r.width,(ev.clientY-r.top)*cv.height/r.height];}
+function nearest(cp){const H=fixTailWide(handles()); let best=null,bd=26*cv.width/cv.getBoundingClientRect().width;
+  for(const name in H){const q=px(H[name].pos[0],H[name].pos[1]);
+    const dd=Math.hypot(cp[0]-q[0],cp[1]-q[1]); const dm=Math.hypot(cp[0]-(2*G.X-q[0]),cp[1]-q[1]);
+    const dmin=Math.min(dd,dm);
+    if(dmin<bd){bd=dmin;best=name;}}
+  return best;}
+cv.addEventListener('pointerdown',ev=>{ev.preventDefault();const cp=canvasPt(ev);
+  dragging=nearest(cp); if(dragging){cv.setPointerCapture(ev.pointerId); safeDraw();}});
+cv.addEventListener('pointermove',ev=>{const cp=canvasPt(ev);
+  if(dragging){const H=fixTailWide(handles()); const m=inv(cp[0],cp[1]);
+    H[dragging].apply(m[0], m[1]);
+    syncSliders(); safeDraw();}
+  else{const n=nearest(cp); if(n!==hover){hover=n; safeDraw();}}});
+['pointerup','pointercancel'].forEach(t=>cv.addEventListener(t,()=>{dragging=null; safeDraw();}));
+
+// ---- sliders
+function get(d,k){return (state[d]&&state[d][k]!==undefined)?state[d][k]:0;}
+const sliders=document.querySelectorAll('input[type=range]');
+function syncSliders(){sliders.forEach(s=>{const v=get(s.dataset.d,s.dataset.k);
+  s.value=v; s.parentElement.querySelector('.val').textContent=(+v).toFixed(+s.step>=1?0:(+s.step>=0.1?1:2));});}
+sliders.forEach(s=>{const d=s.dataset.d,k=s.dataset.k;
+  s.addEventListener('input',()=>{if(!state[d])state[d]={}; state[d][k]=+s.value;
+    s.parentElement.querySelector('.val').textContent=(+s.value).toFixed(+s.step>=1?0:(+s.step>=0.1?1:2)); safeDraw();});});
+syncSliders();
+
+function editsJSON(){
+  const out=copyOf(BASE); delete out.rows;
+  sliders.forEach(s=>{const d=s.dataset.d,k=s.dataset.k; if(d==='view'||/^row\d+$/.test(d))return;
+    if(!out[d])out[d]={}; out[d][k]=state[d][k];});
+  out.rows=rowsSpec();
+  return out;
+}
+document.getElementById('copy').addEventListener('click',()=>{
+  const txt=JSON.stringify(editsJSON(),null,1);
+  const ta=document.getElementById('json'); ta.value=txt; ta.style.display='block';
+  const done=()=>{document.getElementById('copied').textContent=' copied ✓';
+    setTimeout(()=>document.getElementById('copied').textContent='',2000);};
+  try{navigator.clipboard.writeText(txt).then(done,()=>{ta.select();});}catch(e){ta.select();}
+});
+document.getElementById('reset').addEventListener('click',()=>{ initState(FULL); syncSliders(); safeDraw(); });
+
+// ---- the site: load the saved block, build it, save it (web/app.py /api/drawing/<order>)
+const $=id=>document.getElementById(id);
+function status(t,err){ const s=$('status'); s.textContent=t||''; s.className=err?'err':''; }
+function payload(){ return {P:state.P, outline:state.outline, face:state.face, rows:rowsSpec().rows}; }
+async function post(url,body){ const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+  let j={}; try{ j=await r.json(); }catch(_){ } if(!r.ok) throw new Error(j.error||('HTTP '+r.status)); return j; }
+if(SITE){
+  (async()=>{ try{ const r=await fetch('/api/drawing/'+ORDER); if(!r.ok) throw new Error((await r.json()).error||('HTTP '+r.status));
+      const j=await r.json(); FULL=j.full; BASE={P:j.drawing.params, outline:j.drawing.outline, face:j.drawing.face, rows:j.full.rows};
+      initState(FULL); syncSliders(); safeDraw(); status('saved drawing loaded ('+(j.drawing.saved_at||'').slice(0,16).replace('T',' ')+')'); }
+    catch(e){ status('could not load the saved drawing ('+e.message+'); showing the page’s copy',true); } })();
+  let poll=null;
+  $('build').onclick=async()=>{ const b=$('build'), s=$('save'); b.disabled=s.disabled=true; $('result').innerHTML=''; status('building…');
+    poll=setInterval(async()=>{ try{ const p=await (await fetch('/api/progress')).json(); if(p.total) status(`building… ${p.done}/${p.total} pieces`); }catch(_){ } },1500);
+    try{ const body=payload(); const m=await post('/api/drawing/'+ORDER+'/build',body); clearInterval(poll);
+      const parts=(m.parts||[]); const bad=parts.filter(p=>p.error);
+      const pr=m.print||{}; const touching=(pr.touching||[]).map(t=>`${t.a}–${t.b}`).join(', ');
+      let h=`<table>${parts.map(p=>`<tr><td>${p.name}</td><td>${p.error?('<span style="color:#f66">'+p.error+'</span>'):((p.volume||0).toFixed(0)+' mm³')}</td><td>${p.watertight?'watertight ✓':''}</td><td>${p.stl?`<a href="${p.stl}">stl</a>`:''}</td></tr>`).join('')}</table>`;
+      h+=`<div style="margin-top:6px">print ${pr.print_valid?'valid ✓':'—'} · rest contacts ${touching||'none'} · ${m.build_seconds||'?'} s` + (m.key?` · <a href="/api/stl/${m.key}">download STL (all pieces, print mm)</a>`:'') + `</div>`;
+      $('result').innerHTML=h; status(bad.length?`built with ${bad.length} failed piece(s)`:'built ✓ — drawing the sheet…', bad.length>0);
+      try{ const sh=await post('/api/drawing/'+ORDER+'/sheet',body); if(sh.url){ const im=document.createElement('img'); im.src=sh.url; $('result').appendChild(im); } status(bad.length?`built with ${bad.length} failed piece(s)`:'built ✓', bad.length>0); }
+      catch(e){ status('built ✓ — sheet failed: '+e.message,true); }
+    }catch(e){ clearInterval(poll); status('build failed: '+e.message,true); }
+    b.disabled=s.disabled=false; };
+  $('save').onclick=async()=>{ const b=$('build'), s=$('save'); b.disabled=s.disabled=true; status('saving…');
+    try{ const j=await post('/api/drawing/'+ORDER,payload()); FULL=j.full; BASE={P:j.saved.params, outline:j.saved.outline, face:j.saved.face, rows:j.full.rows};
+      initState(FULL); syncSliders(); safeDraw();
+      status('saved ✓ into presets/'+ORDER+'.json'+(j.mirrored&&j.mirrored.head?` · studio head/body ${j.mirrored.head}`:(j.mirrored&&j.mirrored.error?` · studio mirror failed: ${j.mirrored.error}`:''))); }
+    catch(e){ status('save failed: '+e.message,true); }
+    b.disabled=s.disabled=false; };
+}
+safeDraw();
+</script></body></html>

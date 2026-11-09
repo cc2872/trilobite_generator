@@ -24,6 +24,9 @@ def plan(P):
     pb = float(P.get("pygBorderWidth", -0.01))
     bwf = P["borderWidth"] if pb < 0 else pb                    # negative = the head's border fraction, as before
     se = lambda c: np.sign(c) * np.abs(c) ** (2.0 / nO)         # superellipse coordinate; se(c) = c when nO = 2
+    nk = float(P.get("pygNeck", 0.0)); nkl = max(float(P.get("pygNeckLen", 0.30)), 1e-3)
+    def neck_f(yy):                                             # 7 Nov 2026 (schema 6.9): the tail necks in at its front
+        return 1.0 - nk * (1.0 - smoothstep(0.0, nkl, np.clip(yy, 0, 1)))   # and swells to full width by nkl of its length
     margin = P["marginHeight"] * h
     rise = P["axisRise"] * h
     F = furrow_amp(P) * float(P.get("pygFurrowScale", 1.0))
@@ -31,7 +34,9 @@ def plan(P):
     n = int(P["pygRings"])
     def xmax(y):
         yy = np.clip(np.asarray(y, float) / Lp, 0, 1)
-        return np.maximum(wp * np.clip(1 - yy ** nO, 0, 1) ** (1.0 / nO), 1.5)
+        base = wp * np.clip(1 - yy ** nO, 0, 1) ** (1.0 / nO)
+        if nk > 0.005: base = base * neck_f(yy)
+        return np.maximum(base, 1.5)
     Lf_full = P["pygSpine"] * Lp
     n_m = int(P["pygMarginal"]); Lm_full = P["pygMarginalLen"] * Lp
     # 24 Oct 2026: with pygSpineRise / Bend / Grow the margin spines run on as curved solid spines (ornaments); the flat
@@ -73,7 +78,9 @@ def plan(P):
     # base (skew: the rear flank steeper than the front one -- a radial bump, so the outline cannot fold), and (2) the
     # bump's direction turns toward the rear by as much as the lobe's width allows (more would fold the polar grid)
     for sd in spines:
-        bx, by = wp * se(math.cos(sd["phi"])), Lp * se(math.sin(sd["phi"])); th = math.atan2(by, bx); r0 = math.hypot(bx, by)
+        bx, by = wp * se(math.cos(sd["phi"])), Lp * se(math.sin(sd["phi"]))
+        if nk > 0.005: bx = bx * neck_f(by / Lp)
+        th = math.atan2(by, bx); r0 = math.hypot(bx, by)
         sw_ = min(sd.get("sweep", 0.0), 0.45 * abs(math.pi / 2 - th)); Lk_ = max(sd["Lk"], 1e-6)
         sd["skew"] = min(0.6 * sd["hh"], Lk_ * math.tan(sw_) / max(r0, 1e-6))
         room = min(1.0, 0.8 * (sd["hh"] - sd["skew"]) * r0 / (sd["e"] * Lk_))   # the rear flank's steepest slope is e * Lk / (hh - skew), at the root
@@ -96,6 +103,7 @@ def plan(P):
         return (ex, ln) if lean_out else ex
     def margin_pt(phi):
         x0, y0 = wp * se(np.cos(phi)), Lp * se(np.sin(phi))
+        if nk > 0.005: x0 = x0 * neck_f(y0 / Lp)
         r0 = np.maximum(np.hypot(x0, y0), 1e-6); ex, ln = radial_extra(phi, lean_out=True)
         th = np.arctan2(y0, x0) + ln                                   # the radial direction, leaned toward the rear
         return x0 + ex * np.cos(th), y0 + ex * np.sin(th)
@@ -105,13 +113,15 @@ def plan(P):
         mx, my = margin_pt(np.array([phi])); fx = u * (wp - 1.0)
         if band > 0.01:                                            # inside: smooth rings (the base margin scaled about the axis
             bx, by = wp * se(math.cos(phi)), Lp * se(math.sin(phi))   # line) out to v = 1 - band; then the band, from that ring out
+            if nk > 0.005: bx = bx * neck_f(by / Lp)
             vi = min(v, 1 - band); ix, iy = (1 - vi) * fx + vi * bx, vi * by   # to the margin with its lobes -- never of zero width,
             if v <= 1 - band: return float(ix), float(iy)          # as it would be where there is no lobe if it began on the margin
             w_ = (v - (1 - band)) / band
             return float(ix + w_ * (mx[0] - ix)), float(iy + w_ * (my[0] - iy))
         return float((1 - v) * fx + v * mx[0]), float(v * my[0])
     def outside(x, y):
-        r = (np.abs(x / wp) ** nO + np.abs(y / Lp) ** nO) ** (1.0 / nO)
+        wx = wp * neck_f(np.asarray(y, float) / Lp) if nk > 0.005 else wp
+        r = (np.abs(x / wx) ** nO + np.abs(y / Lp) ** nO) ** (1.0 / nO)
         Lmax = max([sd["Lk"] for sd in spines if sd["Lk"] > 0.5] + [1e-6])
         return np.clip((r - 1) * np.hypot(x, y) / np.maximum(r, 1e-6) / Lmax, 0, 1)
     def ov_pre(ax, y): return np.where(y > 0.35 * Lp, outside(ax, y), 0.0)   # the margin spines' region (no ribs there)
@@ -120,12 +130,33 @@ def plan(P):
         nT = P["tailDomeExp"]
         tz = np.clip(1 - yy ** nT, 0, 1) ** (1 / nT) * 0.9 + 0.1
         z = margin * 0.6 + (h - margin * 0.6) * vault(x / xm, P) * tz
-        ay = a * (1 - 0.85 * np.clip(yy / ka, 0, 1))
-        z += rise * plateau(x, ay) * (1 - smoothstep((Lax - 0.10) * Lp, (Lax + 0.10) * Lp, y))
-        z -= F * trough(ax - (ay + 0.6), 0.9) * (y < (Lax + 0.05) * Lp)
+        taper = float(P.get("pygAxisTaper", 0.85))                        # 9 Nov 2026 (schema 6.9): settable; 0.85 as built
+        ayf = lambda yv: a * (1 - taper * np.clip(np.asarray(yv, float) / (Lp * ka), 0, 1))
+        ay = ayf(y)
+        ae_ = float(P.get("pygAxisEnd", 0.0))
+        if ae_ < 0.005:                                                    # as built: the axis fades out, flank furrows only
+            z += rise * plateau(x, ay) * (1 - smoothstep((Lax - 0.10) * Lp, (Lax + 0.10) * Lp, y))
+            z -= F * trough(ax - (ay + 0.6), 0.9) * (y < (Lax + 0.05) * Lp)
+        else:                                                              # 9 Nov 2026: the axis as a CLOSED capsule mirroring the
+            kc = float(P.get("pygAxisCap", 1.0)); y0e = 0.9 * Lax * Lp      # head's glabella (head_crescent front_furrow): flanks to
+            for _ in range(3): y0e = max(Lax * Lp - kc * float(ayf(y0e)), 0.3 * Lp)   # y0e, then an elliptical cap of half-width ay(y0e)
+            g_e = float(ayf(y0e)); cl = max(kc * g_e, 0.5)                  # and length kc x that, ending at the axis' end Lax Lp.
+            dy = np.clip(y - y0e, 0, None)                                  # Rise and furrow follow ONE normalised radius, so the
+            u = np.where(y <= y0e, ax / np.maximum(ay, 1e-6), np.sqrt((ax / g_e) ** 2 + (dy / cl) ** 2))   # top is continuous and
+            gE = np.where(y <= y0e, ay, g_e)                                # the furrow runs round the end without a break
+            rnd = float(P.get("pygAxisRound", 0.0))
+            top = (1 - rnd) * plateau(u * gE, gE) + rnd * np.sqrt(np.clip(1 - (u * gE / (gE + 0.6)) ** 2, 0, 1))
+            z += rise * top
+            z -= F * trough((u - 1) * gE - 0.6, 0.9) * np.where(y <= y0e, 1.0, ae_)
+        nod = float(P.get("pygNode", 0.0)) * 0.04 * h                      # 7 Nov 2026 (schema 6.9): a median node on the
+        if nod > 0.005:                                                    # axis -- a round boss, like the head face's `node`
+            yn = float(P.get("pygNodePos", 0.30)) * Lax * Lp * ka
+            rn = 1.4                                                       # a tubercle (like the head face's node), not a mound
+            z += nod * np.exp(-(((x / rn) ** 2) + (((y - yn) / rn) ** 2)))
         dy_k = Lp * ka / (n + 1.5)                                 # the furrow spacing
-        for k in range(n):
-            yk = Lp * ka * (k + 1) / (n + 1.5)
+        r_at = float(P.get("pygRingAt", -1.0))                     # 8 Nov 2026 (schema 6.9): where the first ring furrow
+        for k in range(n):                                         # sits along the axis; -1 = (1 / (n + 1.5)), as built
+            yk = Lp * ka * ((k + 1) / (n + 1.5) if r_at < 0 else (r_at + k / (n + 1.5)))
             fade = 1 - 0.6 * k / max(n, 1)
             z -= 0.7 * F * fade * trough(y - yk, 0.8) * plateau(x, ay + 1.5, 1.0)
             px = np.clip((ax - ay) / np.maximum(xm - ay, 1), 0, 1); ly = yk + px * 0.5 * Lp * ka / (n + 1.5)
@@ -146,7 +177,9 @@ def plan(P):
         z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y))
         return z
     # the margin spines, for ornaments(): where each leaves the base margin and how far it runs as a bump (24 Oct 2026)
-    def base_pt(phi): return wp * se(math.cos(phi)), Lp * se(math.sin(phi))
+    def base_pt(phi):
+        bx, by = wp * se(math.cos(phi)), Lp * se(math.sin(phi))
+        return (bx * neck_f(by / Lp) if nk > 0.005 else bx), by
     def margin_xy(phi):
         mx, my = margin_pt(np.asarray(phi, float)); return np.c_[mx, my]
     return dict(outline=outline, zfun=zfun, t=t, Lp=Lp, wp=wp, a=a, margin=margin, u_a=a / max(wp, 1e-6),

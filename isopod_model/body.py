@@ -656,6 +656,27 @@ def genal_piece_solids(S, plans, off, ga, yr, face):
     for name, mod, Sk, offk in plans[1:]:
         e = np.array([Sk["outline"](u, v) for u in np.linspace(-1, 1, 81) for v in (0.0, 1.0)])
         segs.append((e[:, 1].min() + offk - 4.0, e[:, 1].max() + offk + 4.0, np.abs(e[:, 0]).max(), Sk["zfun"], offk))
+    # 9 Nov 2026 -- THE GENAL-SPINE LIFT: a spine running back BESIDE the body whose inner edge strayed into a segment's reach
+    # (by the joint gap + 0.6 mm, eased over several mm, then spread along the whole spine by the organic envelope below) was
+    # hoisted onto the segments' top as a WALL-thick plate: the spine floated. Now the spine is first nudged OUTWARD in plan --
+    # a shear from the root, so the root stays on the head's corner -- until its inner edge clears every segment's reach; the
+    # lift below remains for a spine that is meant to cross the body (a nudge bigger than 30 % of the spine's length is not done).
+    Yr = flap + k * float(pc.root[1]) + off; Yt = flap + k * float(pc.tip[1]) + off
+    along = lambda Y_: np.clip((Y_ - Yr) / max(Yt - Yr, 1e-6), 0.0, 1.0) if Yt > Yr + 1e-6 else np.zeros_like(Y_)
+    nudge = 0.0
+    for nm, o_, s_of in pc.bands:
+        if nm in ("root", "web"): continue
+        U_ = np.linspace(-1, 1, 81); P1 = np.array([[o_(u_, v_) for u_ in U_] for v_ in (0.0, 1.0)])
+        X0, X1 = k * P1[0, :, 0], k * P1[1, :, 0]; Y0, Y1 = flap + k * P1[0, :, 1] + off, flap + k * P1[1, :, 1] + off
+        Xc = 0.5 * (X0 + X1); Yc = 0.5 * (Y0 + Y1); hw_mm = 0.5 * np.hypot(X1 - X0, Y1 - Y0)
+        need = np.full_like(Xc, -np.inf)
+        for y0_, y1_, w_, zf, offk in segs:
+            m = (Yc >= y0_) & (Yc <= y1_)
+            need = np.where(m, np.maximum(need, (w_ + 0.8 * ga + 0.6) + hw_mm - np.abs(Xc)), need)
+        a_ = along(Yc); ok = np.isfinite(need) & (need > 0) & (a_ > 0.05)
+        if ok.any(): nudge = max(nudge, float(np.max(need[ok] / a_[ok])))
+    if nudge > 0.3 * k * pc.L: nudge = 0.0                                  # too far: leave it to the lift (it crosses the body)
+    if nudge > 0: sh.notes.append(f"genal spine nudged {nudge:.1f} mm outward at the tip to run beside the body, not over it")
     out = []
     for nm, o_, s_of in pc.bands:
         nu_b = 31 if nm == "root" else 81; nv_b = 13
@@ -666,6 +687,7 @@ def genal_piece_solids(S, plans, off, ga, yr, face):
         for i in (0, nu_b - 1):                                             # a pinched end (a round tip's apex) carries one z
             if np.ptp(x1[:, i]) < 1e-9 and np.ptp(y1[:, i]) < 1e-9: z1[:, i] = z1[:, i].mean()
         X = k * x1; Y = flap + k * y1 + off; Z = kz * z1
+        if nudge > 0: X = X + np.sign(X) * nudge * along(Y)
         reach = np.zeros_like(Y); zth = np.full_like(Y, -np.inf)
         for y0_, y1_, w_, zf, offk in segs:
             m = (Y >= y0_) & (Y <= y1_)
@@ -697,7 +719,9 @@ def genal_piece_solids(S, plans, off, ga, yr, face):
         stay = np.repeat((beside & (share > 0) | trimmed)[None, :], nv_b, 0)   # cross-sections that stay at the head's height
         # over the body (behind the rear joint plane, inside a part's reach): a WALL-thick plate clear of the thorax's top;
         # beside it: solid to the bed. The change between them is eased over ~2 mm (a hard switch per grid point left a comb).
-        ease = 1.0 + 6.0 * _OR.strength()                                   # organic rule 7: the climb over the body is a long curve, not a step
+        ease = 1.0                                                          # 9 Nov 2026: the LATERAL ease stays 1 mm whatever the organic strength --
+                                                                            # it was 1 + 6 x strength, so a spine clearing the body by 2 mm was still
+                                                                            # lifted onto it (the lift bug); rule 7's long curve runs ALONG the spine (below)
         w_over = smoothstep(ease, -1.0, np.abs(X) - (reach + 0.8 * ga + 0.6)) * smoothstep(yr - 1.0, yr + 1.0, Y) * ~stay
         lift = np.where(np.isfinite(zth), np.maximum(zth + 0.6 + WALL - Z, 0.0), 0.0) * smoothstep(yr + 1.0, yr + 5.0, Y)   # not on the head's own flap
         top = np.maximum(Z + w_over * lift, 0.6)
@@ -761,13 +785,28 @@ def shaped_head(P, plans, PV, K, J, outline, face):
     xs = k * xa; ys = S["flap"] + k * (yr_ - Vg * (yr_ - yf_)); zs = S["zfun"](xs, ys)
     y = ys + off; ga = J["gap_axial"]
     yr = plans[1][3] - 0.5 * ga
-    reach = np.zeros_like(y)                                                # the body's half-width at each y behind the head
+    reach = np.zeros_like(y); zth = np.full_like(y, -np.inf)                # the body's half-width and top at each (x, y) behind the head
     for name, mod, Sk, offk in plans[1:]:
         e = np.array([Sk["outline"](u, v) for u in np.linspace(-1, 1, 81) for v in (0.0, 1.0)])
         y0, y1 = e[:, 1].min() + offk - 4.0, e[:, 1].max() + offk + 4.0      # + the curl's fore-aft travel
-        reach = np.where((y >= y0) & (y <= y1), np.maximum(reach, np.abs(e[:, 0]).max()), reach)
+        w_ = np.abs(e[:, 0]).max(); m = (y >= y0) & (y <= y1)
+        reach = np.where(m, np.maximum(reach, w_), reach)
+        if m.any():                                                         # 9 Nov 2026: the segment's top under the head's trailing
+            zz = np.full_like(y, -np.inf); zz[m] = np.asarray(Sk["zfun"](np.minimum(np.abs(xs[m]), w_), y[m] - offk), float)
+            zth = np.maximum(zth, zz)                                       # cheeks (the crescent head, see below)
     beside = np.abs(xs) > reach + 0.8 * ga + 0.6
-    bot = np.where((y > yr) & ~beside, zs - WALL, 0.0)
+    over = (y > yr) & ~beside
+    # 9 Nov 2026 -- the CRESCENT head: a rear margin bowed back (outline `notch`) trails the cheeks over the first segments.
+    # They were built at the dome's own height there, which at the head's rear corners is near the rim -- so the trailing
+    # cheeks sat under the pleurae, invisible, and the studio's crescent came out as a straight edge. Now, like the genal
+    # piece, the plate over the body is held clear of the segments' top (gap + WALL), climbing from the joint plane over
+    # ~4 mm, so the cheeks lie ON the first segments as shingles and the crescent shows.
+    lift = np.where(over & np.isfinite(zth), np.maximum(zth + 0.6 + WALL - zs, 0.0), 0.0) * smoothstep(yr + 1.0, yr + 5.0, y)
+    for _ in range(2):                                                      # soften the climb (3-tap, both ways)
+        lp = np.pad(lift, 1, mode="edge"); lift = np.maximum(0.25 * lp[1:-1, :-2] + 0.5 * lp[1:-1, 1:-1] + 0.25 * lp[1:-1, 2:], lift * 0)
+        lp = np.pad(lift, 1, mode="edge"); lift = 0.25 * lp[:-2, 1:-1] + 0.5 * lp[1:-1, 1:-1] + 0.25 * lp[2:, 1:-1]
+    zs = zs + lift
+    bot = np.where(over, zs - WALL, 0.0)
     bot = np.clip(np.minimum(bot, zs - 0.6), 0.0, None); top = np.maximum(zs, bot + 0.6)
     head = M._closed(np.c_[xs.ravel(), y.ravel(), top.ravel()], np.c_[xs.ravel(), y.ravel(), bot.ravel()], zs.shape[0], zs.shape[1])
     # the rear block (10 Oct 2026): the socket half is pasted in the strip |x| <= K.w from sock_start to the rear face; a

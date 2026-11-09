@@ -389,9 +389,8 @@ def api_body_diagram():
     _isopod_body(); import rows as RW; import shaped_head as SH
     q = request.get_json(force=True, silent=True) or {} if request.method == "POST" else dict(request.args)
     preset = q.get("preset") or schema.DEFAULT_PRESET
-    Pp = _presets().get(preset)
-    if Pp is None: return jsonify(error="no such preset"), 404
-    P = schema.coerce(Pp, base=schema.table_defaults())
+    P = _studio_params(preset)                                                   # 8 Nov 2026: with the drawing block's params, when the preset has one
+    if P is None: return jsonify(error="no such preset"), 404
     if request.method == "POST" and isinstance(q.get("P"), dict):             # 24 Oct 2026: the studio's edited P (spines, tail), so the drawing shows what Build will build
         try: P = schema.coerce(q["P"], base=P)
         except (KeyError, ValueError, TypeError) as ex: return jsonify(error=f"P: {str(ex)[:160]}"), 400
@@ -402,7 +401,7 @@ def api_body_diagram():
         h = _head_custom({"style": q.get("head") or "crescent"}); hd = _diagram_json(SH.diagram(h["outline"], h["face"]))
     except (KeyError, ValueError) as ex:
         return jsonify(error=str(ex)[:200]), 400
-    return jsonify(preset=preset, spec=spec, diagram=D, head=dict(style=h["style"], diagram=hd), id=_body_id(P, spec),
+    return jsonify(preset=preset, spec=spec, diagram=D, head=dict(style=h["style"], diagram=hd), id=_body_id(P, spec), drawing=_drawing_info(preset),
                    presets=sorted(_presets()), saved_bodies=[dict(name=n, preset=d.get("preset"), doc=d.get("doc", "")) for n, d in _saved_bodies().items()])
 
 @app.get("/api/bodies")
@@ -419,7 +418,7 @@ def api_macro():
     outline: a guide style picked from the list keeps the page's old rule (its parameter values alone)."""
     _isopod_body(); import rows as RW
     q = request.get_json(force=True, silent=True) or {}
-    base = _presets().get(q.get("preset")) if q.get("preset") else None
+    base = _studio_params(q.get("preset")) if q.get("preset") else None
     P = schema.coerce(q.get("P") or (base or {}), base=schema.table_defaults())
     out = {}; info = {}
     try:
@@ -439,29 +438,178 @@ def api_macro():
         return jsonify(error=str(ex)[:200]), 400
     return jsonify(P=out, info=info)
 
-@app.post("/api/bodies")
-def api_bodies_save():
-    """Save a body: {"name", "preset", "spec", "doc"?}. Name rules as for heads. Re-saving replaces."""
+def _save_body(q):
+    """The body editor's save, shared with the drawing block (8 Nov 2026): {"name", "preset", "spec", "head"?, "doc"?} ->
+    the stored record. Raises ValueError (a bad name or spec: 400) or KeyError (no such preset or head: 404)."""
     _isopod_body(); import rows as RW
-    q = request.get_json(force=True, silent=True) or {}
     name = str(q.get("name", "")).strip()
-    if not _HEAD_NAME.match(name): return jsonify(error="name: letters, digits, _ and -, 1 to 40 characters, starting with a letter"), 400
-    if name in _presets() or name == "preset": return jsonify(error=f"'{name}' is a preset's name"), 400
+    if not _HEAD_NAME.match(name): raise ValueError("name: letters, digits, _ and -, 1 to 40 characters, starting with a letter")
+    if name in _presets() or name == "preset": raise ValueError(f"'{name}' is a preset's name")
     preset = q.get("preset") or schema.DEFAULT_PRESET
-    if preset not in _presets(): return jsonify(error="no such preset"), 404
+    if preset not in _presets(): raise KeyError("no such preset")
     try: spec = dict(q.get("spec") or {}); RW.plans(schema.coerce(_presets()[preset], base=schema.table_defaults()), spec, strict=False)   # work in progress may be saved; the build refuses it
-    except (KeyError, ValueError) as ex: return jsonify(error=str(ex)[:200]), 400
+    except (KeyError, ValueError) as ex: raise ValueError(str(ex)[:200])
     head = str(q.get("head") or "crescent")                                                # the head it was drawn with (a style or a saved head)
-    if head != "crescent" and _head_style(head) is None: return jsonify(error=f"no such head '{head}'"), 404
+    if head != "crescent" and _head_style(head) is None: raise KeyError(f"no such head '{head}'")
     rec = dict(name=name, preset=preset, head=head, spec=spec, doc=str(q.get("doc", ""))[:200], saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
     os.makedirs(BODIES, exist_ok=True); tmp = os.path.join(BODIES, name + ".json.part")
     json.dump(rec, open(tmp, "w"), indent=1); os.replace(tmp, os.path.join(BODIES, name + ".json"))
+    return rec
+
+@app.post("/api/bodies")
+def api_bodies_save():
+    """Save a body: {"name", "preset", "spec", "doc"?}. Name rules as for heads. Re-saving replaces."""
+    q = request.get_json(force=True, silent=True) or {}
+    try: rec = _save_body(q)
+    except ValueError as ex: return jsonify(error=str(ex)[:200]), 400
+    except KeyError as ex: return jsonify(error=_msg(ex)), 404
     return jsonify(saved=rec)
+
+def _msg(ex):
+    """An exception's message (a KeyError's str() wraps it in quotes)."""
+    return str(ex.args[0] if ex.args else ex)[:200]
 
 @app.delete("/api/bodies/<name>")
 def api_bodies_delete(name):
     if not _HEAD_NAME.match(name) or name not in _saved_bodies(): return jsonify(error="no such saved body"), 404
     os.remove(os.path.join(BODIES, name + ".json")); return jsonify(deleted=name)
+
+# ---- the drawing block (8 Nov 2026): a preset may carry the animal matched to a reference drawing on the isopod model,
+# presets/<order>.json["drawing"] = {"doc", "schema", "model": "isopod", "style": a head style, "params": {schema key:
+# value} EDITS over the preset's params, "outline": edits over the style's silhouette, "face": edits over the style's
+# face keys, "rows": the body spec's rows, "head"/"body": the saved head and body the block is mirrored to, "page": the
+# page that edits it, "saved_at"}. The preset's own params are never touched: they are the instrument's frozen
+# reference. The block is what the order's page (/agnostid for agnostida) loads, builds and saves; the mirrored saved
+# head/body let the studio open the same head and rows (its parameters stay the preset's: the drawing's live here).
+PRESETS_DIR = os.path.join(ROOT, "presets")
+DRAWING_PAGES = {"agnostida": "agnostid.html"}                                            # order -> web/<page>
+
+def _preset_record(name):
+    f = os.path.join(PRESETS_DIR, f"{name}.json")
+    if not _HEAD_NAME.match(name or "") or not os.path.exists(f): raise KeyError("no such preset")
+    return f, json.load(open(f))
+
+def _studio_params(name):
+    """The preset as the STUDIO and the generator page see it (8 Nov 2026): its params with the drawing block's
+    parameter edits laid over them when it has one -- so picking 'agnostida' gives the drawn agnostid. The
+    instrument (sweep.py, the library, isopod_model/presets.py) keeps reading presets/*.json["params"] untouched."""
+    Pp = _presets().get(name)
+    if Pp is None: return None
+    try: D = _preset_record(name)[1].get("drawing") or {}
+    except KeyError: D = {}
+    return schema.coerce(dict(Pp, **(D.get("params") or {})), base=schema.table_defaults())
+
+def _drawing_info(name):
+    """{"head", "body"}: the saved head and body a preset's drawing block is mirrored to, when both exist."""
+    try: D = _preset_record(name)[1].get("drawing") or {}
+    except KeyError: return None
+    if D.get("head") in _saved_heads() and D.get("body") in _saved_bodies(): return dict(head=D["head"], body=D["body"], saved_at=D.get("saved_at"))
+    return None
+
+def _drawing_resolve(name, D):
+    """The block's edits resolved: the full P (preset + params), the full outline (the style's + edits), the page's face
+    (the style's face keys + edits), the rows, and the head spec the build takes -- its face completed from P through
+    body.face_of, so the drawing's glabInflate / eyeSize win over the style's own values (which _head_custom would
+    otherwise lay over the page's parameters)."""
+    HS = _head_styles(); import shaped_head as SH; IBODY = _isopod_body()
+    style = D.get("style") or IBODY.DEFAULT_HEAD
+    if style not in HS.STYLES: raise KeyError(f"no such head style '{style}'")
+    P = schema.coerce(dict(_presets()[name], **(D.get("params") or {})), base=schema.table_defaults())
+    outline = SH.outline_of(dict(dict(SH.OUTLINE, **HS.outline(style)), **{k: (v if k == "trace" else float(v)) for k, v in (D.get("outline") or {}).items()}))
+    face = dict(HS.style(style)[0], **{k: float(v) for k, v in (D.get("face") or {}).items()})
+    from anatomy import head_crescent as HC
+    head = dict(style=style, outline=outline, face=HC.face_of(IBODY.face_of(P, face)))   # face_of validates the keys
+    rows = D.get("rows") or {}
+    body = dict(rows=rows) if rows else None
+    return dict(P=P, style=style, outline=outline, face=face, rows=rows, head=head, body=body)
+
+def _drawing_block(name, q, old):
+    """The page's state {"P", "outline", "face", "rows", "style"?, "doc"?} -> the stored block (edits only)."""
+    HS = _head_styles(); import shaped_head as SH
+    style = q.get("style") or old.get("style") or _isopod_body().DEFAULT_HEAD
+    if style not in HS.STYLES: raise KeyError(f"no such head style '{style}'")
+    base_P = schema.coerce(_presets()[name], base=schema.table_defaults())
+    P = schema.coerce(dict(base_P, **(q.get("P") or {})), base=schema.table_defaults())
+    base_out = dict(SH.OUTLINE, **HS.outline(style)); base_face = HS.style(style)[0]
+    D = dict(old)
+    D.update(doc=str(q.get("doc", old.get("doc", "")))[:300], schema=schema.SCHEMA_VERSION, model="isopod", style=style,
+             params={k: v for k, v in P.items() if v != base_P.get(k)},
+             outline={k: v for k, v in (q.get("outline") or old.get("outline") or {}).items() if v != base_out.get(k)},
+             face={k: v for k, v in (q.get("face") or old.get("face") or {}).items() if v != base_face.get(k)},
+             rows=(q.get("rows") if q.get("rows") is not None else old.get("rows") or {}),
+             head=f"{name}-drawing", body=f"{name}-drawing", page=old.get("page") or f"/{name}", saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
+    _drawing_resolve(name, D)                                                               # validates every key and value
+    return D
+
+@app.get("/api/drawing/<name>")
+def api_drawing(name):
+    """The preset's drawing block, resolved for the page: {"preset", "drawing": the block, "full": {"P", "outline",
+    "face", "rows"}, "head": the build's head spec, "body": the build's body spec}."""
+    try: f, rec = _preset_record(name)
+    except KeyError: return jsonify(error="no such preset"), 404
+    D = rec.get("drawing")
+    if not D: return jsonify(error=f"the {name} preset has no drawing block"), 404
+    try: R = _drawing_resolve(name, D)
+    except (KeyError, ValueError) as ex: return jsonify(error=_msg(ex)), 400
+    return jsonify(preset=name, drawing=D, full=dict(P=R["P"], outline=R["outline"], face=R["face"], rows=dict(rows=R["rows"])), head=R["head"], body=R["body"])
+
+@app.post("/api/drawing/<name>")
+def api_drawing_save(name):
+    """Save the page's state as the preset's drawing block: {"P": the parameters (full or partial), "outline", "face",
+    "rows", "style"?, "doc"?}. Stored as edits (see above); the preset's params are left as they are. Then mirrored to
+    the saved head and body <preset>-drawing (web/heads, web/bodies) so the studio can open them (?body=<name>-drawing)."""
+    q = request.get_json(force=True, silent=True) or {}
+    try: f, rec = _preset_record(name)
+    except KeyError: return jsonify(error="no such preset"), 404
+    try:
+        D = _drawing_block(name, q, rec.get("drawing") or {}); R = _drawing_resolve(name, D)
+        _iso_key(R["P"], R["head"], R["body"])                                              # the build's own validation (rows, head)
+    except (KeyError, ValueError) as ex: return jsonify(error=_msg(ex)), 400
+    rec["drawing"] = D
+    with LOCK:
+        tmp = f + ".part"; json.dump(rec, open(tmp, "w"), indent=1, sort_keys=True); os.replace(tmp, f)
+    mirrored = {}
+    try:
+        doc = f"the {name} preset's drawing block ({D['saved_at'][:10]}); its parameters live on {D['page']}"
+        hrec, _ = _save_head(dict(name=D["head"], style=R["style"], outline={k: v for k, v in R["outline"].items() if k != "trace" or v}, face=R["head"]["face"], doc=doc))
+        brec = _save_body(dict(name=D["body"], preset=name, head=D["head"], spec=R["body"] or {}, doc=doc))
+        mirrored = dict(head=hrec["name"], body=brec["name"])
+    except (KeyError, ValueError) as ex:
+        mirrored = dict(error=_msg(ex))                                                     # the block is saved either way
+    return jsonify(saved=D, full=dict(P=R["P"], outline=R["outline"], face=R["face"], rows=dict(rows=R["rows"])), mirrored=mirrored)
+
+def _drawing_request(name, q):
+    """The page's state (or the saved block where the page sent nothing) as /api/build's json."""
+    f, rec = _preset_record(name); D = dict(rec.get("drawing") or {})
+    if q.get("P") is not None: D["params"] = q["P"]
+    for k in ("outline", "face", "rows", "style"):
+        if q.get(k) is not None: D[k] = q[k]
+    R = _drawing_resolve(name, D)
+    return dict(P=R["P"], joint="isopod", head=R["head"], body=R["body"])
+
+@app.post("/api/drawing/<name>/build")
+def api_drawing_build(name):
+    """Build the page's state through /api/build (the head spec completed here): {"P", "outline", "face", "rows",
+    "preview"?, "peek"?} -> the build manifest (parts with .stl links, print checks, key for /api/stl/<key>)."""
+    q = request.get_json(force=True, silent=True) or {}
+    try: req = _drawing_request(name, q)
+    except KeyError as ex: return jsonify(error=_msg(ex)), 404
+    except ValueError as ex: return jsonify(error=_msg(ex)), 400
+    req.update(preview=bool(q.get("preview")), peek=bool(q.get("peek")))
+    with app.test_request_context(json=req): return api_build()
+
+@app.post("/api/drawing/<name>/sheet")
+def api_drawing_sheet(name):
+    """The blueprint sheet of the page's state (built first if need be): {"P", "outline", "face", "rows", "cmap"?} -> {"url"}."""
+    q = request.get_json(force=True, silent=True) or {}
+    try: req = _drawing_request(name, q)
+    except KeyError as ex: return jsonify(error=_msg(ex)), 404
+    except ValueError as ex: return jsonify(error=_msg(ex)), 400
+    req.update(cmap=q.get("cmap", "none"))
+    with app.test_request_context(json=req): return api_sheet()
+
+@app.get("/agnostid")
+def agnostid_page(): return send_file(os.path.join(ROOT, "web", DRAWING_PAGES["agnostida"]))   # the agnostid's own plan editor (8 Nov 2026)
 
 STATIC = os.path.join(ROOT, "web", "static")                                            # self-hosted libraries (p5.min.js)
 @app.get("/static/<path:name>")
@@ -540,11 +688,17 @@ def api_heads_save():
     crescent, or another saved head (then it is flattened: the stored record rests on the guide style). The name is
     [A-Za-z][A-Za-z0-9_-]{0,39} and must not be a guide style's. Re-saving a name replaces it."""
     spec = request.get_json(force=True, silent=True) or {}
+    try: rec, hid = _save_head(spec)
+    except (KeyError, ValueError) as ex: return jsonify(error=_msg(ex)), 400
+    return jsonify(saved=rec, id=hid)
+
+def _save_head(spec):
+    """The head editor's save, shared with the drawing block (8 Nov 2026): the record stored and the resolved head's id.
+    Raises ValueError (name) or KeyError / ValueError (the spec, from _head_custom)."""
     name = str(spec.get("name", "")).strip()
-    if not _HEAD_NAME.match(name): return jsonify(error="name: letters, digits, _ and -, 1 to 40 characters, starting with a letter"), 400
-    if name == "crescent" or name in _head_styles().STYLES: return jsonify(error=f"'{name}' is a guide style's name"), 400
-    try: h = _head_custom(spec)
-    except (KeyError, ValueError) as ex: return jsonify(error=str(ex)[:200]), 400
+    if not _HEAD_NAME.match(name): raise ValueError("name: letters, digits, _ and -, 1 to 40 characters, starting with a letter")
+    if name == "crescent" or name in _head_styles().STYLES: raise ValueError(f"'{name}' is a guide style's name")
+    h = _head_custom(spec)
     # store the edits against the guide style, flattened (a head saved from a saved head rests on the same guide style)
     HS = _head_styles(); from anatomy import head_crescent as HC
     base_out = HS.outline(h["base"])
@@ -556,7 +710,7 @@ def api_heads_save():
     rec = dict(name=name, style=h["base"], outline=o_edits, face=f_edits, doc=str(spec.get("doc", ""))[:200], saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
     os.makedirs(HEADS, exist_ok=True); tmp = os.path.join(HEADS, name + ".json.part")
     json.dump(rec, open(tmp, "w"), indent=1); os.replace(tmp, os.path.join(HEADS, name + ".json"))
-    return jsonify(saved=rec, id=h["id"])
+    return rec, h["id"]
 
 @app.post("/api/heads/import")
 def api_heads_import():
@@ -635,7 +789,7 @@ def api_preset_chars():
 
 @app.get("/api/preset/<name>")
 def api_preset(name):
-    P = _presets().get(name)
+    P = _presets().get(name) if request.args.get("raw") else _studio_params(name)   # ?raw=1: the file's params alone (the instrument's)
     if P is None: return jsonify(error="no such preset"), 404
     return jsonify(schema.coerce(P, base=schema.table_defaults()))
 

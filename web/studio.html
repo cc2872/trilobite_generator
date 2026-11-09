@@ -146,7 +146,8 @@ const RH={
   eye_size:[0,0.5], eye_pos:[0.2,0.95], eye_height:[0.2,2.5], eye_lat:[0,0.95], axis_frac:[0.15,0.45], glab_inflate:[0.5,2.0], glab_rise:[0,0.6],
   glab_front:[1,6], glab_lobes:[0,6,1], furrow:[0,2.5], border_w:[0,0.3], suture_end:[-1,1], suture_depth:[0,0.6], eye_ridge:[0,1.5],
   glab_len:[0.3,1.2], glab_bulge:[-0.3,0.3], glab_round:[0,1], glab_boss:[0,0.45], boss_rise:[0,1], furrow_cross:[0,1], furrow_splay:[0,1],
-  dot_r:[0.02,0.3], bullae:[0,0.3], node:[0,1.5], eye_len:[0.5,3], caeca:[0,1], brim:[0,0.5], brim_drop:[0,1.5], tubercles:[0,1], tub_all:[0,1,1], efface:[0,1]};
+  dot_r:[0.02,0.3], bullae:[0,0.3], node:[0,1.5], eye_len:[0.5,3], caeca:[0,1], brim:[0,0.5], brim_drop:[0,1.5], tubercles:[0,1], tub_all:[0,1,1], efface:[0,1],
+  dome_exp:[1.2,3.5], bullae_at:[0,0.9], bullae_rise:[0,0.4], furrow_at:[-1,0.95], node_at:[0.05,0.9], collar:[0,0.4], front_furrow:[0,1], front_cap:[0.3,1.5], genal_sharp:[0,1]};   // 7-9 Nov 2026 (schema 6.9) face keys
 
 // ---------- head key helpers ----------
 const isFace=k=>S.headMeta && (k in S.headMeta.face_defaults);
@@ -182,11 +183,12 @@ async function loadAll(preset, bodyName, start){
   const bu=`/api/body_diagram?preset=${encodeURIComponent(preset)}&head=${encodeURIComponent(S.head)}`+(bodyName?`&body=${encodeURIComponent(bodyName)}`:(start==='plain'?'&start=boring':''));
   const [hd,bd]=await Promise.all([ (await fetch(hu)).json(), (await fetch(bu)).json() ]);
   if(hd.error){ status(hd.error,true); return; } if(bd.error){ status(bd.error,true); return; }
+  if(bd.drawing && !bodyName && start!=='plain'){ S.head=bd.drawing.head; return loadAll(preset, bd.drawing.body, 'drawing'); }   // 8 Nov 2026: a preset with a drawing block opens AS that animal (its saved head + rows; its params come with /api/preset)
   // head
   S.headMeta=hd; S.HD=hd; S.headBaseOutline=hd.outline; S.headBaseFace=hd.face; S.headOutline={}; S.headFace={};
   S.savedHead=hd.saved?hd.saved.name:null; if(hd.saved){ S.head=hd.base; S.headOutline=Object.assign({},hd.saved.outline); S.headFace=Object.assign({},hd.saved.face); }
   // body
-  S.preset=preset; S.savedBody=bodyName||null; S.start=bodyName?'saved':(start||'preset');
+  S.preset=preset; S.savedBody=bodyName||null; S.start=bodyName?(start==='drawing'?'drawing':'saved'):(start||'preset');
   S.spec=Object.assign({}, bd.spec||{}); delete S.spec.rows; for(const k of ['thorax_rows','pyg_rows','thorax_len','pyg_len']) delete S.spec[k];   // tail_spines (if saved) stays
   S.spec.list=bd.diagram.list.map(r=>Object.assign({},r)); S.spec.model=S.spec.model||bd.diagram.model||'thorax'; $('model').value=S.spec.model;
   S.BD=bd.diagram; S.presets=bd.presets; S.savedBodies=bd.saved_bodies; S.pinned=null; S.sel=null;
@@ -209,20 +211,20 @@ async function sendHead(){ S.edited=true; invalidateBuild(); postState(); render
 function kv(){ const D=S.BD; if(!D) return; $('kv').innerHTML=`<b>${S.savedBody?S.savedBody:(S.start==='plain'?'plain trilobite':S.preset)}</b> - head <b>${S.savedHead||S.head}</b><br>rows <b>${D.rows.length}</b> - pieces <b>${D.pieces.length}</b><br>print <b>${D.print_size_mm.length} × ${D.print_size_mm.width} mm</b> - scale <b>${D.scale.toFixed(2)}</b>`+((D.problems||[]).length?`<br><span style="color:var(--accent)">cannot build: ${D.problems.join(' - ')}</span>`:'')+(((S.HD&&S.HD.diagram.notes)||[]).length?`<br><span style="color:var(--accent)">head: ${S.HD.diagram.notes.join(' - ')}</span>`:''); $('build').disabled=!!(D.problems||[]).length; }
 
 // ---------- panel ----------
-function fillPickers(){ const ps=$('preset'); ps.innerHTML=`<option value="plain">plain trilobite</option><optgroup label="presets">${S.presets.map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+(S.savedBodies.length?`<optgroup label="saved bodies">${S.savedBodies.map(b=>`<option value="saved:${b.name}">${b.name} - ${b.preset}</option>`).join('')}</optgroup>`:''); ps.value=S.savedBody?'saved:'+S.savedBody:(S.start==='plain'?'plain':S.preset);
+function fillPickers(){ const ps=$('preset'); ps.innerHTML=`<option value="plain">plain trilobite</option><optgroup label="presets">${S.presets.map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+(S.savedBodies.length?`<optgroup label="saved bodies">${S.savedBodies.map(b=>`<option value="saved:${b.name}">${b.name} - ${b.preset}</option>`).join('')}</optgroup>`:''); ps.value=S.start==='drawing'?S.preset:(S.savedBody?'saved:'+S.savedBody:(S.start==='plain'?'plain':S.preset));
   const hsOpts=['plain','crescent',...(S.headMeta.styles||[]).map(x=>x.name).filter(n=>n!=='plain')]; const hs=$('headstyle');
   hs.innerHTML=`<optgroup label="guide">${hsOpts.map(n=>`<option value="${n}">${n}</option>`).join('')}</optgroup>`+((S.headMeta.saved_heads||[]).length?`<optgroup label="saved">${S.headMeta.saved_heads.map(h=>`<option value="${h.name}">${h.name} - ${h.style}</option>`).join('')}</optgroup>`:'');
   hs.value=S.savedHead||S.head;
 }
 $('preset').onchange=e=>{ const v=e.target.value; if(v==='plain') loadAll('textured',null,'plain'); else if(v.startsWith('saved:')){ const b=S.savedBodies.find(x=>x.name===v.slice(6)); loadAll(b.preset,b.name); } else loadAll(v); };
-$('headstyle').onchange=e=>{ S.head=e.target.value; loadAll(S.preset, S.savedBody, S.start==='plain'?'plain':null); };
+$('headstyle').onchange=e=>{ S.head=e.target.value; loadAll(S.preset, S.savedBody, S.start==='plain'?'plain':(S.start==='drawing'?'drawing':null)); };
 $('model').onchange=e=>{ setBodyModel(e.target.value); };
 $('reset').onclick=()=>{ S.head='diagram'; loadAll('diagram'); };
 $('plus').onclick=()=>{ const at=(S.sel&&S.sel.type==='row')?S.sel.i+1:S.spec.list.length; insertRow(at, at-1); status(`row ${at} added`); };
 $('minus').onclick=()=>{ const i=(S.sel&&S.sel.type==='row')?S.sel.i:S.spec.list.length-1; removeRow(i); status(`row ${i} removed`); };
 
 function slider(box,k,val,lo,hi,step,onin,tag,faint){ const d=document.createElement('div'); d.className='ctrl';
-  d.innerHTML=`<div class="lab"><span>${({front_exp:'front_exp - pointiness (1.2 sharp, 2 round, 4 blunt)',genal_tip:'genal_tip - pointed (0) to round (1)',genal_angle:'genal_angle - 0 back, 90 out, 180 forward, -90 in',genal_kink:'genal_kink - where it bends (0 = straight)',genal_kink_angle:'genal_kink_angle - where the part after the kink points',genal_web:'genal_web - web anchor on the rear margin (0 = none)',genal_web_round:'genal_web_round - 0 straight, +1 hugs the corner, -1 bulges',notch:'notch - rear margin U depth'})[k]||k}${tag?' <span style="color:var(--mid)">- '+tag+'</span>':''}</span><span class="val" id="v_${k}"></span></div><input type="range" min="${lo}" max="${hi}" step="${step}" id="s_${k}">`;
+  d.innerHTML=`<div class="lab"><span>${({front_exp:'front_exp - pointiness (1.2 sharp, 2 round, 4 blunt)',genal_tip:'genal_tip - pointed (0) to round (1)',genal_angle:'genal_angle - 0 back, 90 out, 180 forward, -90 in',genal_kink:'genal_kink - where it bends (0 = straight)',genal_kink_angle:'genal_kink_angle - where the part after the kink points',genal_web:'genal_web - web anchor on the rear margin (0 = none)',genal_web_round:'genal_web_round - 0 straight, +1 hugs the corner, -1 bulges',notch:'notch - rear margin U depth',front_furrow:'front_furrow - carve the glabella all round (closed capsule); 0 = open front',front_cap:'front_cap - the closed capsule\'s front: length / half-width (1 round, 0.6 flatter)',furrow_at:'furrow_at - the glabellar furrow along the glabella (0 rear .. 1 front; -1 default)',node_at:'node_at - the node along the head (0 rear .. 1 front)',collar:'collar - the band\'s V and the median line at the front',dome_exp:'dome_exp - 2 smooth ball, 1.5 ridged',bullae_at:'bullae_at - basal lobes along the glabella',bullae_rise:'bullae_rise - basal lobes height'})[k]||k}${tag?' <span style="color:var(--mid)">- '+tag+'</span>':''}</span><span class="val" id="v_${k}"></span></div><input type="range" min="${lo}" max="${hi}" step="${step}" id="s_${k}">`;
   if(faint) d.style.opacity=0.4; box.appendChild(d); const inp=d.querySelector('input'); inp.value=val; d.querySelector('.val').textContent=fmt(val);
   inp.oninput=()=>{ onin(+inp.value); d.querySelector('.val').textContent=fmt(+inp.value); d.querySelector('.val').classList.add('on'); }; return d; }
 
@@ -604,6 +606,7 @@ new p5(s=>{
       case 'root':     v.genal_at=st.genal_at-across; break;
       case 'notch':    v.notch=st.notch-along/L; v.notch_exp=st.notch_exp+across*4; break;
       case 'glabella': v.glab_len=st.glab_len-along/L; v.glab_inflate=st.glab_inflate+across*1.5; break;
+      case 'cap':      { const g0=(S.HD.diagram.handles.cap||[0.3])[0]||0.3; v.front_cap=Math.max(0.3,Math.min(1.5,(+st.front_cap||1)+along/g0)); break; }   // 9 Nov 2026: the capsule's shoulder
       case 'eye':      v.eye_pos=st.eye_pos-along/L; v.eye_lat=st.eye_lat+across; break;
       case 'brim':     v.brim_w=st.brim_w-across/0.7; break;
       // 1 Nov 2026: the genal piece. The tip turns the whole circle about the root (or, with a kink, about the kink); the kink

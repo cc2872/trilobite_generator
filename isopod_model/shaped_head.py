@@ -48,6 +48,10 @@ OUTLINE = dict(
     notch_exp=2.0,     # 2 = an elliptical U; higher = straight across, then a late bend
     dome_fill=0.82,    # the vaulted part / the whole (0.6 leaves a broad flat brim: Harpetida)
     horn_h=0.32,       # the spine's ridge height / relief (a flat prolongation ~0.18)
+    horn_aspect=1.0,   # 9 Nov 2026: the spine's height / its local width, at most (THE genal-spine bug: the crest was horn_h x the head's
+                       # relief whatever the spine's width, so a thin spine was a tall standing blade); 1 = as tall as wide; 9 = as built
+    genal_sharp=0.0,   # 9 Nov 2026: 0 = the ridge as built (quarter-ellipse section, crest tapering to 45 % at the tip); 1 = a sharp spine
+                       # (triangular section, crest tapering to a point at the tip)
     height=1.0,        # crown height, x the model's usual head height
     fringe_n=0,        # 2 Nov 2026: a fringe of small spines along the side margin (Miraspis, Kettneraspis): how many a side (0 = none)
     fringe_len=0.25,   # ... each one's length / the head's axial length
@@ -77,7 +81,7 @@ OUTLINE_RANGE = dict(   # what the silhouette is drawn for (11 Oct 2026: a 0.2-l
     width=(0.5, 2.5), length=(0.4, 2.5), front_exp=(1.0, 8.0), front_point=(0.0, 1.5), widest=(0.0, 0.8), side=(0.0, 1.0), rear_taper=(0.0, 0.9),
     corner=(0.0, 0.5), genal=(0.0, 3.5), genal_w=(0.02, 1.0), genal_tip=(0.0, 1.0), genal_angle=(-180.0, 180.0), genal_kink=(0.0, 0.9),
     genal_kink_angle=(-180.0, 180.0), genal_web=(0.0, 1.0), genal_web_round=(-1.0, 1.0),
-    notch=(0.0, 1.0), notch_exp=(1.0, 8.0), dome_fill=(0.3, 1.0), horn_h=(0.0, 1.0), height=(0.2, 3.0), genal_at=(-1.0, 1.0),
+    notch=(0.0, 1.0), notch_exp=(1.0, 8.0), dome_fill=(0.3, 1.0), horn_h=(0.0, 1.0), genal_sharp=(0.0, 1.0), horn_aspect=(0.3, 9.0), height=(0.2, 3.0), genal_at=(-1.0, 1.0),
     front_flat=(0.0, 0.9), front_dent=(0.0, 0.5), point_w=(0.02, 1.0), point_fork=(0.0, 0.9), brim_w=(0.0, 1.0), brim_rise=(-0.5, 1.0),
     brim_curve=(-1.0, 1.0), brim_roll=(0.0, 0.5), brim_pits=(0, 10), fringe_n=(0, 24), fringe_len=(0.02, 1.0), fringe_w=(0.005, 0.15),
     fringe_from=(0.0, 1.0), fringe_to=(0.0, 1.0), fringe_rise=(-30.0, 60.0), dot_r=(0.02, 0.3))
@@ -265,7 +269,7 @@ def _convex_columns(x, yf, yr):
 
 
 class Shape:
-    def __init__(self, outline=None, n=1601, organic=None):
+    def __init__(self, outline=None, n=1601, organic=None, body_reach=None):
         o = self.o = outline_of(outline); tr = o.get("trace"); self.notes = []   # what the silhouette had to refuse (the studio shows them)
         if tr is not None:                                         # a traced margin: its own length, widest line and genal angle
             T = np.array(tr, float) * RO; L1 = self.L1 = float(-T[:, 1].min())
@@ -396,7 +400,10 @@ class Shape:
                 dxy = self.dot_shift(x0, y0); x0, y0 = x0 + dxy[0], y0 + dxy[1]
             anchor = None; web = float(o["genal_web"])
             if web > 0.01:
-                xa = x0 - web * (x0 - 0.12 * RO); anchor = (xa, float(np.interp(xa, axb, yrb)))
+                xa = x0 - web * (x0 - 0.12 * RO)
+                if body_reach is not None:                             # 9 Nov 2026: the web stays BESIDE the thorax -- an anchor inside
+                    xa = max(xa, min(float(body_reach) + 1.0, x0 - 0.2))   # the segments' reach put the web over the body, where the kit
+                anchor = (xa, float(np.interp(xa, axb, yrb)))          # lifts it onto the segments (a flat shelf at their height)
             self.piece = GN.Piece((x0, y0), Lh, w0, o["genal_angle"], kink=o["genal_kink"], kink_angle=o["genal_kink_angle"],
                                   tip=o["genal_tip"], web=anchor, web_round=o["genal_web_round"], hw_min=0.35, inward=inward, organic=organic)
             self.notes += self.piece.notes
@@ -472,12 +479,18 @@ class Shape:
         across (0 .. 1): a rounded ridge, as the column spine was (a quarter-ellipse each side from the shield's edge floor,
         0.6 rim, to a crest horn_h x relief tapering along the length), rising out of the head's own surface at the root.
         The web is a low plate at the edge floor; the root stub follows the head's surface just under it."""
-        s = np.asarray(s, float); v = np.asarray(v, float); e_ = 0.6 * HC.RIM
-        if name in ("root", "web"): return np.full(np.shape(s), e_ + 0.15)   # low plates at the shield's edge floor
-        crest = self.o["horn_h"] * HC.RELIEF * (1 - 0.55 * np.clip(s, 0, 1))
+        s = np.asarray(s, float); v = np.asarray(v, float)
+        e_ = 0.6 * float(HC.face_of(face).get("rim", HC.RIM))                # 9 Nov 2026: the shield's edge floor follows the face's
+        if name in ("root", "web"): return np.full(np.shape(s), e_ + 0.15)   # rim (it was HC.RIM: a 0.9-unit plinth under every spine,
+        gs = float(self.o.get("genal_sharp", 0.0))                           # the vertical walls that made the spines read as slabs)
+        crest = self.o["horn_h"] * HC.RELIEF * (1 - (0.55 + 0.42 * gs) * np.clip(s, 0, 1))
+        p = self.piece; hw_s = p.hw(np.clip(s, 0, 1) * p.Ls)                 # the band's half-width here (plan units)
+        cap = e_ + float(self.o.get("horn_aspect", 1.0)) * 2.0 * hw_s / max(getattr(self, "zk", 1.0), 1e-6)   # 9 Nov 2026: no taller
+        crest = np.minimum(crest, cap)                                        # than horn_aspect x its width, in real mm
         t_ = np.clip(1 - np.abs(2 * v - 1), 0, 1)
-        ridge = e_ + (crest - e_) * np.sqrt(np.clip(1 - (1 - t_) ** 2, 0, 1))
-        p = self.piece; w = smoothstep(0.0, min(1.0, 1.5 * p.W / max(p.L, 1e-6)), s)   # the ridge rises out of the margin
+        sect = (1 - gs) * np.sqrt(np.clip(1 - (1 - t_) ** 2, 0, 1)) + gs * t_ ** 0.75   # round ridge .. sharp (triangular) spine
+        ridge = e_ + (crest - e_) * sect
+        w = smoothstep(0.0, min(1.0, 1.5 * p.W / max(p.L, 1e-6)), s)   # the ridge rises out of the margin
         return e_ + w * (ridge - e_)
 
 
@@ -487,7 +500,9 @@ def plan(P, plans, K, outline=None, face=None, z_thorax=None):
     from anatomy.common import pitch
     import mesh as M
     from anatomy import organic as OR
-    sh = Shape(outline, organic=OR.k_of(P)); o = sh.o
+    o_w = float(outline_of(outline)["width"])
+    sh = Shape(outline, organic=OR.k_of(P), body_reach=RO / max(o_w, 1e-6))   # the thorax's half-width in the head's plan units (= w_seg / k)
+    o = sh.o
     S1 = plans[1][2]; w_seg = max(abs(S1["outline"](u, v)[0]) for u in np.linspace(-1, 1, 201) for v in (0.0, 0.5, 1.0))
     k = o["width"] * w_seg / RO
     if z_thorax is None:
@@ -496,6 +511,7 @@ def plan(P, plans, K, outline=None, face=None, z_thorax=None):
     base = {kk: vv for kk, vv in (face or {}).items() if kk in ("eye_size", "eye_pos", "eye_height", "eye_lat", "glab_inflate", "glab_rise", "glab_front", "glab_lobes")}
     z_ref = float(sh.z(gx, gy, dict(base, eye_size=0.0)).max())             # the unsculpted crown: a boss or a tubercle does not set the scale
     kz = 0.85 * z_thorax * float(P.get("headRelief", 1.0)) * o["height"] / z_ref          # body.HEAD_HEIGHT
+    sh.zk = kz / max(k, 1e-9)                                  # 9 Nov 2026: z units per plan unit, for the spine section (piece_z)
     flap = max(P["overlap"] * pitch(P) - 2.0, 1.0)
     def outline_fn(u, v):
         x = u * sh.Xmax; yf, yr = sh.edges(abs(x)); return k * x, flap + k * float(yr - v * (yr - yf))
@@ -527,6 +543,7 @@ HANDLES = {            # diagram handle -> the outline / face keys it drags (wha
     "root":    ("genal_at",),
     "notch":   ("notch", "notch_exp"),
     "glabella": ("glab_len", "glabInflate", "glab_bulge", "glab_boss"),
+    "cap":     ("front_cap", "front_furrow"),                  # 9 Nov 2026: the closed capsule's front cap (shoulder grip)
     "eye":     ("eyePos", "eyeLat", "eyeSize", "eye_len"),
     "brim":    ("brim_w", "brim_rise", "brim_curve", "brim_roll", "dome_fill"),
     "crown":   ("height", "glabRise", "glab_round"),
@@ -566,6 +583,15 @@ def diagram(outline=None, face=None, n=260):
     gw = HC._glab_half(f / gl, face) * (1 - smoothstep(0.80, 0.92, f / gl) * 0.0)
     nose = np.clip(1 - np.clip((f / gl - 0.70) / 0.30, 0, 1) ** F_["glab_front"], 0, 1) ** (1 / F_["glab_front"])
     glab = np.c_[gw, -f * sh.L1] * u
+    cap = None                                                     # 9 Nov 2026: with front_furrow the glabella is a CLOSED capsule --
+    if float(F_.get("front_furrow", 0.0)) > 0.005:                 # flanks to f0, then an elliptical cap (half-width g(f0), length
+        kc = float(F_.get("front_cap", 1.0)); f0 = 0.85            # front_cap x g(f0)) ending at the glabella's front, as in _z
+        for _ in range(3): f0 = max(1.0 - kc * float(HC._glab_half(f0, face)) / (gl * HC.LC), 0.5)
+        g0 = float(HC._glab_half(f0, face)); cl = kc * g0 * (sh.L1 / HC.LC)      # the cap's length in the sketch's y (mm)
+        ff = np.linspace(0, f0 * gl, n // 2); fw = HC._glab_half(ff / gl, face)
+        t = np.linspace(0, np.pi / 2, n // 2); yc = f0 * gl * sh.L1
+        glab = np.r_[np.c_[fw, -ff * sh.L1], np.c_[g0 * np.cos(t), -(yc + cl * np.sin(t))]] * u
+        cap = (g0 * u, -yc * u)
     E = HC._eye(face); eye = None
     if F_["eye_size"] > 0.01:
         t = np.linspace(0, 2 * np.pi, 49); fe = (HC.Y0 - E["ye"]) / HC.LC
@@ -586,7 +612,8 @@ def diagram(outline=None, face=None, n=260):
     kz = 0.85 * o["height"] * 0.42 / max(sec.max(), 1e-6)         # drawn at the model's usual head height / half-width
     H = dict(front=(0.0, float(sh.yf[0]) * u), widest=(1.0, sh.yw * u), angle=(sh.xg_d * u, sh.yg_d * u),
              notch=(0.5 * sh.x_in * u, float(np.interp(0.5 * sh.x_in, ax, sh.yr)) * u),
-             glabella=(0.0, -min(0.92 * gl, 1.0) * sh.L1 * u))
+             glabella=(0.0, -min(0.92 * gl, 1.0) * sh.L1 * u) if cap is None else (0.0, float(glab[-1, 1])))
+    if cap is not None: H["cap"] = cap                              # the cap's shoulder: drag fore-aft for front_cap
     if o.get("trace") is not None:                                 # a traced margin: the front, side and rear handles have nothing to drag
         for k in ("front", "widest", "angle", "notch"): H.pop(k, None)
     if sh.piece is not None:
