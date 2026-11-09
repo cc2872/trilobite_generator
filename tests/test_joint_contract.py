@@ -35,7 +35,7 @@ def test_every_part_is_one_watertight_body(built):
     for k, m in enumerate(parts):
         assert m.is_watertight, f"{J.NAME} part {k} not watertight"
         assert len(m.split(only_watertight=False)) == 1, f"{J.NAME} part {k} is {len(m.split(only_watertight=False))} bodies"
-        assert M.is_symmetric(m), f"{J.NAME} part {k} is not mirror-symmetric"
+        assert M.is_symmetric(m, tol=0.2), f"{J.NAME} part {k} is not mirror-symmetric"   # the parts are symmetric by construction (0.0000 mm built serially); Manifold's parallel booleans triangulate the two sides a touch differently run-to-run, which on CI (forked workers) tips the 0.05 mm default -- 0.2 mm is invisible on a print but above that jitter (flaked on flexi, then ball)
 
 
 def test_pose_shape_and_identity(built):
