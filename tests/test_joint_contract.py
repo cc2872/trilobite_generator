@@ -29,13 +29,29 @@ def test_template_surface(built):
     assert 0 < J.stop_deg(P) <= 90
 
 
+def _part_fault(J, m, k):
+    """Why part k is not a valid printed piece, or None. Symmetric to 0.1 mm: the geometry is symmetric by construction
+    (0.0000 mm built serially), but Manifold's parallel booleans triangulate the two sides a hair differently."""
+    if not m.is_watertight: return f"{J.NAME} part {k} not watertight"
+    n = len(m.split(only_watertight=False))
+    if n != 1: return f"{J.NAME} part {k} is {n} bodies"
+    if not M.is_symmetric(m, tol=0.1): return f"{J.NAME} part {k} is not mirror-symmetric"
+    return None
+
 def test_every_part_is_one_watertight_body(built):
-    J, P, parts = built
-    assert len(parts) == int(P["segCount"]) + 2
-    for k, m in enumerate(parts):
-        assert m.is_watertight, f"{J.NAME} part {k} not watertight"
-        assert len(m.split(only_watertight=False)) == 1, f"{J.NAME} part {k} is {len(m.split(only_watertight=False))} bodies"
-        assert M.is_symmetric(m, tol=0.2), f"{J.NAME} part {k} is not mirror-symmetric"   # the parts are symmetric by construction (0.0000 mm built serially); Manifold's parallel booleans triangulate the two sides a touch differently run-to-run, which on CI (forked workers) tips the 0.05 mm default -- 0.2 mm is invisible on a print but above that jitter (flaked on flexi, then ball)
+    # Manifold's parallel booleans are nondeterministic run-to-run (its Python binding exposes no thread knob), so a part
+    # can occasionally come back a touch asymmetric or non-watertight though the geometry is valid by construction. Rebuild
+    # up to 3x and require one clean build: a real defect fails every rebuild, a flake clears on a retry (flexi then ball
+    # tripped a single-shot symmetry check on CI's forked workers).
+    J, P, _ = built
+    last = "no build"
+    for _ in range(3):
+        parts = assemble.animal(schema.coerce(ANIMAL), J)
+        assert len(parts) == int(P["segCount"]) + 2
+        faults = [f for f in (_part_fault(J, m, k) for k, m in enumerate(parts)) if f]
+        if not faults: return
+        last = faults[0]
+    assert False, last + " (failed 3 rebuilds)"
 
 
 def test_pose_shape_and_identity(built):
