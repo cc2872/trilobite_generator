@@ -49,7 +49,7 @@
   #sheetwrap{display:none;position:absolute;inset:0;background:#000;z-index:5;align-items:center;justify-content:center} #sheetwrap img{max-width:100%;max-height:100%;object-fit:contain}
   #sheetback{position:absolute;left:16px;top:14px;z-index:6;background:var(--bg);color:var(--ink);border:1px solid var(--ink);padding:8px 14px;font:inherit;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} #sheetback:hover{background:var(--soft)}
   #sheettoggle{position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:6;display:flex;border:1px solid var(--line)} #sheettoggle button{background:var(--bg);color:var(--mid);border:none;border-right:1px solid var(--line);padding:8px 14px;font:inherit;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} #sheettoggle button:last-child{border-right:none} #sheettoggle button.on{background:var(--ink);color:var(--bg)}
-  #view3dframe{display:none;width:100%;height:100%;border:0;background:#000}
+  #view3dframe,#prismframe{display:none;width:100%;height:100%;border:0;background:#000}
   #sheetmenu{position:absolute;right:16px;top:14px;z-index:6;background:var(--bg);color:var(--ink);border:1px solid var(--line);padding:8px 14px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-decoration:none;text-transform:uppercase}
   #sheetmenu:hover{border-color:var(--ink)}
   #sheetwait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mid);font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;pointer-events:none}
@@ -65,7 +65,7 @@
 <body>
 <div class="panel">
   <h1><span>Studio</span><span class="mono" style="color:var(--mid)">head + body</span></h1>
-  <div class="nav"><button onclick="location.href='/tree'" title="browse the orders as a ring/spiral family tree">family tree</button><button id="generator" title="the instrument and advanced page: enrollment measurement (the ruler), all parameters, landmarks and share">measure / advanced →</button></div>
+  <div class="nav"><button onclick="location.href='/tree'" title="browse the orders as a ring/spiral family tree">family tree</button><button id="toprism" title="where this animal sits among the made animals and the fossils">prism</button><button id="generator" title="the instrument and advanced page: enrollment measurement (the ruler), all parameters, landmarks and share">measure / advanced →</button></div>
   <div class="hint">One animal. Click the <b>head</b> or a <b>row</b> on the drawing; its controls appear below. Drag a handle to shape it.</div>
 
   <div class="sect"><span>Start from</span><span id="pg"></span></div>
@@ -94,7 +94,7 @@
   <div class="status" id="status"></div>
   <div class="links" id="links"></div>
 </div>
-<div id="stage"><div class="kv" id="kv"></div><button id="embedbuild" title="build the blueprint and 3D in the generator">build - blueprint + 3d</button><div id="sheetwrap"><button id="sheetback">← editor</button><a id="sheetmenu" href="/tree" style="display:none">blueprints</a><span id="sheetwait" style="display:none">building blueprint…</span><span id="sheettoggle"><button id="toblue" class="on">blueprint</button><button id="to3d">view 3d</button></span><img id="sheetimg" alt="blueprint"><iframe id="view3dframe" title="3D view"></iframe></div></div>
+<div id="stage"><div class="kv" id="kv"></div><button id="embedbuild" title="build the blueprint and 3D in the generator">build - blueprint + 3d</button><div id="sheetwrap"><button id="sheetback">← editor</button><a id="sheetmenu" href="/tree" style="display:none">blueprints</a><span id="sheetwait" style="display:none">building blueprint…</span><span id="sheettoggle"><button id="toblue" class="on">blueprint</button><button id="to3d">view 3d</button><button id="tosprism" title="where this animal sits in the morphospace prism">prism</button></span><img id="sheetimg" alt="blueprint"><iframe id="view3dframe" title="3D view"></iframe><iframe id="prismframe" title="prism"></iframe></div></div>
 
 <script>
 const $=id=>document.getElementById(id);
@@ -367,14 +367,22 @@ $('build').onclick=async()=>{ const b=$('build'); b.disabled=true; const t0=Date
       $('links').innerHTML=`<a href="/api/stl/${m.key}">download STL (all pieces, print mm)</a>`;
       try{ status('drawing blueprint…',true); const sr=await fetch('/api/sheet',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, joint:'isopod', cmap:'none', head:headArg(), body:S.spec})}); const sj=await sr.json(); if(sj.url){ showSheet(sj.url); status(`built - ${m.parts.length} pieces - blueprint ready`,false); } else status('built - blueprint failed',true); }catch(_){ status('built - blueprint failed',true); } }
   }catch(e){ clearInterval(tick); status('build failed - '+e,true); } b.disabled=false; };
-function showSheet(url){ $('sheetwait').style.display='none'; $('sheetimg').src=url+(url.indexOf('?')>=0?'&':'?')+'t='+Date.now(); mode3d(false); $('sheetwrap').style.display='flex'; }   // Build shows the blueprint over the drawing; "← editor" returns to editing
-function mode3d(on){ $('sheetimg').style.display=on?'none':'block'; const f=$('view3dframe'); f.style.display=on?'block':'none';
-  if(on){ try{ sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec, P:S.P})); }catch(_){}
-    const want='/generator?preset='+encodeURIComponent(S.preset)+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+'&bodydraft=1&only3d=1'+(S.built?'&sig='+encodeURIComponent(S.built):'');   // the generator's proven 3D, panel hidden; sig=build key so a rebuilt animal reloads the iframe (reads the fresh draft) instead of showing the old mesh
+function showSheet(url){ $('sheetwait').style.display='none'; $('sheetimg').src=url+(url.indexOf('?')>=0?'&':'?')+'t='+Date.now(); setView('blue'); $('sheetwrap').style.display='flex'; }   // Build shows the blueprint over the drawing; "← editor" returns to editing
+function _draft(){ try{ sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec, P:S.P})); }catch(_){} }
+function setView(v){   // 31 Oct 2026: three sheet views -- 'blue' (blueprint), '3d' (the generator's viewer), 'prism' (where this point sits)
+  $('sheetimg').style.display=v==='blue'?'block':'none';
+  const f=$('view3dframe'), pf=$('prismframe'); f.style.display=v==='3d'?'block':'none'; pf.style.display=v==='prism'?'block':'none';
+  if(v==='3d'){ _draft();
+    const want='/generator?preset='+encodeURIComponent(S.preset)+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+'&bodydraft=1&only3d=1'+(S.built?'&sig='+encodeURIComponent(S.built):'');   // the generator's proven 3D, panel hidden; sig=build key so a rebuilt animal reloads the iframe
     if(f.getAttribute('src')!==want) f.setAttribute('src',want); }
-  $('toblue').classList.toggle('on',!on); $('to3d').classList.toggle('on',on); }
+  if(v==='prism'){ _draft();
+    const fp=JSON.stringify([S.preset,S.head,S.headOutline,S.headFace,S.spec,S.P]);   // reload the prism only when the animal actually changed (it reads the draft to mark 'you')
+    if(pf._fp!==fp){ pf._fp=fp; pf.setAttribute('src','/prism?mine=1&embed=1&sig='+Date.now()); } }
+  $('toblue').classList.toggle('on',v==='blue'); $('to3d').classList.toggle('on',v==='3d'); $('tosprism').classList.toggle('on',v==='prism'); }
+function mode3d(on){ setView(on?'3d':'blue'); }   // kept: other callers still flip blueprint <-> 3D
 $('sheetback').onclick=()=>{ $('sheetwrap').style.display='none'; };
-$('toblue').onclick=()=>mode3d(false); $('to3d').onclick=()=>mode3d(true);
+$('toblue').onclick=()=>setView('blue'); $('to3d').onclick=()=>setView('3d'); $('tosprism').onclick=()=>setView('prism');
+$('toprism').onclick=()=>{ _draft(); location.href='/prism?mine=1'; };   // 30 Oct 2026: the studio's nav prism button -> the full prism page (reads the draft, ?mine=1)
 $('generator').onclick=()=>{ try{ if(S.edited) sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, spec:S.spec, savedName:S.savedBody})); }catch(_){}
   location.href='/?preset='+encodeURIComponent(S.preset||'')+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+(S.edited?'&bodydraft=1':'')+(S.savedBody?'&body='+encodeURIComponent(S.savedBody):''); };
 
