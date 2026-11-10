@@ -21,11 +21,17 @@ def _fits_bed(w, h, bed=BED_MM):
         if w * c + h * s <= bed and w * s + h * c <= bed: return True
     return False
 
+EYE_LENSES = False   # 10 Nov 2026: the lens-lattice overlay on the dorsal plan read as white spheres on the cards (and landed off
+#                      the eye on some heads); off by default. Set True (or TRILO_EYE_LENSES=1) to draw it again.
+import os as _os
+if _os.environ.get("TRILO_EYE_LENSES") == "1": EYE_LENSES = True
+
 def _eye_lenses(ax, head, P, color=INK, eye=None, cx=0.0):
     """Fill each eye on the dorsal plan with its lens packing (the packing factor, as circles): the eye outline and a
     hex lattice of lenses sized by lensD and spaced by lensGap. eye = (x, y, R) where the builder put the right eye, in
     the sheet's mm (26 Oct 2026: the manifest records it); without it the eye dome is searched for off-axis on the head
     (the old way, which lands on the glabella's flank on a head whose glabella stands taller than its eyes)."""
+    if not EYE_LENSES: return                                                    # 10 Nov 2026: off by default (see EYE_LENSES)
     try:
         if P.get("eyeSolid", 1) < 0.5 or P.get("eyeSize", 0) <= 0.01: return
         if eye:

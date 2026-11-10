@@ -62,6 +62,7 @@ def _head_style(name):
     (web/heads/<name>.json, from the head editor) or a dict ({"style", "outline", "face"}, the editor's live head) is a
     custom shaped head and is returned resolved (see _head_custom)."""
     if isinstance(name, dict): return _head_custom(name)
+    if isinstance(name, str) and name.endswith("-drawing"): _drawing_info(name[:-len("-drawing")])   # 10 Nov 2026: write a missing drawing mirror from its preset's block
     if name and name in _saved_heads(): return _head_custom({"style": name})
     if name == "crescent": return None                                    # the crescent on the isopod head piece, by name
     if not name: name = _isopod_body().DEFAULT_HEAD                          # 25 Oct 2026: no head given = the default head style ('diagram')
@@ -344,6 +345,7 @@ def _body_spec(body):
     """A body spec (dict), or a saved body's name -> its spec; None/''/'preset' = the preset's rows untouched (None)."""
     if body is None or body == "" or body == "preset": return None
     if isinstance(body, str):
+        if body.endswith("-drawing"): _drawing_info(body[:-len("-drawing")])                 # 10 Nov 2026: as in _head_style
         d = _saved_bodies().get(body)
         if d is None: raise KeyError(f"no saved body '{body}'")
         return d.get("spec") or {}
@@ -505,11 +507,31 @@ def _studio_params(name):
     except KeyError: D = {}
     return schema.coerce(dict(Pp, **(D.get("params") or {})), base=schema.table_defaults())
 
+_MIRRORING = set()
+
+def _drawing_mirror(name, D):
+    """Write the drawing block's saved head and body <name>-drawing (web/heads, web/bodies) from the block itself.
+    10 Nov 2026: those folders are git-ignored, docker-ignored and bind-mounted on the live box, so a pushed preset
+    arrives WITHOUT its mirror and the studio fell back to the plain generator animal. The block is the source of truth:
+    rebuild the mirror whenever it is missing or older than the block. Same code path as the drawing save."""
+    R = _drawing_resolve(name, D)
+    doc = f"the {name} preset's drawing block ({str(D.get('saved_at', ''))[:10]}); its parameters live on {D.get('page') or '/' + name}"
+    _save_head(dict(name=D["head"], style=R["style"], outline={k: v for k, v in R["outline"].items() if k != "trace" or v}, face=R["head"]["face"], doc=doc))
+    _save_body(dict(name=D["body"], preset=name, head=D["head"], spec=R["body"] or {}, doc=doc))
+
 def _drawing_info(name):
-    """{"head", "body"}: the saved head and body a preset's drawing block is mirrored to, when both exist."""
+    """{"head", "body"}: the saved head and body a preset's drawing block is mirrored to (written from the block if missing)."""
     try: D = _preset_record(name)[1].get("drawing") or {}
     except KeyError: return None
-    if D.get("head") in _saved_heads() and D.get("body") in _saved_bodies(): return dict(head=D["head"], body=D["body"], saved_at=D.get("saved_at"))
+    if not (D.get("head") and D.get("body")): return None
+    h, b = _saved_heads().get(D["head"]), _saved_bodies().get(D["body"])
+    stamp = str(D.get("saved_at") or "")
+    if name not in _MIRRORING and (h is None or b is None or str(h.get("saved_at") or "") < stamp or str(b.get("saved_at") or "") < stamp):
+        _MIRRORING.add(name)                                  # _save_body looks the head up again: no re-entry
+        try: _drawing_mirror(name, D)
+        except (KeyError, ValueError): return None
+        finally: _MIRRORING.discard(name)
+    if D["head"] in _saved_heads() and D["body"] in _saved_bodies(): return dict(head=D["head"], body=D["body"], saved_at=D.get("saved_at"))
     return None
 
 def _drawing_resolve(name, D):
