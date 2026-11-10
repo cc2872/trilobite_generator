@@ -647,7 +647,7 @@ def shield_rows(rows, sh):
             if g("len") > 0.5: spines.append(dict(row=i, len=g("len"), yaw=g("yaw"), rise=g("rise"), bend=g("bend"), w=g("w"), hook=q["hook"]))
     return rows, spines, sh
 
-def plans(P, spec=None, strict=True):
+def plans(P, spec=None, strict=True, kit=None):
     """The body as body.py plans: [(name, mod, S, offset)] for every printed piece (the head is body.py's), the
     offsets, the print scale and the groups. spec: {"model": "thorax"|"slab", "list": [...], "rows": {...edits...},
     "min_joint_mm": .., "print_scale": ..}. strict: refuse (ValueError) a body the kit does not fit or that would not
@@ -660,7 +660,8 @@ def plans(P, spec=None, strict=True):
         P = dict(P, tipTaper=shv["taper"], bladeChord=1.3)                   # full pleural bands, their ends rounded off by `taper`
     pl = float(P.get("printLength", 0.0) or 0.0)                           # 25 Oct 2026: the animal printed at printLength mm, head to tail
     scale = float(spec.get("print_scale") or (pl / float(P["length"]) if pl > 0 else default_scale(rows)))
-    kit = float(P.get("jointScale", 1.0) or 1.0)                           # 25 Oct 2026: the joint kit's print size / the isopod's
+    kit = float(P.get("jointScale", 1.0) or 1.0) if kit is None else float(kit)   # 25 Oct 2026: the joint kit's print size / the isopod's
+    #                                                                      (10 Nov 2026: or the hand-sized build's, scaled with the animal)
     min_mm = float(spec.get("min_joint_mm") or MIN_JOINT_MM * kit)
     term = float(spec.get("term_spine") or 0.0)
     if strict: fits(rows, scale, term, kit)

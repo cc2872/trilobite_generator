@@ -3,7 +3,7 @@
  "blurb": "Odontopleurida \u2014 Gon p. 63. Spines everywhere: pleural, marginal, occipital, axial; 9 segments.",
  "drawing": {
   "body": "odontopleurida-drawing",
-  "doc": "Boedaspis (Odontopleurida), 9 Nov 2026: lobed smooth head, long genal arcs, frontal horns over the body, 10 segments with long and short pleural spines, tail shield with a peg comb and two long pairs",
+  "doc": "Boedaspis (Odontopleurida), 9 Nov 2026: lobed smooth head, long genal arcs, frontal horns over the body, 10 segments with long and short pleural spines, tail shield with a peg comb and two long pairs; 10 Nov 2026: its pinned print_scale 0.8 removed so it prints hand-sized like the other presets",
   "face": {
    "tub_all": 0,
    "tubercles": 0.0
@@ -44,7 +44,6 @@
    "tipTaper": 0.6
   },
   "rows": {
-   "print_scale": 0.8,
    "pyg_len": 42,
    "pyg_rows": 2,
    "rows": {
@@ -277,7 +276,7 @@
    "thorax_len": 120.0,
    "thorax_rows": 10
   },
-  "saved_at": "2026-11-09T21:17:02",
+  "saved_at": "2026-11-10T18:00:00",
   "schema": "6.9",
   "style": "odontopleura"
  },

@@ -1086,6 +1086,74 @@ DEFAULT_HEAD = "diagram"   # 25 Oct 2026: build()'s default head -- the head sty
 PREVIEW = False   # 25 Oct 2026: set by build(preview=True) -- the pieces as drawn, ornaments on, WITHOUT the joint clearances (the
                   # 30-degree curl sweeps are three quarters of a build). For the viewer to show the animal in seconds; never printed.
 
+# ---- 10 Nov 2026: the print's size. Every preset was built at the isopod's own 18 mm pitch per segment (223-596 mm long,
+# 1-3 L of plastic) with the joint kit fixed at jointScale (0.6) of the isopod's whatever the animal's size. The isopod
+# model itself, scaled down whole to 1/2 and 1/3, still prints and articulates (Claire, 10 Nov), so the default print now
+# scales the whole animal, joints included, to a hand-held size.
+HAND_SIZE = True          # printLength 0 = hand size (False: the isopod's 18 mm pitch, as before 10 Nov 2026)
+HAND_MM = 160.0           # the longest side of the printed animal (plan), mm
+KIT_MIN = 1.0 / 3.0       # the smallest joint kit, x the isopod's: the isopod printed whole at 1/3 still articulates (10 Nov 2026)
+SIZE_TOL = 0.04           # rebuild once when the measured size is off the target by more than this
+ISO_CLEAR = 0.244         # the isopod kit's ball-socket clearance at 1:1, mm (measured on its STL, 10 Nov 2026); scales with the kit
+ISO_BALL_D = 11.5         # its ball's diameter at 1:1, mm
+_EXTENT18 = {}            # animal -> its longest plan side at the isopod's pitch (print mm), from the last build
+
+
+def hand_ratio(E18, fit18=1.0, hand=None):
+    """The print / the isopod-pitch print for an animal whose longest side at the isopod's pitch is E18 mm: HAND_MM over
+    E18, never above 1 (a small animal is not enlarged) and never below the size at which the joint that fits its
+    shortest segment would be smaller than KIT_MIN of the isopod's. fit18 = the largest kit (x the isopod's) its shortest
+    thoracic segment holds at the isopod's pitch (that row's print length / the isopod's 17 mm piece)."""
+    hand = HAND_MM if hand is None else float(hand)
+    return float(min(1.0, max(KIT_MIN / max(float(fit18), 1e-6), hand / max(float(E18), 1e-6))))
+
+
+def hand_kit(ratio, fit18, cap):
+    """The joint kit (x the isopod's) at print ratio `ratio`: the size it was (cap = jointScale) while the shortest segment
+    holds it, else the largest that segment holds -- never below KIT_MIN (hand_ratio keeps the print big enough for that)."""
+    return float(max(KIT_MIN, min(float(cap), float(fit18) * float(ratio))))
+
+
+def kit_fit18(rows_):
+    """The largest joint kit (x the isopod's) the shortest thoracic row holds at the isopod's pitch: the kit's piece is the
+    isopod's 17 mm at 1:1 and must fit inside the row (rows.MIN_JOINT_MM), so its print length / 17."""
+    import rows as RW
+    th = [r["len"] for r in rows_ if r["kind"] == "thorax"] or [r["len"] for r in rows_]
+    return float(min(th) * RW.default_scale(rows_) / RW.MIN_JOINT_MM)
+
+
+def _extent_print(parts, s):
+    """The longest side of the flat animal in plan, print mm (parts in model mm; print = model / s)."""
+    b = np.array([p.bounds for p in parts if p is not None and len(p.vertices)])
+    lo, hi = b[:, 0, :2].min(0), b[:, 1, :2].max(0)
+    return float((hi - lo).max() / s)
+
+
+def _size_key(P, head, face, outline, rows):
+    import hashlib
+    blob = json.dumps(dict(P=schema.param_hash(P), head=head, face=face, outline=outline, rows={k: v for k, v in (rows or {}).items() if k != "print_scale"}),
+                      sort_keys=True, default=str).encode()
+    return hashlib.sha1(blob).hexdigest()[:16]
+
+
+def _build_rows(P, head, face, outline, rows, kit=None, s18=None):
+    """The rows-model build. kit None: the joint kit at P's jointScale and the gaps between the pieces constant in print mm
+    (an explicit printLength, as before). kit = a number: the kit at that x the isopod's; the gaps between the pieces stay
+    as they were while the kit does, and shrink with it below that (the hand-sized print, 10 Nov 2026)."""
+    import rows as RW
+    R = RW.plans(P, rows, kit=kit); s = 1.0 / R["scale"]
+    T0 = BALL.pose(P, [0.0] * (int(P["segCount"]) + 1))                         # the head and row 0 where placed_plans puts them
+    plans = [("head", HEAD, HEAD.plan(P), T0[0][1, 3])] + [(n, m, S, T0[1][1, 3] + off) for (n, m, S, off) in R["parts"]]
+    cap = float(P.get("jointScale", 1.0) or 1.0)
+    g = BALL.ISO_PITCH * s * (1.0 if kit is None else min(1.0, float(kit) / cap))   # the joint gaps: print mm, shrinking with a kit below its size
+    J = dict(gap_axial=BALL.GAP_AXIAL_FRAC * g, gap_vertical=BALL.GAP_VERT_FRAC * g, gap_lateral=BALL.GAP_LAT_FRAC * g)
+    K = iso_kit(P, s=s, kit=(float(P.get("jointScale", 1.0) or 1.0) if kit is None else float(kit))); PV = pivots(plans, J, K)
+    ROWS_INFO.clear(); ROWS_INFO.update(groups=R["groups"], scale=R["scale"], term_spine=R["term_spine"], rows=R["rows"], model=R["model"], free_spines=R.get("free_spines", []), domes=R.get("domes", []), textures=R.get("textures", []), grooves=R.get("grooves", []),
+                                        margin_spines=R.get("margin_spines", []), kit=K["kit"], hand=(kit is not None),
+                                        kit_floor=(kit is not None and float(kit) <= KIT_MIN + 1e-9), s18=s18)
+    return _build(P, head, face, outline, plans, J, K, PV, shell=(R["model"] == "slab"), term_spine=R["term_spine"])
+
+
 def build(P, head=None, face=None, outline=None, rows=None, preview=False):
     global PREVIEW; PREVIEW = bool(preview)
     """head: 'isopod' (the crescent head made on the isopod's head piece, crescent_head.py; the default), 'shaped'
@@ -1100,18 +1168,35 @@ def build(P, head=None, face=None, outline=None, rows=None, preview=False):
         import head_styles as HS
         st = DEFAULT_HEAD if head is None else head
         face = HS.style(st)[0] if face is None else face; outline = HS.outline(st) if outline is None else outline; head = "shaped"
-    if rows is None and float(P.get("printLength", 0.0) or 0.0) > 0: rows = {}   # 25 Oct 2026: a print length goes through the rows model (its fusion rule
-    if rows is not None:                                                          # makes the pieces long enough for the joint kit at that size)
+    auto = float(P.get("printLength", 0.0) or 0.0) <= 0 and HAND_SIZE        # 10 Nov 2026: printLength 0 = hand size (see hand_ratio)
+    if rows is None and (auto or float(P.get("printLength", 0.0) or 0.0) > 0): rows = {}   # 25 Oct 2026: a print length goes through the rows model
+    if rows is not None:
         import rows as RW
-        R = RW.plans(P, rows); s = 1.0 / R["scale"]
-        T0 = BALL.pose(P, [0.0] * (int(P["segCount"]) + 1))                     # the head and row 0 where placed_plans puts them
-        plans = [("head", HEAD, HEAD.plan(P), T0[0][1, 3])] + [(n, m, S, T0[1][1, 3] + off) for (n, m, S, off) in R["parts"]]
-        ga = BALL.GAP_AXIAL_FRAC * BALL.ISO_PITCH * s                          # the joint gaps: constant in print mm
-        J = dict(gap_axial=ga, gap_vertical=BALL.GAP_VERT_FRAC * BALL.ISO_PITCH * s, gap_lateral=BALL.GAP_LAT_FRAC * BALL.ISO_PITCH * s)
-        K = iso_kit(P, s=s, kit=float(P.get("jointScale", 1.0) or 1.0)); PV = pivots(plans, J, K)
-        ROWS_INFO.clear(); ROWS_INFO.update(groups=R["groups"], scale=R["scale"], term_spine=R["term_spine"], rows=R["rows"], model=R["model"], free_spines=R.get("free_spines", []), domes=R.get("domes", []), textures=R.get("textures", []), grooves=R.get("grooves", []),
-                                            margin_spines=R.get("margin_spines", []))
-        return _build(P, head, face, outline, plans, J, K, PV, shell=(R["model"] == "slab"), term_spine=R["term_spine"])
+        if not auto: return _build_rows(P, head, face, outline, rows, kit=None)
+        # 10 Nov 2026: the hand-sized print. The whole animal -- plates, joint kit, the kit's ball-socket clearance and the
+        # gaps between the pieces -- is scaled together, as the isopod scaled whole (it still articulates at 1/2 and 1/3), so
+        # the longest side is HAND_MM. The joints keep their size (jointScale) while the shortest segment holds them, shrink with
+        # the segments below that, and never go below KIT_MIN of the isopod's; where that floor binds the animal stays as big
+        # as the floor needs. The build is self-similar in the print scale (only PRINT_MIN_R is absolute,
+        # and it thickens spines, not lengthens them), so one measured build fixes the scale: its extent / the ratio it was
+        # built at = the extent at the isopod's pitch. Remembered per animal, so the next build (the full one after a preview)
+        # goes straight to the size.
+        cap = float(P.get("jointScale", 1.0) or 1.0)
+        if rows.get("print_scale"):                                              # a body that pins its own print scale keeps it;
+            R0 = RW.plans(P, rows, strict=False); s18 = RW.default_scale(R0["rows"]); fit = kit_fit18(R0["rows"])   # its joints still follow it
+            return _build_rows(P, head, face, outline, rows, kit=hand_kit(float(rows["print_scale"]) / s18, fit, cap), s18=s18)
+        R0 = RW.plans(P, rows, strict=False); s18 = RW.default_scale(R0["rows"]); fit = kit_fit18(R0["rows"])
+        key = _size_key(P, head, face, outline, rows)
+        E18 = _EXTENT18.get(key)
+        if E18 is None: E18 = float(P["length"]) * s18 * 1.1                    # a first guess: the body plus ~10 % of spines
+        ratio = hand_ratio(E18, fit)
+        out = _build_rows(P, head, face, outline, dict(rows, print_scale=s18 * ratio), kit=hand_kit(ratio, fit, cap), s18=s18)
+        E = _extent_print(out[0], out[3]["s"]); E18 = E / ratio; _EXTENT18[key] = E18
+        r2 = hand_ratio(E18, fit)
+        if abs(r2 / ratio - 1.0) > SIZE_TOL:                                     # the guess was off (long spines, a wide brim): once more, at size
+            out = _build_rows(P, head, face, outline, dict(rows, print_scale=s18 * r2), kit=hand_kit(r2, fit, cap), s18=s18)
+            E = _extent_print(out[0], out[3]["s"]); _EXTENT18[key] = E / r2
+        return out
     ROWS_INFO.clear()
     plans = placed_plans(P)
     J, d, zj, y_piv = BALL.geometry(P); K = iso_kit(P); PV = pivots(plans, J, K)
@@ -1430,6 +1515,7 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
     paste_middle(parts, plans, PV, K, skip=set(rep))
     for k in rep: copy(k)
     relieve_head_joint(parts, PV)
+    cut_at_bed(parts)                                                      # 10 Nov 2026: nothing below the bed
     _progress(3, 0, n)                                                     # = every part built
     lap("middle paste")
     global LAST_DROPPED; LAST_DROPPED = dict(J["_dropped"])                # flakes cut off by the clearances (model mm3)
@@ -1438,6 +1524,25 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
     audit_intact(parts, plans, K["s"]); lap("spine intact")
     lap("clean + validate"); gc.collect()
     return parts, plans, PV, K
+
+
+LAST_BED_CUT = {}   # {part index: model mm3 cut off below the bed} in the last build
+
+
+def cut_at_bed(parts):
+    """Cut every part at z = 0 (10 Nov 2026). The pieces stand on the bed at z = 0, but a spine's root collar or a tail
+    spine with a downward roll could reach below it (0.5-1.3 mm under the phacopid, odontopleurid, redlichiid and lichid
+    tails at hand size, 1.6-3.1 mm at full size), and a slicer then lifts every other piece off the plate to put that point
+    on it. What is below the bed is removed; the piece keeps its flat underside."""
+    LAST_BED_CUT.clear()
+    for k, m in enumerate(parts):
+        lo, hi = m.bounds
+        if lo[2] >= -1e-6: continue
+        pad = 1.0 + float((hi - lo).max())
+        cutter = M.box(hi[0] - lo[0] + 2 * pad, hi[1] - lo[1] + 2 * pad, hi[2] + pad, at=(0.5 * (lo[0] + hi[0]), lo[1] - pad, 0.0), align=("c", "min", "min"))
+        before = M.volume(m)
+        parts[k] = M.from_manifold(M.to_manifold(m) ^ M.to_manifold(cutter))
+        LAST_BED_CUT[k] = float(before - M.volume(parts[k]))
 
 
 def relieve_head_joint(parts, PV, to_deg=None, step_deg=1.0):

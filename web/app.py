@@ -133,8 +133,9 @@ def _build_isopod(P, folder, head=None, body_spec=None, preview=False):
     else:
         HS = _head_styles(); face, _ = HS.style(h)
         parts, plans, PV, K = IBODY.build(P, "shaped", face=face, outline=HS.outline(h), rows=rows, preview=preview)
-    s = K["s"]                                                  # model units -> the isopod's own print mm
+    s = K["s"]                                                  # model units -> print mm
     pieces = [p.copy().apply_scale(1.0 / s) for p in parts]
+    ri = getattr(IBODY, "ROWS_INFO", {}) or {}
     names = ["head"] + [f"seg{i}" for i in range(len(pieces) - 2)] + ["tail"]
     pivots = [[float(y / s), float(z / s)] for (y, z) in PV]    # per-joint pivot (y, z) in print mm, for the viewer's pose
     out = []
@@ -144,7 +145,8 @@ def _build_isopod(P, folder, head=None, body_spec=None, preview=False):
         out.append(dict(name=name, url=f"/files/{os.path.basename(folder)}/{name}.glb", stl=f"/files/{os.path.basename(folder)}/{name}.stl",
                         bodies=len(__import__("mesh").bodies(m)), watertight=bool(m.is_watertight), volume=round(float(m.volume), 1)))
     import kinematics as KIN
-    kin = dict(names=names, pivots=pivots,                      # pivots present => the viewer poses about per-joint pivots (ball joints)
+    kit = float(K.get("kit", 1.0))                              # 10 Nov 2026: the joint kit as printed, x the isopod's (the sheet's ball and clearance)
+    kin = dict(names=names, pivots=pivots, kit=round(kit, 4),   # pivots present => the viewer poses about per-joint pivots (ball joints)
                profile=[round(a / KIN.HEAD_DEG, 4) for a in KIN.profile(len(pivots))],   # each joint's share of the head angle (Esteve profile)
                profile_source=KIN.SOURCE)
     try:                                                        # 26 Oct 2026: where the builder put the eye (print mm), for the sheet's lens drawing
@@ -160,9 +162,10 @@ def _build_isopod(P, folder, head=None, body_spec=None, preview=False):
     dropped = {names[k]: round(v / s ** 3, 3) for k, v in getattr(IBODY, "LAST_DROPPED", {}).items() if v > 0}
     cut = {k: v for k, v in dropped.items() if v > 20.0}                  # more than debris: the clearances severed anatomy (parts overlapped)
     checks = dict(print_valid=all(p["watertight"] and p["bodies"] == 1 for p in out) and not touching and not cut,
-                  notes=[f"{t['a']} and {t['b']} touch at rest: {t['mm3']} mm3" for t in touching]
+                  notes=_size_notes(pieces, kit, ri) + [f"{t['a']} and {t['b']} touch at rest: {t['mm3']} mm3" for t in touching]
                         + [f"free {n}" for n in (getattr(IBODY, "ROWS_INFO", {}) or {}).get("free_notes", [])]
                         + [f"spine audit: {n}" for n in getattr(IBODY, "LAST_AUDIT", [])]
+                        + [f"{names[k]}: {v / s ** 3:.1f} mm3 below the bed cut off" for k, v in getattr(IBODY, "LAST_BED_CUT", {}).items() if v / s ** 3 > 0.05]
                         + (lambda r: [] if not r[1] else [f"enrolment: the pieces collide before the tail tucks under the head -- {r[1][0][0]} hits {r[1][0][1]} ({r[1][0][2]} mm3); it enrols to {r[0]:.0f} of 180 deg"])(IBODY.enrol_check(parts, [(nm,) for nm in names], PV, s))
                         + [f"{k}: {v:.0f} mm3 cut away by the clearances (it overlapped the part ahead; a forward sweep or a long overlap?)" for k, v in cut.items()]
                         + ([f"debris dropped (mm3): {dropped}"] if dropped and not cut else []),
@@ -358,14 +361,30 @@ def _iso_problems(P, head, spec):
     from anatomy.common import pitch
     from fields import seg_halfwidth
     out = []
-    if spec is not None:
-        R = RW.plans(P, spec, strict=False); out += R["problems"]; scale = R["scale"]; L_body = R["length"]
+    IB = _isopod_body()
+    auto = float(P.get("printLength", 0.0) or 0.0) <= 0 and IB.HAND_SIZE and not (spec or {}).get("print_scale")
+    if spec is not None or auto:
+        if auto:                                                # 10 Nov 2026: the hand-sized print scales the joint kit with the animal, so
+            R = RW.plans(P, spec or {}, strict=False)           # the kit fits wherever it fits at the isopod's pitch (kit 1); the size check
+            s18 = RW.default_scale(R["rows"]); scale = s18 * IB.hand_ratio(1e9, IB.kit_fit18(R["rows"]))   # is at the smallest the build may go (the joint floor)
+            out += RW.problems(R["rows"], scale, R["term_spine"], kit=IB.KIT_MIN); L_body = R["length"]
+        else:
+            R = RW.plans(P, spec, strict=False); out += R["problems"]; scale = R["scale"]; L_body = R["length"]
     else: scale = BALL_SCALE(P); L_body = P["length"] * (1 - P["cephFrac"])
     h = _head_style(head)
     if isinstance(h, dict):
         o = h["outline"]; L_ceph = o["length"] * o["width"] * seg_halfwidth(P, 0)      # the head's axial length
         L_tot = L_ceph + max(L_body, L_ceph * o["genal"])       # 9 Nov 2026: the genal spines run BESIDE the body, so the print is the head
         if L_tot * scale > RW.PRINT_MAX_MM: out.append(f"with this head the print would be {L_tot * scale:.0f} mm long; at most {RW.PRINT_MAX_MM:g}")   # plus the longer of body and spines, not all three (a harpetid's prolongations were counted on top of the thorax they lie along)
+    return out
+
+def _size_notes(pieces, kit, ri):
+    """10 Nov 2026: the print's size and its joints, as notes on the manifest: the whole animal (printed in place, one
+    piece on the bed), the kit's ball and clearance at this size, and whether the joint floor kept it above hand size."""
+    import trimesh
+    IB = _isopod_body(); W, L, H = trimesh.util.concatenate(pieces).extents
+    out = [f"print {L:.0f} x {W:.0f} x {H:.0f} mm, one print-in-place piece; joints {kit:.2f} x the isopod's (ball {IB.ISO_BALL_D * kit:.1f} mm, clearance {IB.ISO_CLEAR * kit:.2f} mm)"]
+    if ri.get("kit_floor") and max(W, L) > IB.HAND_MM * (1 + IB.SIZE_TOL): out.append(f"held at the smallest joints ({IB.KIT_MIN:.2f} x the isopod's): at {IB.HAND_MM:.0f} mm they would be smaller")
     return out
 
 def BALL_SCALE(P):
@@ -961,6 +980,7 @@ def api_sheet():
                         volumes=[p.get("volume") for p in parts], meta=[dict(bodies=p.get("bodies"), watertight=p.get("watertight")) for p in parts],
                         checks=man.get("print", {}), head=man.get("head"), body=man.get("body"),   # the editors' specs, as the manifest records them
                         eye=kin.get("eye"),                                                     # the eye as built (print mm), for the lens drawing
+                        kit=kin.get("kit"),                                                     # 10 Nov 2026: the joint kit as printed (x the isopod's)
                         date=time.strftime("%Y-%m-%d"))
             blueprint.isopod_sheet(meshes, P, info, png, cmap=cmap)
         return jsonify(url=f"/files/{key}/sheet_isopod_{cmap}.png", measured=False)

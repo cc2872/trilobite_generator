@@ -12,6 +12,7 @@ INK, BG, DIM = "#ffffff", "#000000", "#9a9a9a"
 CMAPS = ("magma", "viridis", "twilight", "inferno", "cividis", "gray", "rainbow")   # scientific field colormaps (wave-optics look) + rainbow (full spectrum, vivid)
 RELIEF_ALPHA = 0.5   # the relief field sits semi-transparent under the blueprint lines — muted, not vibrant
 BED_MM = 256         # target print bed (square), mm — common desktop FDM; the sheet flags a specimen that won't fit
+ISO_BALL_D, ISO_CLEAR = 11.5, 0.244   # 10 Nov 2026: the isopod kit's ball diameter and ball-socket clearance at 1:1 (isopod_model/body.py); x the kit
 
 def _fits_bed(w, h, bed=BED_MM):
     """Does a w x h footprint fit on a square bed, flat or rotated? (print-in-place must lie flat)."""
@@ -576,6 +577,7 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
     ang = _angles(pivots, curl); tot = float(sum(ang)); prof = (f"head {ang[0]:.0f}°, {ang[1]:.0f}→{ang[-1]:.0f}° behind" if nj > 1 else (f"{curl:.0f}°" if nj else "no joints"))
     meta = info.get("meta") or [{} for _ in parts]
     checks = info.get("checks") or {}
+    kit = float(info["kit"]) if info.get("kit") else None                    # 10 Nov 2026: the joint kit as printed, x the isopod's (None: an older build)
     flat = trimesh.util.concatenate([p.copy() for p in parts]); cx = float(flat.centroid[0]); flat.apply_translation([-cx, 0, 0])
     parts = [p.copy().apply_translation([-cx, 0, 0]) for p in parts]
     (x0, y0, z0), (x1, y1, z1) = flat.bounds; W, L, H = x1 - x0, y1 - y0, z1 - z0
@@ -649,9 +651,7 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
         aj = ang[j]                                                                                         # this joint's own angle on the profile
         for q in secs[j + 1]: r = _rot2(q, yc, zc, aj); axb.plot(r[:, 0], r[:, 1], color=DIM, lw=0.45, alpha=0.55)   # ... curled
         axb.plot([yc - 2.5, yc + 2.5], [zc, zc], color=INK, lw=0.5); axb.plot([yc, yc], [zc - 2.5, zc + 2.5], color=INK, lw=0.5)
-        try:
-            import joints.ball as _B; ballD = 2.0 * float(_B._ASSET_R)               # the kit is printed 1:1 (18 mm pitch)
-        except Exception: ballD = None
+        ballD = ISO_BALL_D * kit if kit else None                                   # 10 Nov 2026: the kit as printed (was the 1:1 ball whatever the kit)
         lo_z = z0 - 1.0
         if ballD: _dim(axb, yc - ballD / 2, lo_z - 2.0, yc + ballD / 2, lo_z - 2.0, f"Ø {ballD:.1f} ball", off=0)
         _dim(axb, yc + win - 5, z0, yc + win - 5, zc, f"{zc - z0:.1f}", off=0)
@@ -660,7 +660,7 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
             axb.text(yc + (win - 1) * math.cos(math.radians(-a)), zc + (win - 1) * math.sin(math.radians(-a)), lab, fontsize=5.5, color=DIM, family="monospace", va="center")
         gv = lambda k, d=0.0: float(P.get(k, d))
         axb.text(yc - win + 1, lo_z - 9.5,
-                 f"clearance {gv('clearance'):.2f} mm · pivot z {zc:.1f} · solid = ahead, dashed = behind, grey = behind curled", fontsize=5.5, color=DIM, family="monospace")
+                 (f"clearance {ISO_CLEAR * kit:.2f} mm · " if kit else "") + f"pivot z {zc:.1f} · solid = ahead, dashed = behind, grey = behind curled", fontsize=5.5, color=DIM, family="monospace")
         axb.set_title(f"DETAIL B · joint J{j + 1} ({names[j]}–{names[j + 1]}) · section y–z · 2:1", fontsize=8, loc="left", **mono)
         axb.set_xlim(yc - win, yc + win); axb.set_ylim(lo_z - 12, ztop + 3)
     else: axb.set_title("DETAIL B · no joints", fontsize=8, loc="left", **mono)
@@ -713,17 +713,29 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
     ax5.text(0.0, 0.97, "\n".join(rows), fontsize=5.9, va="top", ha="left", linespacing=1.45, transform=ax5.transAxes, **mono)
     _box(ax5)
 
-    # ---- BED LAYOUT
+    # ---- BED LAYOUT (10 Nov 2026): the animal prints in place, captive balls in their sockets, so it goes on the bed whole --
+    # its flat footprint, turned if that is what fits (the pieces packed onto separate plates could not be assembled after)
     ax6 = fig.add_subplot(gs[15:24, 15:19]); ax6.set_facecolor(BG); ax6.set_aspect("equal"); ax6.axis("off")
-    plates, nofit = _pack_bed(sizes)
+    fits = _fits_bed(W, L)
     ax6.add_patch(Rectangle((0, 0), BED_MM, BED_MM, fill=False, ec=INK, lw=0.9))
-    for nm, bx, by, bwid, bh in (plates[0] if plates else []):
-        ax6.add_patch(Rectangle((bx, by), bwid, bh, fill=False, ec=INK, lw=0.5))
-        ax6.text(bx + 2.5, by + bh / 2, nm, fontsize=5.3, va="center", **mono)
-    others = " · ".join(f"plate {i + 2}: {', '.join(b[0] for b in pl)}" for i, pl in enumerate(plates[1:]))
-    foot = (others if others else "one plate") + (f" · NO FIT (> {BED_MM} mm): {', '.join(nofit)} — scale" if nofit else "")
+    th = 0.0
+    if fits and max(W, L) > BED_MM:
+        for th in np.radians(np.arange(1, 46, 1.0)):
+            c_, s_ = np.cos(th), np.sin(th)
+            if W * c_ + L * s_ <= BED_MM and W * s_ + L * c_ <= BED_MM: break
+    try:
+        import shapely.geometry as _sg, shapely.affinity as _sa
+        fp = _sg.MultiPoint(np.asarray(flat.vertices)[::7, :2]).convex_hull          # the footprint's hull (fast; what the bed sees)
+    except Exception: fp = None
+    if fp is not None and not fp.is_empty and fp.geom_type == "Polygon":
+        fp = _sa.rotate(fp, math.degrees(th), origin="centroid"); bx0, by0, bx1, by1 = fp.bounds
+        fp = _sa.translate(fp, BED_MM / 2 - (bx0 + bx1) / 2, BED_MM / 2 - (by0 + by1) / 2)
+        xs, ys = fp.exterior.xy; ax6.plot(xs, ys, color=INK if fits else DIM, lw=0.6)
+    else:
+        ax6.add_patch(Rectangle((BED_MM / 2 - min(W, BED_MM) / 2, BED_MM / 2 - min(L, BED_MM) / 2), min(W, BED_MM), min(L, BED_MM), fill=False, ec=INK, lw=0.5))
+    foot = (f"one piece, printed in place · {W:.0f} × {L:.0f} mm" + (" · turned" if th else "")) if fits else f"DOES NOT FIT: {W:.0f} × {L:.0f} mm on a {BED_MM} mm bed — scale it down"
     ax6.text(0, -12, foot[:90], fontsize=5.2, va="top", **mono)
-    ax6.set_title(f"BED LAYOUT · {BED_MM} × {BED_MM} mm · {len(plates)} plate{'s' if len(plates) != 1 else ''}", fontsize=7.5, loc="left", **mono)
+    ax6.set_title(f"BED LAYOUT · {BED_MM} × {BED_MM} mm · {'fits' if fits else 'too big'}", fontsize=7.5, loc="left", **mono)
     ax6.set_xlim(-6, BED_MM + 6); ax6.set_ylim(-34, BED_MM + 6)
 
     # ---- INFO · print checks, morphospace, editor coordinates
@@ -744,8 +756,9 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
         if rw: body_s.append(f"         {_spark(rw)}")
     elif isinstance(body, dict): body_s = ["BODY     " + ", ".join(f"{k} {v}" for k, v in body.items() if k != "rows")[:46]]
     else: body_s = ["BODY     preset rows (segCount %d)" % int(gv("segCount", 0))]
-    lines = [f"LENGTH {L:6.1f}  WIDTH {W:6.1f}  RELIEF {H:5.1f}", f"CLEAR  {gv('clearance'):5.2f}  PIECES {n:2d}  JOINTS {nj} ball",
-             f"CURL   {prof} · {tot:.0f}°  BED {BED_MM} · {len(plates)} plate{'s' if len(plates) != 1 else ''}", "",
+    lines = [f"LENGTH {L:6.1f}  WIDTH {W:6.1f}  RELIEF {H:5.1f}",
+             (f"JOINTS {nj} ball · {kit:.2f} × isopod · Ø {ISO_BALL_D * kit:.1f} · clear {ISO_CLEAR * kit:.2f}" if kit else f"PIECES {n:2d}  JOINTS {nj} ball"),
+             f"CURL   {prof} · {tot:.0f}°  BED {BED_MM} {'fits' if fits else 'too big'}", "",
              "PRINT CHECKS",
              f" valid     {'✓' if valid else ('✗' if valid is not None else '— (not checked)')}",
              f" contacts  {('none at rest' if not touching else ', '.join('%s–%s %.2f mm3' % (t['a'], t['b'], t['mm3']) for t in touching))[:44]}",

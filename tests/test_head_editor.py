@@ -274,6 +274,7 @@ def test_unbuildable_bodies_and_heads_are_refused_early(c):
         assert c.post("/api/build", json={"P": {}, "joint": "isopod", "body": bad}).status_code == 400
     for bad in ({"width": 0.3}, {"length": 3.0}, {"genal": float("nan")}, {"front_exp": "x"}):
         with pytest.raises(ValueError): SH.outline_of(bad)
-    assert c.post("/api/build", json={"P": {}, "joint": "isopod", "head": {"style": "harpes", "outline": {"length": 2.5, "width": 2.5, "genal": 2.5}}}).status_code == 400   # a 1.6 m print
+    assert c.post("/api/build", json={"P": {"printLength": 600}, "joint": "isopod", "head": {"style": "harpes", "outline": {"length": 2.5, "width": 2.5, "genal": 2.5}}}).status_code == 400   # a 1.6 m print
+    #   (10 Nov 2026: at printLength 0 the print is hand-sized -- this head would print at a third of 1.6 m -- so the size is pinned)
     assert A._grid_step(0.25, 80, 40) == 0.25 and A._grid_step(0.25, 600, 600) > 0.25 if hasattr(A, "_grid_step") else True
 
