@@ -457,6 +457,11 @@ class Shape:
         if not (self.o.get("dots")): return np.zeros(2)
         return self.ring_D[self._T_ring0.query([float(x), float(y)])[1]]
 
+    def dot_shift(self, x, y):
+        """How far the dots moved the margin nearest (x, y) (scale 1): (0, 0) without dots."""
+        if not (self.o.get("dots")): return np.zeros(2)
+        return self.ring_D[self._T_ring0.query([float(x), float(y)])[1]]
+
     def edges(self, x):
         a = np.abs(np.asarray(x, float)); return np.interp(a, self.ax, self.yf), np.interp(a, self.ax, self.yr)
 

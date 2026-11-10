@@ -51,6 +51,6 @@ def test_head_styles_endpoint_and_keys(c):
 
 @pytest.mark.slow
 def test_build_with_a_head_style(c):
-    P = c.get("/api/preset/proetida").get_json(); P["segCount"] = 4
+    P = c.get("/api/preset/proetida?raw=1").get_json(); P["segCount"] = 4
     m = c.post("/api/build", json={"P": P, "joint": "isopod", "head": "phacops"}).get_json()
     assert m["head"] == "phacops" and len(m["parts"]) == 6 and all(p["bodies"] == 1 and p["watertight"] for p in m["parts"])

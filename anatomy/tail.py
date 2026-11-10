@@ -29,6 +29,18 @@ def plan(P):
     nk = float(P.get("pygNeck", 0.0)); nkl = max(float(P.get("pygNeckLen", 0.30)), 1e-3)
     def neck_f(yy):                                             # 7 Nov 2026 (schema 6.9): the tail necks in at its front
         return 1.0 - nk * (1.0 - smoothstep(0.0, nkl, np.clip(yy, 0, 1)))   # and swells to full width by nkl of its length
+    # 29 Oct 2026: the swept anterior margin. Real pygidia carry the anterolateral corner BEHIND the axial front
+    # (TriloMorph: median 21 deg, 86 % of 111 pygidia); the tail built since v4 had a straight front. pygFrontSweep is
+    # tan of that angle (corner set-back / lateral run), 0 = straight as before. The whole tail is sheared along y by
+    # fy(x), growing from the axial furrow (0, so the hinge is untouched) to the corner with the thoracic blade's own
+    # exponent, and fading to nothing at the tip, so the furrows, ribs, border and the front flap all follow the sweep.
+    fsw = float(P.get("pygFrontSweep", 0.0)) * max(wp - a, 1e-6)
+    def fy(x):
+        q = np.clip((np.abs(np.asarray(x, float)) - a) / max(wp - a, 1e-6), 0, 1); return fsw * q ** 1.6
+    def shear(x, y):                                            # plan (x, y) -> built (x, y'): y' = fy + y (1 - fy / Lp)
+        f = fy(x); return x, f + np.asarray(y, float) * np.maximum(1 - f / Lp, 0.05)
+    def unshear(x, y):
+        f = fy(x); return x, (np.asarray(y, float) - f) / np.maximum(1 - f / Lp, 0.05)
     margin = P["marginHeight"] * h
     rise = P["axisRise"] * h
     F = furrow_amp(P) * float(P.get("pygFurrowScale", 1.0))
@@ -132,7 +144,7 @@ def plan(P):
             X_[m] = bx + c_ * dx - s_ * dy + ax_; Y_[m] = by + s_ * dx + c_ * dy + ay_
         return X_, Y_
     PHI_MIN = math.radians(1.5)   # the margin never reaches the front line: at phi = 0 the outer grid column would lie
-    def outline(u, v):            # along y = 0 and its corner triangles would be collinear (the spline fit used to hide it)
+    def outline_plan(u, v):       # along y = 0 and its corner triangles would be collinear (the spline fit used to hide it)
         phi = PHI_MIN + (math.pi - 2 * PHI_MIN) * 0.5 * (1 - u)
         mx, my = margin_pt(np.array([phi])); fx = u * (wp - 1.0)
         if band > 0.01:                                            # inside: smooth rings (the base margin scaled about the axis
@@ -143,6 +155,10 @@ def plan(P):
             w_ = (v - (1 - band)) / band
             return float(ix + w_ * (mx[0] - ix)), float(iy + w_ * (my[0] - iy))
         return float((1 - v) * fx + v * mx[0]), float(v * my[0])
+    def outline(u, v):
+        x, y = outline_plan(u, v)
+        if fsw <= 1e-9: return x, y
+        xs, ys = shear(x, y); return float(xs), float(ys)
     def outside(x, y):
         wx = wp * neck_f(np.asarray(y, float) / Lp) if nk > 0.005 else wp
         r = (np.abs(x / wx) ** nO + np.abs(y / Lp) ** nO) ** (1.0 / nO)
@@ -150,6 +166,7 @@ def plan(P):
         return np.clip((r - 1) * np.hypot(x, y) / np.maximum(r, 1e-6) / Lmax, 0, 1)
     def ov_pre(ax, y): return np.where(y > 0.35 * Lp, outside(ax, y), 0.0)   # the margin spines' region (no ribs there)
     def zfun(x, y):
+        if fsw > 1e-9: x, y = unshear(np.asarray(x, float), y)       # back to the plan's frame: the relief rides the shear
         ax = np.abs(x); xm = xmax(y); yy = np.clip(y / Lp, 0, 1)
         nT = P["tailDomeExp"]
         tz = np.clip(1 - yy ** nT, 0, 1) ** (1 / nT) * 0.9 + 0.1
@@ -210,6 +227,7 @@ def plan(P):
         the grid's smoothing blur (mesh.sample_grid detail=), as the head's sutures are, so 1 mm furrows survive."""
         fan = float(P.get("pygRibFan", 0.0)); n_ = int(P["pygRings"])
         if fan < 0.005 or n_ < 1: return np.zeros_like(np.asarray(x, float))
+        if fsw > 1e-9: x, y = unshear(np.asarray(x, float), y)       # the fan rides the front sweep's shear too (9 Nov 2026 merge)
         ax = np.abs(np.asarray(x, float)); y = np.asarray(y, float); yy = np.clip(y / Lp, 0, 1); xm = xmax(y)
         taper = float(P.get("pygAxisTaper", 0.85)); ayf = lambda yv: a * (1 - taper * np.clip(np.asarray(yv, float) / (Lp * ka), 0, 1)); ay = ayf(y)
         r_at = float(P.get("pygRingAt", -1.0)); dy_k = Lp * ka / (n_ + 1.5); n_post = int(round(0.4 * n_)); N = n_ + n_post
@@ -243,11 +261,16 @@ def plan(P):
     # the margin spines, for ornaments(): where each leaves the base margin and how far it runs as a bump (24 Oct 2026)
     def base_pt(phi):
         bx, by = wp * se(math.cos(phi)), Lp * se(math.sin(phi))
-        return (bx * neck_f(by / Lp) if nk > 0.005 else bx), by
+        x, y = (bx * neck_f(by / Lp) if nk > 0.005 else bx), by
+        if fsw > 1e-9: x, y = shear(x, y)
+        return float(x), float(y)
     def margin_xy(phi):
-        mx, my = margin_pt(np.asarray(phi, float)); return np.c_[mx, my]
+        mx, my = margin_pt(np.asarray(phi, float))
+        if fsw > 1e-9: mx, my = shear(mx, my)
+        return np.c_[mx, my]
     return dict(outline=outline, zfun=zfun, zfun_base=zfun_base, detail=fan_field if has_fan else None, t=t, Lp=Lp, wp=wp, a=a, margin=margin, u_a=a / max(wp, 1e-6),
-                axis_len=Lax, border_frac=bwf, outline_exp=nO, spines=spines, base_pt=base_pt, margin_xy=margin_xy, tube=tube)
+                axis_len=Lax, border_frac=bwf, outline_exp=nO, spines=spines, base_pt=base_pt, margin_xy=margin_xy, tube=tube,
+                front_y=fy, front_sweep=fsw)
 
 def _base(S): return (S.get("zfun_base", S["zfun"]), S.get("detail"))   # 9 Nov 2026: the fan furrows ride on the blurred base (anatomy/head._base)
 

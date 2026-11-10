@@ -42,9 +42,12 @@ PARAMS = [
     Param("length", "Body length", 130, 60, 250, 1, "Body", "Whole animal, head tip to tail shield tip (spines extra)", unit="mm"),
     Param("width", "Max width", 65, 30, 140, 1, "Body", "Widest point of the body", unit="mm"),
     Param("relief", "Relief", 16, 6, 40, 0.5, "Body", "Dorsal height of the vault at the axis", unit="mm"),
-    Param("segCount", "Thoracic segments", 6, 2, 16, 1, "Body", "Number of articulating thoracic segments", kind="int"),
-    Param("cephFrac", "Head length fraction", 0.33, 0.18, 0.45, 0.005, "Body", "Cephalon length / body length"),
-    Param("pygFrac", "Tail shield fraction", 0.14, 0.05, 0.40, 0.005, "Body", "Pygidium length / body length (spines extra)"),
+    # 9 Nov 2026: body-plan ranges widened to the 70 TriloMorph whole bodies (data/prism/fossils_trilomorph.csv: head 0.20-0.455,
+    # tail 0.0375-0.418, 6-19 segments; 10 of 70 were outside 0.18-0.45 / 0.05-0.40 / 2-16). preglabField may now be 0 (41 % of the
+    # 20-key fits sat at the old 0.02 floor; TriloMorph 5-95 % starts at 0).
+    Param("segCount", "Thoracic segments", 6, 2, 20, 1, "Body", "Number of articulating thoracic segments", kind="int"),
+    Param("cephFrac", "Head length fraction", 0.33, 0.18, 0.50, 0.005, "Body", "Cephalon length / body length"),
+    Param("pygFrac", "Tail shield fraction", 0.14, 0.03, 0.45, 0.005, "Body", "Pygidium length / body length (spines extra)"),
     Param("marginHeight", "Margin height", 0.34, 0.05, 0.60, 0.01, "Body", "Pleural margin height / relief"),
     Param("fulcrum", "Fulcrum", 0.55, 0.3, 0.9, 0.01, "Body", "Where the pleura bends down, as a fraction of half-width"),
     Param("overlap", "Shingle overlap", 0.5, 0.1, 0.8, 0.01, "Body", "Rear flap length as a fraction of segment pitch"),
@@ -82,12 +85,12 @@ PARAMS = [
     Param("glabRise", "Glabella rise", 0.18, 0.0, 0.6, 0.01, "Head", "Glabella height above the cheeks / relief"),
     Param("glabLobes", "Glabellar furrow pairs", 3, 0, 4, 1, "Head", "Pairs of lateral glabellar furrows", kind="int"),
     Param("glabFront", "Glabella front", 2.5, 1.5, 8.0, 0.1, "Head", "How the glabella closes at the front: 2.5 ovoid nose, 6+ blunt"),
-    Param("preglabField", "Preglabellar field", 0.10, 0.02, 0.35, 0.01, "Head", "Flat field between the glabella's front and the anterior margin / head length (TriloMorph median 0.06, 5-95 % 0-0.30). 0.10 = the head as built since 6.0"),
+    Param("preglabField", "Preglabellar field", 0.10, 0.0, 0.35, 0.01, "Head", "Flat field between the glabella's front and the anterior margin / head length (TriloMorph median 0.06, 5-95 % 0-0.30). 0.10 = the head as built since 6.0"),
     Param("eyeSize", "Eye size", 0.14, 0.0, 0.55, 0.005, "Head", "Eye radius / head half-width (0 = blind; a pelagic cyclopygid eye is ~0.45)"),
     Param("eyePos", "Eye position", 0.45, 0.10, 0.90, 0.01, "Head", "Along the head, 0 rear → 1 front"),
     Param("eyeArc", "Eye arc", 150, 60, 360, 5, "Head", "Angular extent of the visual surface (360 with eyeLobe 0: lenses all round)", unit="deg"),
     Param("eyeLobe", "Eye palpebral lobe", 1, 0, 1, 1, "Head", "1 = the solid eye carries its palpebral lobe inward of the visual arc (as built); 0 = the faceted drum alone", kind="int"),
-    Param("eyeElong", "Eye elongation", 1.0, 1.0, 4.0, 0.05, "Head", "The solid eye's length along the body / its width: the drum stretched fore-aft, its lenses laid on the stretched surface so they stay round (1 = round, as built; olenellids ~2.5-3.5)"),
+    Param("eyeStretch", "Eye elongation", 1.0, 1.0, 4.0, 0.05, "Head", "The solid eye's length along the body / its width: the drum stretched fore-aft, its lenses laid on the stretched surface so they stay round (1 = round, as built; olenellids ~2.5-3.5)"),
     Param("eyeHalf", "Eye half drum", 0, 0, 1, 1, "Head", "1 = only the outer half of the drum, its flat face toward the glabella (with eyeLobe 0, eyeArc 180: a half-round crescentic eye); 0 = the whole drum, as built", kind="int"),
     Param("eyeRoll", "Eye roll", 0.0, -30.0, 30.0, 1.0, "Head", "The solid eye tipped about its long axis: + leans its top outward, so the lens band faces down and out (0 = upright, as built)", unit="deg"),
     Param("eyeHeight", "Eye height", 0.8, 0.2, 1.6, 0.05, "Head", "Dome height of the eye / eye radius"),
@@ -126,6 +129,8 @@ PARAMS = [
     Param("sutureEnd", "Facial suture end", 0.0, -1.0, 1.0, 0.05, "Head",
           "Where the posterior branch meets the margin: -1 on the lateral margin forward of the genal angle (proparian, Phacopina), "
           "0 at the genal angle (gonatoparian, Calymenina), +1 on the posterior margin inboard of it (opisthoparian, Ptychopariina)"),
+    Param("sutureFront", "Suture front", 0.0, 0.0, 0.9, 0.01, "Head", "Where the facial suture's anterior branch meets the front margin: fraction of the half-width out from the axis. 0 = on the axis (connective, as before); phacopids 0.3-0.5 (TriloMorph LM10 lateral)."),
+    Param("sutureFrontBack", "Suture front set-back", 0.0, 0.0, 0.4, 0.01, "Head", "How far behind the front margin the suture's anterior end sits, as a fraction of the head length (0 = on the margin). Phacopids carry it inside the anterior border."),
     Param("sutureDepth", "Facial suture depth", 0.0, 0.0, 0.6, 0.05, "Head", "Groove cut along the suture; 0 = not drawn, the head is unchanged", unit="mm"),
     # ---- eye ridges (27 Sep 2026): the primitive character (Gon p. 41, Redlichia): a raised ridge from the glabella's
     # frontal lobe back and out to the front of the eye. Lost in most derived groups, so 0 is the derived state.
@@ -198,6 +203,7 @@ PARAMS = [
     Param("pygSpineSweep", "Tail spine lean", 0, 0, 60, 1, "Spines", "Each margin lobe leans back toward the rear by this much (0 = straight out from the tail's centre, as before); limited by the lobe's width", unit="deg"),
     Param("pygLobePoint", "Tail lobe point", 1.2, 1.0, 3.0, 0.1, "Spines", "The marginal lobes' flanks: 1 = straight-sided triangles, higher = concave flanks, a broad base running out to a slender point (1.2 = as before)"),
     Param("pygLobeBand", "Tail lobe band", 0.0, 0.0, 0.4, 0.01, "Spines", "The outer share of the tail's surface grid given to the lobes, so the dome inside stays smooth (0 = the whole grid follows the spiky margin, as before)"),
+    Param("pygFrontSweep", "Tail front sweep", 0.0, 0.0, 1.0, 0.01, "Tail", "How far the anterolateral corner sits behind the axial front, as tan of the sweep angle (corner set-back / lateral run). 0 = the straight front built since v4; TriloMorph pygidia: median 0.38 (21 deg). The whole tail shears with it, hinge untouched."),
     # ---- curved spines (23 Oct 2026, schema 6.5): every grafted spine may follow a circular arc. bend = the tangent's total
     #      turn root to tip (0 = straight, as before); roll = the plane it bends in about the spine's own axis (0 up, 90 out
     #      toward the side, 180 down). Defaults 0, so every preset and reading is unchanged.
@@ -256,7 +262,7 @@ UI = {
     "parts": {
         "Body":   ["length", "width", "relief", "wall"],
         "Head":   ["headOutlineExp", "headDomeExp", "headDomeFill", "headRearArc", "genalSpine", "genalWidthMM",
-                   "eyeSize", "eyeArc", "eyeLobe", "eyeElong", "eyeHalf", "eyeRoll", "eyeHeight", "eyePos", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade",
+                   "eyeSize", "eyeArc", "eyeLobe", "eyeStretch", "eyeHalf", "eyeRoll", "eyeHeight", "eyePos", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade",
                    "lensD", "lensRise"],   # lensGap is driven by the "Lens packing" slider in the eye editor instead
         "Thorax": ["segCount", "bladeChord", "tipSweep", "tipTaper"],
         "Tail":   ["pygFrac", "pygWidth", "pygRings", "pygRibRelief", "pygFurrowScale", "pygRibFan"],
@@ -298,12 +304,12 @@ CELLS = {
     "b1": dict(label="Glabella + occipital ring", doc="the raised axial part of the head", primary=["glabInflate", "glabRise", "glabLobes"],
                more=["glabFront", "preglabField", "headDomeExp", "headDomeFill", "headOutlineExp", "cephParallel", "headRelief", "headWall", "occipitalSpine", "occipitalTines", "occipitalSplay", "occipitalBend", "frontSpine", "frontSpineBend"]),
     "a1": dict(label="Cheek + genal angle", doc="the side of the head: eye, border, genal spine or prolongation", primary=["eyeSize", "genalSpine", "headRearArc"],
-               more=["eyePos", "eyeArc", "eyeLobe", "eyeElong", "eyeHalf", "eyeRoll", "eyeHeight", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade", "lensD", "lensGap", "lensRise",
+               more=["eyePos", "eyeArc", "eyeLobe", "eyeStretch", "eyeHalf", "eyeRoll", "eyeHeight", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade", "lensD", "lensGap", "lensRise",
                      "eyeStalk", "eyeStalkR", "eyeLean", "eyeStalkBend", "eyeSphere", "eyeAxial", "eyeTall", "eyeSink", "eyeCollar",
                      "borderWidth", "genalSweep", "genalAngle", "genalKink", "genalKinkAngle", "genalTip", "genalWeb", "genalWebRound", "genalWidth", "genalWidthMM", "headRearExp",
                      "headProngs", "headProngLen", "headProngSplay", "headProngStem", "headProngCenter", "headProngWidth", "headProngCurl", "headProngBend",
                      "genalHorn", "genalHornPitch", "genalHornBend", "genalHornRoll", "genalHornYaw", "genalHornWidth", "genalHornFlare",
-                     "sutureEnd", "sutureDepth", "eyeRidge"]),
+                     "sutureEnd", "sutureFront", "sutureFrontBack", "sutureDepth", "eyeRidge"]),
     "b2": dict(label="Axial rings", doc="the ring chain over the hinges", primary=["axisFrac", "axisRise", "furrowDepth"],
                more=["effacement", "axisSigma", "ringArch", "tent", "vaultRound", "axialSpine", "axialPitch", "axialBend", "axialGrad"]),
     "a2": dict(label="Pleura", doc="inner run to the fulcrum, then the blade; its spine is the blade running on", primary=["overlap", "fulcrum", "pleuralSlope"],
@@ -313,7 +319,7 @@ CELLS = {
     "b3": dict(label="Tail axis", doc="the pygidial axis and its rings", primary=["pygRings", "tailRelief", "tailDomeExp"],
                more=["pygRibRelief", "pygFurrowScale", "pygRibFan", "pygAxisLen", "pygAxisFrac", "pygNode", "pygNodePos", "pygAxisEnd", "pygAxisCap", "pygAxisTaper", "pygAxisRound", "pygRingAt", "tailWall", "termSpine", "termBend"]),
     "a3": dict(label="Tail field + margin", doc="the pleural field, border, forks and marginal spines", primary=["pygWidth", "pygSpine", "pygMarginal"],
-               more=["tailOutlineExp", "pygNeck", "pygNeckLen", "pygBorderWidth", "pygSplay", "pygMarginalLen", "pygMarginalFrom", "pygMarginalTo", "pygSpineSweep", "pygLobePoint", "pygLobeBand", "pygSpineRise", "pygSpineBend", "pygSpineGrow", "pygSpineBlade", "pygSpineWidth", "printLength", "jointScale", "tailProngs", "tailProngLen", "tailProngSplay", "tailProngStem", "tailProngCenter", "tailProngWidth", "tailProngCurl", "tailProngBend"]),
+               more=["tailOutlineExp", "pygNeck", "pygNeckLen", "pygBorderWidth", "pygSplay", "pygMarginalLen", "pygMarginalFrom", "pygMarginalTo", "pygSpineSweep", "pygLobePoint", "pygLobeBand", "pygFrontSweep", "pygSpineRise", "pygSpineBend", "pygSpineGrow", "pygSpineBlade", "pygSpineWidth", "printLength", "jointScale", "tailProngs", "tailProngLen", "tailProngSplay", "tailProngStem", "tailProngCenter", "tailProngWidth", "tailProngCurl", "tailProngBend"]),
     "ruler": dict(label="Print + hinge", doc="manufacturing, not morphology", primary=["maxAngle", "clearance", "nKnuckles"], more=["boreDia", "barrelR"]),
 }
 VERTICAL_SPINES = ["occipitalSpine", "axialSpine", "termSpine"]     # their own family (10 Sep verdict): dorsal, not a cell prong

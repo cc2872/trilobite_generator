@@ -14,7 +14,7 @@ web/bodies/
 segment/out/
 web/heads_cache/
 
-# local (not part of the project)
+# local (not committed)
 .venv312/
 isopod_model/source/cache/
 prism_points.csv

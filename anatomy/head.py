@@ -213,7 +213,13 @@ def suture_path(P, S):
         xi = 0.5 * (float(S["glab_half"](np.array([-0.5 * Lc]))[0]) + wh); loop_r = 0.0
         y_ef = y_er = -0.55 * Lc
     x0 = min(xi, wh - 1.0)
-    pts = [(x0, float(S["y_front"](np.array([x0]))[0]) + 0.3)]              # anterior margin
+    # 29 Oct 2026, sutureFront: where the anterior branch meets the front margin, as a fraction of the half-width out
+    # from the axis. 0 = as drawn since 27 Sep (the groove starts beside the eye; the landmark LM10 sits on the axis, the
+    # connective case). Phacopids have it lateral (TriloMorph: 46 of 117); then the groove starts there and runs out to
+    # the palpebral loop.
+    sf = float(np.clip(P.get("sutureFront", 0.0), 0.0, 1.0)); sb = float(np.clip(P.get("sutureFrontBack", 0.0), 0.0, 0.4))
+    if sf > 1e-6: x0 = min(max(sf * wh, 0.8), wh - 1.0)
+    pts = [(x0, float(S["y_front"](np.array([x0]))[0]) + 0.3 + sb * Lc)]   # anterior margin (set back by sutureFrontBack x Lc)
     if G is not None:                                                         # the palpebral loop, axial side: front -> inner -> rear
         for ang in np.linspace(-90.0, 90.0, 19):
             th = math.radians(ang)
@@ -439,12 +445,13 @@ def lens_centres(R, H, slope, arc, lensD, lensGap):
     return out
 
 def eye_params(P, eR):
+    # eyeStretch, not "eyeElong": that is a retired key (schema.DEAD_KEYS) the frozen references still carry (9 Nov 2026)
     return dict(R=eR, H=P.get("eyeHeight", 1.7) * eR, slope_deg=P.get("eyeSlope", 15.0), shade=P.get("eyeShade", 0.0),
                 arc_deg=P.get("eyeArc", 110.0), lensD=P.get("lensD", 0.16), lensGap=P.get("lensGap", 0.3), lensRise=P.get("lensRise", 0.35),
                 stalk=P.get("eyeStalk", 0.0) * eR, stalk_r=P.get("eyeStalkR", 0.45), lean=P.get("eyeLean", 0.0),
                 sphere=P.get("eyeSphere", 0.0) > 0.5, bend_deg=P.get("eyeStalkBend", 30.0),
                 axial=P.get("eyeAxial", 1.0), tall=P.get("eyeTall", 1.0), sink_frac=P.get("eyeSink", 0.55),
-                lobe=P.get("eyeLobe", 1) > 0.5, elong=P.get("eyeElong", 1.0), half=P.get("eyeHalf", 0) > 0.5)
+                lobe=P.get("eyeLobe", 1) > 0.5, elong=P.get("eyeStretch", 1.0), half=P.get("eyeHalf", 0) > 0.5)
 
 def _base(S): return (S.get("zfun_base", S["zfun"]), S.get("detail"))   # a replacement head may give zfun alone
 

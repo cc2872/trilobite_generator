@@ -132,6 +132,25 @@ def mirror_x(m):
     v = m.vertices.copy(); v[:, 0] *= -1
     return trimesh.Trimesh(v, m.faces[:, ::-1], process=False)
 
+def symmetrize(m, eps=1e-6):
+    """Exactly mirror-symmetric copy of a (nearly) symmetric solid (10 Nov 2026): keep the x >= 0 half, drop its cap on
+    the sagittal plane, mirror it and STITCH the two halves along x = 0 (no boolean). union(half, mirror(half)) has the
+    right volume, but Manifold re-triangulates the weld and can leave a zero-volume fin on one side (the ball/flexi head
+    measured 0.5-2.2 mm asymmetric run to run on Linux). Falls back to the boolean weld if the stitch is not manifold."""
+    big = 4 * float(np.abs(np.asarray(m.bounds)).max()) + 10
+    half = intersection(m, box(big, 2 * big, 2 * big, at=(0, 0, 0), align=("min", "c", "c")))
+    v = half.vertices.copy(); on = np.abs(v[:, 0]) < eps; v[on, 0] = 0.0
+    f = half.faces[~on[half.faces].all(axis=1)]
+    mv = v.copy(); mv[:, 0] *= -1
+    out = trimesh.Trimesh(np.vstack([v, mv]), np.vstack([f, f[:, ::-1] + len(v)]), process=False)
+    out.merge_vertices(digits_vertex=7); out.remove_unreferenced_vertices()
+    try:
+        res = from_manifold(_as_man(out))
+        if res.is_watertight and abs(res.volume - 2 * half.volume) < 1e-3 * max(1.0, abs(half.volume)): return res
+    except Exception:
+        pass
+    return union(half, mirror_x(half))
+
 def is_symmetric(m, tol=0.05, n=6000, seed=0):
     """True if the SURFACE is invariant under x -> -x: points sampled on the mesh, mirrored, lie on the mesh within tol.
     (A vertex-set test is wrong after a boolean: Manifold may triangulate a flat face with an extra vertex on one side

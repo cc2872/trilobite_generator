@@ -22,7 +22,7 @@
    "bladeCamber": 0.06,
    "bladeChord": 1.3,
    "eyeArc": 180.0,
-   "eyeElong": 3.5,
+   "eyeStretch": 3.5,
    "eyeHalf": 1,
    "eyeHeight": 1.6,
    "eyeLobe": 0,

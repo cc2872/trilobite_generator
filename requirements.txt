@@ -2,6 +2,7 @@ numpy>=1.26
 scipy>=1.11
 trimesh>=4.4
 networkx>=3.0       # trimesh graph ops (mesh .split) — the isopod model build needs it
+shapely>=2.0         # plan outlines of the shaped head and genal piece (isopod_model/shaped_head.py, anatomy/genal.py)
 manifold3d==3.0.1
 python-fcl>=0.7
 rtree>=1.0

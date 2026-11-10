@@ -1,0 +1,13 @@
+file,specimen,Ax,Ay,Ox,Oy,Px,Py,Tx,Ty,n,Wmax_x1,Wmax_y1,Wmax_x2,Wmax_y2,Wrear_x1,Wrear_y1,Wrear_x2,Wrear_y2,conf_cp,conf_n,conf_w,note
+IG_442_II_138_C_grid.png,single specimen,390,117,392,300,388,580,388,705,14,182,442,600,442,190,585,590,585,l,l,l,"many-segment thorax; pygidium boundary and rear end unclear"
+IRSNB13012_C_grid.png,single specimen (D),246,17,246,245,248,508,250,607,11,65,230,439,230,133,497,387,497,m,l,l,"encrinurid; Wmax at genal angle where border runs into genal spines; thorax/pygidium boundary unclear"
+IRSNB_a12997_C_grid.png,single specimen,373,70,374,282,374,596,372,770,11,173,411,575,411,207,578,559,578,m,l,m,"encrinurid; Wmax on thorax (genae pass into long spines); n assumed-ish from ring count"
+LO_9639_C_grid.png,right-hand reconstruction drawing,661,27,661,142,662,357,662,396,13,508,124,815,124,596,355,731,355,m,l,m,"RECONSTRUCTION drawing measured; photo A is broken off posteriorly; A position +-10"
+MCZ103493_C_grid.png,single specimen (D),182,10,183,148,NA,NA,NA,NA,NA,5,115,365,115,NA,NA,NA,NA,l,l,l,"many (>30) segments; posterior runs to image bottom edge, cut off; right margin near image edge"
+MCZ7623-1_C_grid.png,single specimen (2),NA,NA,225,272,265,670,NA,NA,12,NA,NA,NA,NA,NA,NA,NA,NA,l,l,l,"oblique/twisted; cephalon front cut at top edge; pygidium runs to bottom edge; left pleurae cropped"
+MCZ_5445P_C_grid.png,single specimen (10),235,38,235,267,235,765,235,835,15,45,450,451,450,122,765,371,765,m,l,l,"many-segment thorax grading into small pygidium; P boundary uncertain"
+MCZ_638_C_grid.png,single specimen,375,30,375,350,372,730,372,810,9,32,270,703,270,195,725,545,725,l,l,m,"oblique/partly flexed, cephalon foreshortened; front edge near top crop; thorax/pygidium boundary unclear"
+MGUH_33662_C_grid.png,single specimen (Eurycare bornholmensis),281,52,281,203,282,692,282,720,16,50,350,525,350,150,688,420,688,m,l,l,"olenid, many segments, tiny pygidium; pleural tips spinose; rear segments poorly defined"
+MMB102_C_grid.png,single specimen (2),335,33,330,215,365,543,320,755,10,80,265,655,265,110,530,557,530,l,l,l,"spiny odontopleurid-like, slightly rotated; border passes into genal spines so Wmax ambiguous; P and n uncertain"
+MMB107_C_grid.png,specimen 4 (largest; 5 is smaller),226,27,226,210,226,332,226,455,10,70,150,395,150,135,325,325,325,m,l,l,"Acanthopyge spiny; widths taken at spine bases; partial specimen top right and spec 5 ignored"
+Maksimova-1978-3.9_C_grid.png,single specimen (e),388,25,393,258,NA,NA,385,775,18,190,215,590,215,NA,NA,NA,NA,l,l,l,"poorly preserved, tilted; A/O from overlay trace; many tapering segments, pygidium not distinguishable"

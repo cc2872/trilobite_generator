@@ -71,7 +71,9 @@ def cephalon(P):
     blind = G is None
     # --- suture
     su = np.asarray(S["suture"], float)                          # (N, 2), front margin -> margin end
-    x10, y10 = 0.0, y1                                           # marginal suture at the axis (ours starts beside the glabella)
+    sf = float(np.clip(P.get("sutureFront", 0.0), 0.0, 1.0))      # 29 Oct 2026: the suture's front end out on the margin (phacopids)
+    sb = float(np.clip(P.get("sutureFrontBack", 0.0), 0.0, 0.4))
+    x10 = min(max(sf * wh, 0.8), wh - 1.0) if sf > 1e-6 else 0.0; y10 = (yf(x10) + sb * Lc) if sf > 1e-6 else y1   # sf = 0: marginal suture at the axis, as before
     x12, y12 = float(su[-1, 0]), float(su[-1, 1])
     bw = float(P["borderWidth"]) * wh
     if bw > 0.05 and len(su) > 2:                                # LM11: the point on the posterior branch bw before its end
@@ -109,14 +111,15 @@ def pygidium(P):
     tip = Lp * (1.0 + (float(P["termSpine"]) if float(P["termSpine"]) > 0.05 else 0.0))   # LM4 at the spine tip if spiny
     bw = float(S.get("border_frac", P["borderWidth"])) * wp      # 6.4: the tail's own border (pygBorderWidth), else the head's
     ax_end = float(S.get("axis_len", AXIS_END)); ka = ax_end / AXIS_END
-    lm = {"LM1": (0.0, 0.0), "LM2": (0.0, ax_end * Lp), "LM4": (0.0, tip), "LM5": (a, 0.0), "LM7": (wp, 0.0)}
-    if bw > 0.05: lm.update(LM3=(0.0, Lp - bw), LM6=(wp - bw, 0.0))
+    fy = S.get("front_y", lambda x: 0.0 * np.asarray(x, float))       # 29 Oct 2026: the swept anterior margin (pygFrontSweep)
+    lm = {"LM1": (0.0, 0.0), "LM2": (0.0, ax_end * Lp), "LM4": (0.0, tip), "LM5": (a, float(fy(a))), "LM7": (wp, float(fy(wp)))}
+    if bw > 0.05: lm.update(LM3=(0.0, Lp - bw), LM6=(wp - bw, float(fy(wp - bw))))
     else: lm.update(LM3=lm["LM4"], LM6=lm["LM7"])
     # curves: axis = the axial furrow ay(y); margin = the ellipse (plus spines) from the tip round to the front; border = inset
     yy = np.linspace(0.0, ax_end * Lp, 60); axis = np.c_[a * (1 - 0.85 * np.clip(yy / Lp / ka, 0, 1)), yy]
     phi = np.linspace(math.pi / 2, math.radians(1.5), 120)
     mx = np.array([S["outline"](float(1 - 2 * (p - math.radians(1.5)) / (math.pi - 2 * math.radians(1.5))), 1.0) for p in phi])
-    margin = np.r_[mx, [[a, 0.0]]]                                # LM4 -> round the margin -> LM5 on the anterior edge
+    margin = np.r_[mx, [[a, float(fy(a))]]]                               # LM4 -> round the margin -> LM5 on the anterior edge
     if bw > 0.05:
         s = 1 - bw / max(wp, 1e-6)
         border = np.c_[mx[:, 0] * s, mx[:, 1] * (1 - bw / max(Lp, 1e-6))][::1]

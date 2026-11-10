@@ -1,0 +1,26 @@
+plate,genus,order,c_recipe,c,c_src,p_recipe,p,p_src,r_recipe,r,r_src,n_recipe,n,n_src,clipped
+01,Agnostus,agnostida,0.42,0.42,preset,0.4,0.4,preset,0.95,0.95,preset,2.0,2.0,recipe,
+02,Lejopyge,agnostida,0.42,0.42,preset,0.4,0.4,preset,0.95,0.95,preset,2.0,2.0,recipe,
+03,Pagetia,agnostida,0.42,0.42,preset,0.4,0.4,preset,0.95,0.95,preset,2.0,2.0,recipe,
+04,Pleuroctenium,agnostida,0.42,0.42,preset,0.4,0.4,recipe,0.95,0.95,preset,2.0,2.0,recipe,
+05,Yukonia,agnostida,0.42,0.42,preset,0.4,0.4,preset,0.95,0.95,preset,2.0,2.0,recipe,
+06,Bohemilla,asaphida,0.3,0.3,preset,0.1,0.1,recipe,0.45,0.45,recipe,10.0,10.0,recipe,
+07,Nileus,asaphida,0.32,0.32,recipe,0.28,0.28,recipe,0.8,0.8,preset,8.0,8.0,recipe,
+08,Novakella,asaphida,0.46,0.45,recipe,0.24,0.24,recipe,0.85,0.85,recipe,6.0,6.0,recipe,cephFrac 0.46->0.45
+09,Pricyclopyge,asaphida,0.3,0.3,preset,0.24,0.24,recipe,0.8,0.8,preset,6.0,6.0,recipe,
+10,Robergia,asaphida,0.24,0.24,recipe,0.1,0.1,recipe,0.6,0.6,recipe,11.0,11.0,recipe,
+11,Bathyuriscus,corynexochida,0.32,0.32,recipe,0.33,0.33,recipe,0.92,0.92,recipe,8.0,8.0,recipe,
+12,Harpillaenus,asaphida,0.3,0.3,recipe,0.33,0.33,recipe,0.95,0.95,recipe,10.0,10.0,recipe,
+13,Kolihapeltis,corynexochida,0.27,0.27,recipe,0.38,0.38,recipe,0.9,0.9,recipe,10.0,10.0,recipe,
+14,Panderia,corynexochida,0.4,0.4,recipe,0.22,0.22,recipe,0.95,0.95,recipe,8.0,8.0,recipe,
+15,Zacanthoides,corynexochida,0.3,0.3,recipe,0.13,0.13,recipe,0.5,0.5,recipe,9.0,9.0,recipe,
+16,Acanthopyge,lichida,0.18,0.18,recipe,0.42,0.4,recipe,0.85,0.85,recipe,10.0,10.0,recipe,pygFrac 0.42->0.4
+17,Ceratarges,lichida,0.24,0.24,recipe,0.15,0.15,recipe,0.5,0.5,recipe,10.0,10.0,recipe,
+18,Lobopyge,lichida,0.26,0.26,recipe,0.25,0.25,recipe,0.55,0.55,recipe,10.0,10.0,recipe,
+19,Terataspis,lichida,0.22,0.22,recipe,0.3,0.3,recipe,0.85,0.85,recipe,11.0,11.0,recipe,
+20,Uralichas,lichida,0.24,0.24,recipe,0.28,0.28,recipe,0.8,0.8,recipe,11.0,11.0,recipe,
+21,Boedaspis,odontopleurida,0.16,0.18,recipe,0.14,0.14,recipe,0.75,0.75,recipe,10.0,10.0,recipe,cephFrac 0.16->0.18
+22,Dicranurus,odontopleurida,0.18,0.18,recipe,0.14,0.14,recipe,0.7,0.7,recipe,9.0,9.0,recipe,
+23,Kettneraspis,odontopleurida,0.17,0.18,recipe,0.14,0.14,recipe,0.7,0.7,recipe,9.0,9.0,recipe,cephFrac 0.17->0.18
+24,Miraspis,odontopleurida,0.16,0.18,recipe,0.16,0.16,recipe,0.7,0.7,recipe,10.0,10.0,recipe,cephFrac 0.16->0.18
+25,Selenopeltis,odontopleurida,0.24,0.24,recipe,0.12,0.12,recipe,0.62,0.62,preset,10.0,10.0,recipe,

@@ -50,9 +50,7 @@ def _finish(body, mod, P, S, T, notes=None, skip=()):
             # (union(head, e, mirror(e)) left a ~1 mm asymmetric patch under the left eye's base, a Manifold artifact
             # on a near-coincident lobe/shell intersection; the half-and-mirror route cannot.)
             right = M.union(body, *solids)
-            big = 4 * max(abs(v) for v in np.asarray(right.bounds).ravel()) + 10
-            half = M.intersection(right, M.box(big, 2 * big, 2 * big, at=(0, 0, 0), align=("min", "c", "c")))
-            body = M.union(half, M.mirror_x(half))
+            body = M.symmetrize(right)                 # half, mirror, stitch (10 Nov 2026: no boolean weld, see mesh.symmetrize)
         else:
             body = M.union(body, *solids)
     return body
@@ -102,7 +100,9 @@ def animal(P, joint="pin", bevel_deg=None, grid=None, notes=None, opts=None, rep
     parts = [fn() for _, fn in builders(P, J, bevel_deg, grid, notes, opts)]
     if (opts or {}).get("overhangs", True) and J.overhang is not None and not J.MEASURED:
         parts = restore(P, parts, J, opts, report)
-    return parts
+    # 10 Nov 2026: the anatomy is symmetric by construction, but Manifold's booleans (the eye weld, the overhang clear)
+    # can leave a sub-mm one-sided fin on Linux; re-mirror any part that measures asymmetric so every build is exact.
+    return [M.symmetrize(p) if M.mirror_asymmetry_mm(p) > 0.05 else p for p in parts]
 
 def pose(P, joint, angles_deg):
     J = joints.get(joint) if isinstance(joint, str) else joint
