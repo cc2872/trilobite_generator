@@ -156,6 +156,30 @@
   #refs a:hover{border-bottom-color:var(--ink)}
   #refs .close{position:fixed;right:22px;top:calc(16px + env(safe-area-inset-top,0px));z-index:6;background:var(--glass)}
   #refs .close:hover{background:var(--ink);color:var(--bg)}
+  /* 9 Nov 2026: the blueprint menu, the tree page's first page -- the ten order presets, two rows of five, each its
+     dorsal plan from the generator's blueprint (web/static/blueprints/<preset>.png); a card opens the preset */
+  #menu{position:absolute;inset:0;z-index:3;background:var(--bg);display:flex;flex-direction:column;
+        padding:calc(64px + env(safe-area-inset-top,0px)) 22px 22px;box-sizing:border-box}
+  #menu[hidden]{display:none}
+  #menu .grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(2,1fr);
+        border-top:1px solid var(--rule);border-left:1px solid var(--rule)}
+  #menu .card{position:relative;display:block;min-height:0;border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);
+        color:var(--ink);text-decoration:none;overflow:hidden;outline:none}
+  #menu .card img{position:absolute;left:12%;right:12%;top:15%;bottom:13%;width:76%;height:72%;object-fit:contain;
+        opacity:.86;transition:opacity .25s, transform .35s}
+  #menu .card .no{position:absolute;left:14px;top:12px;font-size:11px;letter-spacing:.14em;text-transform:lowercase;line-height:1.5}
+  #menu .card .no b{display:block;font-weight:400;font-size:15px;letter-spacing:.06em}
+  #menu .card .go{position:absolute;right:14px;top:14px;font-size:16px;transition:transform .25s}
+  #menu .card .nm{position:absolute;left:14px;bottom:12px;font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+  #menu .card .rg{position:absolute;right:14px;bottom:12px;font-size:10px;letter-spacing:.06em;color:var(--ink-dim);text-transform:none}
+  #menu .card:hover img, #menu .card:focus-visible img{opacity:1;transform:scale(1.03)}
+  #menu .card:hover .go, #menu .card:focus-visible .go{transform:translateX(4px)}
+  #menu .card:focus-visible{box-shadow:inset 0 0 0 2px var(--ink)}
+  #menu .card .missing{position:absolute;inset:0;display:grid;place-items:center;color:var(--ink-faint);font-size:10px;letter-spacing:.14em}
+  #top{z-index:4}
+  #top #menubtn.on{background:var(--ink);color:var(--bg)}
+  @media (max-width:900px){ #menu{overflow:auto} #menu .grid{flex:none;grid-template-columns:repeat(2,1fr);grid-template-rows:none;grid-auto-rows:minmax(260px,46vh)}
+    #menu .card .rg{display:none} }
 </style>
 </head>
 <body>
@@ -163,11 +187,14 @@
 
 <div class="hud" id="top">
   <a class="btn" id="gen" href="/">Universal Trilobite Generator</a>
+  <button class="btn on" id="menubtn" type="button" aria-pressed="true" title="The ten order presets (B)">Blueprints</button>
   <div id="views" role="group" aria-label="Layout"><button class="btn on" type="button" aria-pressed="true">Spiral</button><button class="btn" type="button" aria-pressed="false">Timeline</button><button class="btn" type="button" aria-pressed="false">Tree</button><button class="btn" type="button" aria-pressed="false">Earth</button></div>
   <button class="btn" id="play" type="button" aria-pressed="false" title="Run through all the layouts (P)">Play</button>
   <button class="btn" id="refsbtn" type="button" aria-expanded="false" aria-controls="refs" title="Literature and credits (S)">Sources</button>
   <div class="k">TREE <span>  542 Ma to 251 Ma  one drawing, four layouts</span></div>
 </div>
+
+<nav id="menu" aria-label="Blueprints: the ten order presets"><div class="grid" id="menugrid"></div></nav>
 
 <div class="hud" id="panel">
   <h2>Trilobite Morphospace</h2>
@@ -922,7 +949,31 @@ function select(n){
 // in the app these are real links (web/app.py serves this page at /tree); in the mock-up they go nowhere
 if(!/\/tree/.test(location.pathname)) document.querySelectorAll('a.btn').forEach(a=>a.addEventListener('click',e=>e.preventDefault()));
 select(byId.redlichiida); setTime(T0,{animate:false});
-goMode(Math.max(0, MODES.indexOf(location.hash.slice(1))), {animate:false, user:false});
+// ---- the blueprint menu (9 Nov 2026): the first page. The ten orders in MENU_ORDER, #1 to #10; each card
+// is the preset's dorsal plan from its blueprint and opens it in the generator (a preset with a drawing opens as that animal)
+const MENU_ORDER = ['agnostida','asaphida','corynexochida','harpetida','redlichiida','lichida','odontopleurida','phacopida','proetida','ptychopariida'];   // the menu's numbering, #1 to #10
+const ORDERS = MENU_ORDER.map(id => byId[id]).filter(Boolean);
+const menu = document.getElementById('menu'), menubtn = document.getElementById('menubtn');
+document.getElementById('menugrid').innerHTML = ORDERS.map((r, i) => {
+  const {id, name, t0, t1} = r;
+  return `<a class="card" href="/?preset=${id}&view=blueprint" aria-label="Blueprint ${i + 1}: ${name}: its blueprint and 3D, editable in the studio">
+    <span class="no">blueprint<b>#${i + 1}</b></span><span class="go" aria-hidden="true">\u2192</span>
+    <img src="/static/blueprints/${id}.png" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'missing',textContent:'no blueprint yet'}))">
+    <span class="nm">${name}</span><span class="rg">${t0}\u2013${t1} Ma</span></a>`; }).join('');
+function showMenu(on){
+  menu.hidden = !on; menubtn.classList.toggle('on', on); menubtn.setAttribute('aria-pressed', on);
+  if(on){ setPlay(false); document.querySelectorAll('#views button').forEach(b=>{ b.classList.remove('on'); b.setAttribute('aria-pressed', false); }); }
+  try{ history.replaceState(null,'', on ? location.pathname+location.search : '#'+(goal || MODES[0])); }catch(_){}
+}
+const fitMenu = ()=>{ menu.style.paddingTop = (document.getElementById('top').offsetHeight + 8) + 'px'; };   // clear the top bar, however it wraps
+addEventListener('resize', fitMenu); fitMenu();
+menubtn.addEventListener('click', ()=>showMenu(true));
+document.querySelectorAll('#views button').forEach(b=> b.addEventListener('click', ()=>showMenu(false)));
+document.getElementById('play').addEventListener('click', ()=>{ if(!menu.hidden) showMenu(false); });
+document.addEventListener('keydown', e=>{ if((e.key==='b'||e.key==='B') && !e.metaKey && !e.ctrlKey && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) showMenu(menu.hidden); });
+const _h = location.hash.slice(1);
+goMode(Math.max(0, MODES.indexOf(_h)), {animate:false, user:false});
+showMenu(!MODES.includes(_h));          // no layout named in the address: the menu is the first page
 </script>
 </body>
 </html>

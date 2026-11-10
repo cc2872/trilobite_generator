@@ -1,0 +1,56 @@
+{
+ "name": "redlichiida-drawing",
+ "preset": "redlichiida",
+ "head": "redlichiida-drawing",
+ "spec": {
+  "rows": {
+   "0": {
+    "len": 9.387
+   },
+   "1": {
+    "len": 9.118
+   },
+   "10": {
+    "len": 6.705
+   },
+   "11": {
+    "len": 6.437
+   },
+   "12": {
+    "len": 6.168
+   },
+   "13": {
+    "len": 5.9
+   },
+   "14": {
+    "len": 5.632
+   },
+   "2": {
+    "len": 8.85
+   },
+   "3": {
+    "len": 8.582
+   },
+   "4": {
+    "len": 8.314
+   },
+   "5": {
+    "len": 8.046
+   },
+   "6": {
+    "len": 7.778
+   },
+   "7": {
+    "len": 7.509
+   },
+   "8": {
+    "len": 7.241
+   },
+   "9": {
+    "len": 6.973
+   }
+  }
+ },
+ "doc": "the redlichiida preset's drawing block (2026-11-09); its parameters live on /redlichiida",
+ "saved_at": "2026-11-09T14:28:01"
+}

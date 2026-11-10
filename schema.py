@@ -87,6 +87,9 @@ PARAMS = [
     Param("eyePos", "Eye position", 0.45, 0.10, 0.90, 0.01, "Head", "Along the head, 0 rear → 1 front"),
     Param("eyeArc", "Eye arc", 150, 60, 360, 5, "Head", "Angular extent of the visual surface (360 with eyeLobe 0: lenses all round)", unit="deg"),
     Param("eyeLobe", "Eye palpebral lobe", 1, 0, 1, 1, "Head", "1 = the solid eye carries its palpebral lobe inward of the visual arc (as built); 0 = the faceted drum alone", kind="int"),
+    Param("eyeElong", "Eye elongation", 1.0, 1.0, 4.0, 0.05, "Head", "The solid eye's length along the body / its width: the drum stretched fore-aft, its lenses laid on the stretched surface so they stay round (1 = round, as built; olenellids ~2.5-3.5)"),
+    Param("eyeHalf", "Eye half drum", 0, 0, 1, 1, "Head", "1 = only the outer half of the drum, its flat face toward the glabella (with eyeLobe 0, eyeArc 180: a half-round crescentic eye); 0 = the whole drum, as built", kind="int"),
+    Param("eyeRoll", "Eye roll", 0.0, -30.0, 30.0, 1.0, "Head", "The solid eye tipped about its long axis: + leans its top outward, so the lens band faces down and out (0 = upright, as built)", unit="deg"),
     Param("eyeHeight", "Eye height", 0.8, 0.2, 1.6, 0.05, "Head", "Dome height of the eye / eye radius"),
     Param("eyeLat", "Eye lateral position", 0.5, 0.0, 0.9, 0.01, "Head", "Eye centre / head half-width (0 = hug the glabella, the v4 rule). TriloMorph median 0.5; Phacops scan 0.55"),
     Param("eyeProfile", "Eye profile", 4.0, 2.0, 8.0, 0.1, "Head", "Super-Gaussian exponent of the eye dome: 2 = round, 8 = flat-topped drum (schizochroal)"),
@@ -159,7 +162,7 @@ PARAMS = [
     Param("pygRings", "Tail axial rings", 4, 0, 12, 1, "Tail", "Axial rings on the pygidium", kind="int"),
     Param("pygSpine", "Tail spine length", 0.9, 0.0, 2.0, 0.05, "Tail", "Paired tail spines / shield length (0 = none)"),
     Param("pygSplay", "Tail spine splay", 20, 0, 45, 1, "Tail", "Outward angle of the tail spines", unit="deg"),
-    Param("termSpine", "Terminal spine", 0.0, 0.0, 2.5, 0.05, "Tail", "Single median terminal spine / shield length (0 = none)"),
+    Param("termSpine", "Terminal spine", 0.0, 0.0, 6.0, 0.05, "Tail", "Single median terminal spine / shield length (0 = none; up to 6: an olenellid's shield is tiny and its spine long)"),
     # ---- extra spine families and ornament
     Param("axialSpine", "Axial spines", 0.0, 0.0, 2.5, 0.05, "Spines", "Dorsal spine on every thoracic ring / relief (0 = none)"),
     # 24 Oct 2026: the thoracic spines as curves that leave the plane (Koneprusia, Comura, Ceratonurus): the axial spines get a
@@ -180,6 +183,7 @@ PARAMS = [
     # continuing as curved solid spines (rise, bend, extra length). Every default is the tail built before.
     Param("pygRibRelief", "Tail rib relief", 0.0, 0.0, 3.0, 0.05, "Tail", "Convex pleural ribs between the tail's furrows, height x the furrow depth (0 = none)"),
     Param("pygFurrowScale", "Tail furrow scale", 1.0, 0.2, 4.0, 0.1, "Tail", "The tail's rings and pleural furrows, x the body's furrow depth"),
+    Param("pygRibFan", "Tail rib fan", 0.0, 0.0, 1.0, 0.05, "Tail", "The pleural furrows radiate: each runs from its ring straight to its own point on the margin, transverse at the front round to the rear (0 = near-transverse furrows beside the axis only, as built; 1 = the full fan)"),
     Param("pygSpineRise", "Tail spine rise", 0, 0, 80, 5, "Spines", "The tail's margin spines (the pair and the marginals) leave the shield at this pitch", unit="deg"),
     Param("pygSpineBend", "Tail spine bend", 0, -180, 180, 5, "Spines", "Their arc, root to tip", unit="deg"),
     Param("pygSpineGrow", "Tail spine extra length", 0.0, 0.0, 2.0, 0.05, "Spines", "Each margin spine runs on as a solid spine this much further / shield length (0 = the flat bump as built)"),
@@ -252,10 +256,10 @@ UI = {
     "parts": {
         "Body":   ["length", "width", "relief", "wall"],
         "Head":   ["headOutlineExp", "headDomeExp", "headDomeFill", "headRearArc", "genalSpine", "genalWidthMM",
-                   "eyeSize", "eyeArc", "eyeLobe", "eyeHeight", "eyePos", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade",
+                   "eyeSize", "eyeArc", "eyeLobe", "eyeElong", "eyeHalf", "eyeRoll", "eyeHeight", "eyePos", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade",
                    "lensD", "lensRise"],   # lensGap is driven by the "Lens packing" slider in the eye editor instead
         "Thorax": ["segCount", "bladeChord", "tipSweep", "tipTaper"],
-        "Tail":   ["pygFrac", "pygWidth", "pygRings", "pygRibRelief", "pygFurrowScale"],
+        "Tail":   ["pygFrac", "pygWidth", "pygRings", "pygRibRelief", "pygFurrowScale", "pygRibFan"],
         # every spine family in one place, head to tail, whether it's a lateral ("side") spine or a dorsal
         # midline ("top") one - previously scattered across Thorax/Tail and, for axialSpine/occipitalSpine/
         # termSpine/macroIndex/macroAmp/pygMarginalLen, not editable individually at all (only blendable via
@@ -294,7 +298,7 @@ CELLS = {
     "b1": dict(label="Glabella + occipital ring", doc="the raised axial part of the head", primary=["glabInflate", "glabRise", "glabLobes"],
                more=["glabFront", "preglabField", "headDomeExp", "headDomeFill", "headOutlineExp", "cephParallel", "headRelief", "headWall", "occipitalSpine", "occipitalTines", "occipitalSplay", "occipitalBend", "frontSpine", "frontSpineBend"]),
     "a1": dict(label="Cheek + genal angle", doc="the side of the head: eye, border, genal spine or prolongation", primary=["eyeSize", "genalSpine", "headRearArc"],
-               more=["eyePos", "eyeArc", "eyeLobe", "eyeHeight", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade", "lensD", "lensGap", "lensRise",
+               more=["eyePos", "eyeArc", "eyeLobe", "eyeElong", "eyeHalf", "eyeRoll", "eyeHeight", "eyeLat", "eyeProfile", "eyeSolid", "eyeSlope", "eyeShade", "lensD", "lensGap", "lensRise",
                      "eyeStalk", "eyeStalkR", "eyeLean", "eyeStalkBend", "eyeSphere", "eyeAxial", "eyeTall", "eyeSink", "eyeCollar",
                      "borderWidth", "genalSweep", "genalAngle", "genalKink", "genalKinkAngle", "genalTip", "genalWeb", "genalWebRound", "genalWidth", "genalWidthMM", "headRearExp",
                      "headProngs", "headProngLen", "headProngSplay", "headProngStem", "headProngCenter", "headProngWidth", "headProngCurl", "headProngBend",
@@ -307,7 +311,7 @@ CELLS = {
                      "pleuraFlip", "tipRound", "pleuralLobes", "pleuralLobeRelief", "pleuralLobeCut",
                      "pleuralHorn", "pleuralHornPitch", "pleuralHornBend", "pleuralHornRoll", "pleuralHornGrad"]),
     "b3": dict(label="Tail axis", doc="the pygidial axis and its rings", primary=["pygRings", "tailRelief", "tailDomeExp"],
-               more=["pygRibRelief", "pygFurrowScale", "pygAxisLen", "pygAxisFrac", "pygNode", "pygNodePos", "pygAxisEnd", "pygAxisCap", "pygAxisTaper", "pygAxisRound", "pygRingAt", "tailWall", "termSpine", "termBend"]),
+               more=["pygRibRelief", "pygFurrowScale", "pygRibFan", "pygAxisLen", "pygAxisFrac", "pygNode", "pygNodePos", "pygAxisEnd", "pygAxisCap", "pygAxisTaper", "pygAxisRound", "pygRingAt", "tailWall", "termSpine", "termBend"]),
     "a3": dict(label="Tail field + margin", doc="the pleural field, border, forks and marginal spines", primary=["pygWidth", "pygSpine", "pygMarginal"],
                more=["tailOutlineExp", "pygNeck", "pygNeckLen", "pygBorderWidth", "pygSplay", "pygMarginalLen", "pygMarginalFrom", "pygMarginalTo", "pygSpineSweep", "pygLobePoint", "pygLobeBand", "pygSpineRise", "pygSpineBend", "pygSpineGrow", "pygSpineBlade", "pygSpineWidth", "printLength", "jointScale", "tailProngs", "tailProngLen", "tailProngSplay", "tailProngStem", "tailProngCenter", "tailProngWidth", "tailProngCurl", "tailProngBend"]),
     "ruler": dict(label="Print + hinge", doc="manufacturing, not morphology", primary=["maxAngle", "clearance", "nKnuckles"], more=["boreDia", "barrelR"]),

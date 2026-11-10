@@ -1,8 +1,109 @@
 {
  "base": "olenellid",
  "blurb": "Redlichiida (olenellid) \u2014 Gon p. 52. Long genal horns, 14 segments, macropleural spine, tiny tail.",
+ "drawing": {
+  "body": "redlichiida-drawing",
+  "doc": "Redlichiida (Olenellus) on the isopod model (9 Nov 2026): semicircular head, broad ringed glabella, long half-drum eyes set back (eyeElong 3.5, eyeHalf, eyeRoll 8), genal spines to segment 5; 15 segments graded 1.25 -> 0.75 long with long swept pleural spines, macropleural 3rd segment; tiny pygidium",
+  "face": {
+   "axis_frac": 0.22,
+   "glab_boss": 0.0,
+   "glab_bulge": 0.15,
+   "glab_round": 0.8
+  },
+  "head": "redlichiida-drawing",
+  "model": "isopod",
+  "outline": {
+   "genal": 1.0,
+   "genal_tip": 0.08
+  },
+  "page": "/redlichiida",
+  "params": {
+   "axisRise": 0.2,
+   "bladeCamber": 0.06,
+   "bladeChord": 1.3,
+   "eyeArc": 180.0,
+   "eyeElong": 3.5,
+   "eyeHalf": 1,
+   "eyeHeight": 1.6,
+   "eyeLobe": 0,
+   "eyePos": 0.35,
+   "eyeRoll": 8.0,
+   "eyeSize": 0.07,
+   "eyeSolid": 1,
+   "furrowDepth": 1.8,
+   "glabInflate": 1.6,
+   "glabRise": 0.2,
+   "lensD": 0.16,
+   "lensGap": 0.3,
+   "macroAmp": 0.6,
+   "marginHeight": 0.3,
+   "ringArch": 0.12,
+   "segCount": 15,
+   "spineBase": 0.8,
+   "spineGrad": 0.4,
+   "spineSweep": 60.0,
+   "termSpine": 4.0,
+   "tipSweep": 0.8,
+   "tipTaper": 0.45,
+   "widthThoraxRear": 0.35
+  },
+  "rows": {
+   "0": {
+    "len": 9.387
+   },
+   "1": {
+    "len": 9.118
+   },
+   "10": {
+    "len": 6.705
+   },
+   "11": {
+    "len": 6.437
+   },
+   "12": {
+    "len": 6.168
+   },
+   "13": {
+    "len": 5.9
+   },
+   "14": {
+    "len": 5.632
+   },
+   "2": {
+    "len": 8.85
+   },
+   "3": {
+    "len": 8.582
+   },
+   "4": {
+    "len": 8.314
+   },
+   "5": {
+    "len": 8.046
+   },
+   "6": {
+    "len": 7.778
+   },
+   "7": {
+    "len": 7.509
+   },
+   "8": {
+    "len": 7.241
+   },
+   "9": {
+    "len": 6.973
+   }
+  },
+  "saved_at": "2026-11-09T14:28:01",
+  "schema": "6.9",
+  "style": "olenellus"
+ },
  "expect": {},
  "guide_edits_2026-10-02": {
+  "eyeRidge": [
+   null,
+   0.8
+  ],
   "lensD": [
    0.16,
    0.05
@@ -10,103 +111,99 @@
   "lensGap": [
    0.3,
    0.0
-  ],
-  "eyeRidge": [
-   null,
-   0.8
   ]
  },
  "length_policy": "pitch>=8: 175.0->176 mm",
  "order": "redlichiida",
  "params": {
-  "length": 176.0,
-  "width": 69.5,
-  "relief": 17.1,
-  "segCount": 14,
-  "cephFrac": 0.3,
-  "pygFrac": 0.06,
-  "marginHeight": 0.14,
-  "fulcrum": 0.55,
-  "overlap": 0.45,
-  "wall": 2.0,
-  "widthMaxPos": 0.2,
-  "widthHeadFront": 0.75,
-  "widthThoraxFront": 0.93,
-  "widthThoraxRear": 0.45,
-  "widthTail": 0.3,
+  "axialSpine": 0.0,
   "axisFrac": 0.28,
   "axisRise": 0.0,
-  "furrowDepth": 1.2,
-  "effacement": 0.0,
-  "tent": 1.0,
   "axisSigma": 0.55,
-  "pleuralSlope": 0.74,
-  "ringArch": 0.22,
+  "barrelR": 2.6,
   "bladeCamber": 0.14,
-  "headOutlineExp": 2.15,
-  "headDomeExp": 1.5,
-  "headDomeFill": 0.82,
-  "headWall": 1.0,
-  "tailWall": 1.0,
-  "headRelief": 1.0,
-  "tailRelief": 1.0,
-  "tailDomeExp": 2.0,
+  "bladeChord": 0.9,
+  "borderWidth": 0.1,
+  "boreDia": 1.95,
+  "cephFrac": 0.3,
   "cephParallel": 0.05,
-  "glabInflate": 1.25,
-  "glabRise": 0.18,
-  "glabLobes": 3,
-  "eyeSize": 0.12,
-  "eyePos": 0.45,
+  "clearance": 0.3,
+  "effacement": 0.0,
   "eyeArc": 150.0,
   "eyeHeight": 0.8,
   "eyeLat": 0.0,
+  "eyePos": 0.45,
   "eyeProfile": 4.0,
-  "eyeSolid": 0,
-  "eyeSlope": 15.0,
+  "eyeRidge": 0.8,
   "eyeShade": 0.0,
-  "lensD": 0.05,
-  "lensGap": 0.0,
-  "lensRise": 0.35,
-  "genalSweep": 0.3,
-  "borderWidth": 0.1,
-  "genalSpine": 0.55,
-  "headRearArc": 0.0,
-  "headRearExp": 2.2,
-  "genalWidth": 0.12,
-  "genalTip": 0.0,
-  "genalWidthMM": 0.0,
+  "eyeSize": 0.12,
+  "eyeSlope": 15.0,
+  "eyeSolid": 0,
+  "fulcrum": 0.55,
+  "furrowDepth": 1.2,
   "genalAngle": 7.3,
   "genalKink": 0.5,
   "genalKinkAngle": 20.7,
-  "tipSweep": 0.75,
-  "bladeChord": 0.9,
-  "tipTaper": 0.9,
-  "spineBase": 0.25,
-  "spineGrad": 0.1,
-  "macroIndex": 2,
+  "genalSpine": 0.55,
+  "genalSweep": 0.3,
+  "genalTip": 0.0,
+  "genalWidth": 0.12,
+  "genalWidthMM": 0.0,
+  "glabInflate": 1.25,
+  "glabLobes": 3,
+  "glabRise": 0.18,
+  "headDomeExp": 1.5,
+  "headDomeFill": 0.82,
+  "headOutlineExp": 2.15,
+  "headProngLen": 0.6,
+  "headProngSplay": 30,
+  "headProngs": 0,
+  "headRearArc": 0.0,
+  "headRearExp": 2.2,
+  "headRelief": 1.0,
+  "headWall": 1.0,
+  "length": 176.0,
+  "lensD": 0.05,
+  "lensGap": 0.0,
+  "lensRise": 0.35,
   "macroAmp": 0.9,
-  "spineSweep": 35.0,
-  "pygWidth": 0.82,
+  "macroIndex": 2,
+  "marginHeight": 0.14,
+  "maxAngle": 18.0,
+  "nKnuckles": 3,
+  "occipitalSpine": 0.0,
+  "overlap": 0.45,
+  "pleuralSlope": 0.74,
+  "pygFrac": 0.06,
+  "pygMarginal": 0,
+  "pygMarginalLen": 0.5,
   "pygRings": 1,
   "pygSpine": 0.0,
   "pygSplay": 14.0,
-  "termSpine": 0.0,
-  "axialSpine": 0.0,
-  "occipitalSpine": 0.0,
-  "pygMarginal": 0,
-  "pygMarginalLen": 0.5,
-  "headProngs": 0,
-  "headProngLen": 0.6,
-  "headProngSplay": 30,
-  "tailProngs": 0,
+  "pygWidth": 0.82,
+  "relief": 17.1,
+  "ringArch": 0.22,
+  "segCount": 14,
+  "spineBase": 0.25,
+  "spineGrad": 0.1,
+  "spineSweep": 35.0,
+  "tailDomeExp": 2.0,
   "tailProngLen": 0.5,
   "tailProngSplay": 30,
-  "maxAngle": 18.0,
-  "clearance": 0.3,
-  "boreDia": 1.95,
-  "barrelR": 2.6,
-  "nKnuckles": 3,
-  "eyeRidge": 0.8
+  "tailProngs": 0,
+  "tailRelief": 1.0,
+  "tailWall": 1.0,
+  "tent": 1.0,
+  "termSpine": 0.0,
+  "tipSweep": 0.75,
+  "tipTaper": 0.9,
+  "wall": 2.0,
+  "width": 69.5,
+  "widthHeadFront": 0.75,
+  "widthMaxPos": 0.2,
+  "widthTail": 0.3,
+  "widthThoraxFront": 0.93,
+  "widthThoraxRear": 0.45
  },
  "schema": "6.7"
 }

@@ -82,6 +82,8 @@ BODY_KEYS = dict(
     pyg_len=("mm", "length of the pygidium (all pygidial rows together)"),
     term_spine=("mm", "a terminal spine from the pygidium's tip (0 = none)"),
     tail_spines=("list", "the tail's own margin spines (24 Oct 2026): [{phi: deg along the margin (0 front corner .. 90 rear tip), len: mm, rise: deg, roll: deg, blade: 0..1}], right side; absent = the preset's pair + marginals"),
+    textures=("list", "9 Nov 2026: spike textures anywhere on the animal -- the spiny borders, thorny rows and prickly fields of so many trilobites: [{kind: 'row' (along a path of pts) or 'patch' (an ellipse at pts[0], half-sizes w x l, turned by turn), pts: [[x, y], ...] (mm, as for domes; a row's spikes are mirrored unless on the axis), spacing: mm between spikes, len: mm, r: root radius mm, sharp: tip radius / root radius (0 needle .. 1 blunt peg), rise: deg up from the surface (0 flat, 90 straight up), dir: deg, for a row the turn from square to the path (toward `side`), for a patch the heading (0 = rearward), side: +1 / -1 which side of a row they lean to, bend: deg the spike curves over its length, jit: 0..1 irregularity of place, size and lean, seed}]"),
+    domes=("list", "9 Nov 2026: domes anywhere on the animal -- inflated lobes, bosses, bullae, tubercles: [{x: mm across (>= 0, mirrored unless on the axis), y: mm along the body (0 = the first row's front; negative = on the head), w: half-width across, l: half-length along (mm), h: height above the surface at its centre (mm), shape: profile (2 round, 1 pointed, 4+ flat-topped), turn: plan rotation (deg), n: how many in a row, dx, dy: the step to the next one (mm), taper: each next one's size x this}]; a dome may overhang the margin (it is cut at the bed)"),
     spines=("list", "free spines anywhere on the animal (24 Oct 2026): [{x: mm across (>= 0, mirrored unless on the axis), y: mm along the body (0 = the first row's front; negative = on the head), len: mm, rise: deg, roll: deg, yaw: deg (0 straight back, + outward), hook: -1..1 (where it turns: 1 a hook at the root then a straight run, -1 a hooked tip), bend: deg, extra turn on top of the rise's (in the roll's plane; leaves the leave angle alone), turn_at: 0..1 where the turn is gathered (a hairpin; -1 = off, hook's profile)}]"),
     min_joint_mm=("mm", "the joint minimum at print: a row shorter than this fuses"),
     print_scale=("x", "print mm per model mm (default: 18 mm per median thoracic row)"),
@@ -193,9 +195,110 @@ def validate_list(lst):
     return out
 
 
-TAIL_SPINE_RANGE = dict(phi=(0.0, 90.0), len=(0.0, 500.0), rise=(-180.0, 180.0), roll=(-180.0, 180.0), blade=(0.0, 1.0), width=(0.3, 2.5), sweep=(0.0, 60.0))   # sweep (26 Oct 2026): the lobe's lean back, deg; missing = the preset's pygSpineSweep
+TAIL_SPINE_RANGE = dict(phi=(0.0, 90.0), len=(0.0, 500.0), rise=(-180.0, 180.0), roll=(-180.0, 180.0), blade=(0.0, 1.0), width=(0.3, 2.5), sweep=(0.0, 60.0), curve=(-90.0, 90.0), aim=(-60.0, 60.0))   # aim (9 Nov 2026): the lobe leaves turned this far outward (deg) before it curves   # curve (9 Nov 2026): the lobe bends as it goes out, deg at its tip (+ toward the rear)   # sweep (26 Oct 2026): the lobe's lean back, deg; missing = the preset's pygSpineSweep
 TAIL_SPINE_DEFAULT = dict(phi=70.0, len=20.0, rise=30.0, roll=0.0, blade=0.0, width=1.0)   # width (25 Oct 2026): the lobe's root width, x the built one
 MAX_TAIL_SPINES = 24
+
+DOME_RANGE = dict(x=(0.0, 400.0), y=(-400.0, 2000.0), w=(0.3, 300.0), l=(0.3, 300.0), h=(0.0, 200.0), shape=(0.6, 8.0), turn=(-180.0, 180.0),
+                  n=(1, 40), dx=(-200.0, 200.0), dy=(-200.0, 200.0), taper=(0.3, 1.5))
+DOME_DEFAULT = dict(x=0.0, y=0.0, w=6.0, l=6.0, h=4.0, shape=2.0, turn=0.0, n=1, dx=0.0, dy=6.0, taper=1.0)
+MAX_DOMES = 64
+
+TEX_RANGE = dict(spacing=(0.5, 60.0), len=(0.2, 80.0), r=(0.1, 10.0), sharp=(0.0, 1.0), rise=(-30.0, 90.0), dir=(-180.0, 180.0), side=(-1, 1),
+                 bend=(-120.0, 120.0), jit=(0.0, 1.0), seed=(0, 9999), w=(0.5, 200.0), l=(0.5, 200.0), turn=(-180.0, 180.0))
+TEX_DEFAULT = dict(kind="row", spacing=4.0, len=4.0, r=0.8, sharp=0.15, rise=30.0, dir=0.0, side=1, bend=0.0, jit=0.3, seed=1, w=10.0, l=10.0, turn=0.0)
+MAX_TEXTURES, MAX_TEX_PTS, MAX_TEX_SPIKES = 32, 16, 1500
+
+def validate_textures(lst):
+    """The spike textures (9 Nov 2026): up to MAX_TEXTURES dicts, kind row|patch, pts a list of [x, y] (a row needs 2+,
+    a patch its centre), every number inside TEX_RANGE (missing ones default)."""
+    if not isinstance(lst, list): raise ValueError("textures is not a list")
+    if len(lst) > MAX_TEXTURES: raise ValueError(f"{len(lst)} textures: at most {MAX_TEXTURES}")
+    out = []
+    for j, d in enumerate(lst):
+        if not isinstance(d, dict): raise ValueError(f"texture {j} is not a dict")
+        bad = set(d) - set(TEX_RANGE) - {"kind", "pts"}
+        if bad: raise KeyError(f"texture {j}: unknown keys {sorted(bad)} (have kind, pts, {sorted(TEX_RANGE)})")
+        q = dict(TEX_DEFAULT, **d)
+        if q["kind"] not in ("row", "patch"): raise ValueError(f"texture {j}: kind is row or patch, not {q['kind']!r}")
+        pts = q.get("pts")
+        if not isinstance(pts, list) or not pts or len(pts) > MAX_TEX_PTS: raise ValueError(f"texture {j}: pts is 1..{MAX_TEX_PTS} [x, y] points")
+        q["pts"] = [[_num(p[0], "x", -400.0, 400.0, f"texture {j}"), _num(p[1], "y", -400.0, 2000.0, f"texture {j}")] for p in pts]
+        if q["kind"] == "row" and len(q["pts"]) < 2: raise ValueError(f"texture {j}: a row needs 2+ points")
+        for k, (lo, hi) in TEX_RANGE.items(): q[k] = _num(q[k], k, lo, hi, f"texture {j}")
+        q["side"] = -1 if q["side"] < 0 else 1; q["seed"] = int(round(q["seed"])); out.append(q)
+    return out
+
+
+def texture_spikes(textures):
+    """Every spike the textures make: dicts (x, y, yaw, rise, len, r, tip, bend), yaw in degrees from +y (rearward) toward
+    +x. A row is resampled every `spacing` mm along its path, each spike square to the path (to `side`) turned by `dir`;
+    a patch fills its ellipse on a hex grid of `spacing`, each heading `dir`. jit moves, resizes and turns each one
+    (seeded). Mirrored unless the spike sits on the axis (|x| < 0.75 mm); a path drawn across the axis gives each half once."""
+    import numpy as _np
+    out = []
+    for d in textures or []:
+        rng = _np.random.default_rng(int(d["seed"])); sp = float(d["spacing"]); jit = float(d["jit"]); base = []
+        if d["kind"] == "row":
+            P = _np.asarray(d["pts"], float); seg = _np.hypot(*_np.diff(P, axis=0).T); s = _np.r_[0, _np.cumsum(seg)]
+            if s[-1] < 1e-6: continue
+            n = max(1, int(round(s[-1] / sp)) + 1)
+            for t in _np.linspace(0, s[-1], n):
+                t = float(_np.clip(t + jit * 0.35 * sp * rng.uniform(-1, 1), 0, s[-1]))
+                x, y = _np.interp(t, s, P[:, 0]), _np.interp(t, s, P[:, 1])
+                tx = _np.interp(t + 0.5, s, P[:, 0]) - _np.interp(t - 0.5, s, P[:, 0]); ty = _np.interp(t + 0.5, s, P[:, 1]) - _np.interp(t - 0.5, s, P[:, 1])
+                yaw = float(_np.degrees(_np.arctan2(-ty, tx))) if d["side"] > 0 else float(_np.degrees(_np.arctan2(ty, -tx)))   # square to the path
+                base.append((float(x), float(y), yaw + float(d["dir"])))
+        else:
+            cx, cy = d["pts"][0]; w, l = float(d["w"]), float(d["l"]); tr = _np.radians(float(d["turn"])); c, s_ = _np.cos(tr), _np.sin(tr)
+            hy = sp * 0.866; nx_, ny_ = int(w / sp) + 1, int(l / hy) + 1
+            for i in range(-ny_, ny_ + 1):
+                for k in range(-nx_, nx_ + 1):
+                    u = (k + 0.5 * (i % 2)) * sp + jit * 0.35 * sp * rng.uniform(-1, 1); v = i * hy + jit * 0.35 * sp * rng.uniform(-1, 1)
+                    if (u / w) ** 2 + (v / l) ** 2 > 1: continue
+                    base.append((cx + c * u - s_ * v, cy + s_ * u + c * v, float(d["dir"])))
+        if any(b_[0] > 0.75 for b_ in base) and any(b_[0] < -0.75 for b_ in base):
+            base = [b_ for b_ in base if b_[0] >= -0.75]                       # drawn across the axis: the right half, mirrored
+        for x, y, yaw in base:
+            g = 1 + jit * rng.uniform(-0.5, 0.5)
+            one = dict(x=x, y=y, yaw=yaw + jit * 15.0 * rng.uniform(-1, 1), rise=float(d["rise"]) * (1 + jit * rng.uniform(-0.4, 0.4)),
+                       len=float(d["len"]) * g, r=float(d["r"]) * (1 + jit * rng.uniform(-0.3, 0.3)), tip=float(d["sharp"]), bend=float(d["bend"]))
+            if x < -0.75: one.update(x=-x, yaw=-one["yaw"])                    # a spike drawn on the left half is described on the right
+            out.append(one)
+            if abs(one["x"]) >= 0.75: out.append(dict(one, x=-one["x"], yaw=-one["yaw"]))   # and mirrored
+        if len(out) > MAX_TEX_SPIKES: raise ValueError(f"spike textures make {len(out)} spikes: at most {MAX_TEX_SPIKES} (widen the spacing)")
+    return out
+
+
+def validate_domes(lst):
+    """The body's domes (9 Nov 2026): up to MAX_DOMES dicts, every number inside DOME_RANGE (missing ones default)."""
+    if not isinstance(lst, list): raise ValueError("domes is not a list")
+    if len(lst) > MAX_DOMES: raise ValueError(f"{len(lst)} domes: at most {MAX_DOMES}")
+    out = []
+    for j, d in enumerate(lst):
+        if not isinstance(d, dict): raise ValueError(f"dome {j} is not a dict")
+        bad = set(d) - set(DOME_RANGE)
+        if bad: raise KeyError(f"dome {j}: unknown keys {sorted(bad)} (have {sorted(DOME_RANGE)})")
+        q = dict(DOME_DEFAULT, **d)
+        for k, (lo, hi) in DOME_RANGE.items(): q[k] = _num(q[k], k, lo, hi, f"dome {j}")
+        q["n"] = int(round(q["n"])); out.append(q)
+    return out
+
+
+def dome_instances(domes):
+    """Every dome the list makes, one dict each (x, y, w, l, h, shape, turn): a row of n steps (dx, dy) away, each
+    `taper` times the one before; with its mirror image unless it sits on the axis (|x| < 0.75 mm)."""
+    out = []
+    for d in domes or []:
+        s = 1.0
+        for i in range(int(d["n"])):
+            x, y = d["x"] + i * d["dx"], d["y"] + i * d["dy"]
+            one = dict(x=x, y=y, w=d["w"] * s, l=d["l"] * s, h=d["h"] * s, shape=d["shape"], turn=d["turn"])
+            out.append(one)
+            if abs(x) >= 0.75: out.append(dict(one, x=-x, turn=-d["turn"]))
+            s *= d["taper"]
+    return out
+
 
 FREE_SPINE_RANGE = dict(x=(0.0, 400.0), y=(-400.0, 2000.0), len=(0.0, 500.0), rise=(-180.0, 180.0), roll=(-180.0, 180.0), yaw=(-180.0, 180.0),
                         tines=(1, 5), splay=(0.0, 180.0), stem=(0.0, 0.9), curl=(-60.0, 60.0), hook=(-1.0, 1.0), bend=(-360.0, 360.0), turn_at=(-1.0, 1.0))   # 25 Oct 2026: a prong -- tines (1 = a plain spine), their fan, the shared stem's share, the tines' lift at the split
@@ -243,6 +346,8 @@ def apply(rows, edits=None):
     if edits.get("model") not in (None, "thorax", "slab"): raise ValueError("model must be 'thorax' or 'slab'")
     if edits.get("tail_spines") is not None: validate_tail_spines(edits["tail_spines"])
     if edits.get("spines") is not None: validate_free_spines(edits["spines"])
+    if edits.get("domes") is not None: validate_domes(edits["domes"])
+    if edits.get("textures") is not None: validate_textures(edits["textures"])
     for k, (lo, hi) in BODY_RANGE.items():
         if edits.get(k) is not None: _num(edits[k], k, lo, hi, "body")
     if edits.get("list") is not None: rows = validate_list(edits["list"])
@@ -558,6 +663,8 @@ def plans(P, spec=None, strict=True):
             gs = gs + [list(range(len(th), len(rows)))]
     return dict(rows=rows, groups=gs, scale=scale, min_joint_mm=min_mm, parts=out, offsets=offsets, length=y, model=model, problems=problems(rows, scale, term, kit),
                 free_spines=validate_free_spines(spec["spines"]) if spec.get("spines") is not None else [], margin_spines=margin_spines,
+                domes=validate_domes(spec["domes"]) if spec.get("domes") is not None else [],
+                textures=validate_textures(spec["textures"]) if spec.get("textures") is not None else [],
                 term_spine=float(spec.get("term_spine") or 0.0), mode=("list" if spec.get("list") is not None else "preset"))
 
 

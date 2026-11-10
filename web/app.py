@@ -104,7 +104,8 @@ def _head_custom(spec):
     base_out = HS.outline(style)                                  # "crescent" = the kit's silhouette (head_styles.OUTLINES); unknown = {}
     outline = SH.outline_of(dict(base_out, **o_edits))
     face = HC.face_of(dict(base_face, **f_edits))
-    face_edits = {k: v for k, v in face.items() if v != HC.FACE.get(k)}        # only what differs from the crescent's own face
+    face_edits = {k: v for k, v in face.items() if v != HC.FACE.get(k) or v != base_face.get(k)}   # what differs from the crescent's own face -- and (9 Nov 2026) what
+    # the page set back to the crescent's value over a style that differs (Terataspis' tubercles 0 on the lichas style came back as 0.45)
     blob = json.dumps(dict(o=outline, f=face), sort_keys=True).encode()
     return dict(style=spec.get("style") or "crescent", base=style, outline=outline, face=face_edits, id=hashlib.sha1(blob).hexdigest()[:10],
                 saved=(dict(name=saved["name"], style=saved.get("style") or "crescent", outline=saved.get("outline") or {}, face=saved.get("face") or {}) if saved else None))
@@ -171,34 +172,6 @@ MEASURED = {}                    # param hash -> last instrument result (so the 
 PROGRESS = {"done": 0, "total": 0}   # parts finished in the build now running; the page polls it for its loading count
                                      # (one build at a time, held by LOCK, so a single global is enough)
 PORT = int(os.environ.get("PORT", 8765))   # the lab tunnel (trilomorph.org) points at 8765, the legacy port
-
-# ---- prism points (31 Oct 2026): every distinct animal built is logged as its hash + the four Raup-prism coordinates
-# (c=cephFrac, p=pygFrac, n=segCount, r=widthThoraxRear) so /prism accumulates a live cloud over every build anyone does.
-# Just the five numbers per animal (~40 bytes), never the mesh -- the STLs would be gigabytes. Deduped by hash; the flat
-# file survives restarts. Point it at a persistent volume with TRILO_PRISM_POINTS on the deploy box.
-PRISM_POINTS = os.environ.get("TRILO_PRISM_POINTS") or os.path.join(ROOT, "data", "prism_points.csv")
-_PRISM_SEEN = set(); _PRISM_LOCK = threading.Lock()
-def _prism_init():
-    try:
-        with open(PRISM_POINTS, encoding="utf-8") as f:
-            for line in f:
-                h = line.split(",", 1)[0].strip()
-                if h: _PRISM_SEEN.add(h)
-    except OSError: pass
-_prism_init()
-def _record_point(P):
-    """Log this animal's hash + Raup-prism coordinates once. Cheap, deduped, best-effort: a build is never failed
-    because the point could not be written."""
-    try:
-        h = schema.param_hash(P)
-        if h in _PRISM_SEEN: return
-        with _PRISM_LOCK:
-            if h in _PRISM_SEEN: return
-            _PRISM_SEEN.add(h)
-            os.makedirs(os.path.dirname(PRISM_POINTS) or ".", exist_ok=True)
-            with open(PRISM_POINTS, "a", encoding="utf-8") as f:
-                f.write(f"{h},{float(P['cephFrac']):.4f},{float(P['pygFrac']):.4f},{int(P['segCount'])},{float(P['widthThoraxRear']):.4f}\n")
-    except Exception: pass
 
 # ---- maintenance mode: flip to False (or delete this block) to bring the generator back. While True, every
 # route - the page, every /api/*, every /files/* - returns this instead of running any real code.
@@ -310,24 +283,6 @@ def body_page(): return send_file(os.path.join(ROOT, "web", "body.html"))       
 @app.get("/studio")
 def studio_page(): return send_file(os.path.join(ROOT, "web", "studio.html"))          # the combined editor (p5): head + body on one whole-animal drawing
 
-@app.get("/prism")
-def prism_page(): return send_file(os.path.join(ROOT, "web", "prism.html"))            # the Raup prism (30 Oct 2026): click a point, build it, see where it sits
-
-@app.get("/api/prism/points")
-def api_prism_points():
-    """The live cloud (31 Oct 2026): every distinct animal built here, as [hash, c, p, n, r]. Read fresh from the file
-    so a just-built animal shows up without a restart. Numbers only -- the meshes are never kept."""
-    out = []
-    try:
-        with open(PRISM_POINTS, encoding="utf-8") as f:
-            for line in f:
-                q = line.rstrip("\n").split(",")
-                if len(q) >= 5:
-                    try: out.append([q[0], float(q[1]), float(q[2]), int(float(q[3])), float(q[4])])
-                    except ValueError: pass
-    except OSError: pass
-    return jsonify(points=out)
-
 # ---- saved bodies (the body editor's "save"): web/bodies/<name>.json = {name, preset, spec, doc}. A saved body's
 # name goes wherever a body spec goes (?body=name, /api/build "body").
 BODIES = os.path.join(ROOT, "web", "bodies")
@@ -360,8 +315,9 @@ def _iso_problems(P, head, spec):
     else: scale = BALL_SCALE(P); L_body = P["length"] * (1 - P["cephFrac"])
     h = _head_style(head)
     if isinstance(h, dict):
-        o = h["outline"]; L_head = o["length"] * o["width"] * seg_halfwidth(P, 0) * (1.0 + o["genal"])   # axial length + the genal spines
-        if (L_head + L_body) * scale > RW.PRINT_MAX_MM: out.append(f"with this head the print would be {(L_head + L_body) * scale:.0f} mm long; at most {RW.PRINT_MAX_MM:g}")
+        o = h["outline"]; L_ceph = o["length"] * o["width"] * seg_halfwidth(P, 0)      # the head's axial length
+        L_tot = L_ceph + max(L_body, L_ceph * o["genal"])       # 9 Nov 2026: the genal spines run BESIDE the body, so the print is the head
+        if L_tot * scale > RW.PRINT_MAX_MM: out.append(f"with this head the print would be {L_tot * scale:.0f} mm long; at most {RW.PRINT_MAX_MM:g}")   # plus the longer of body and spines, not all three (a harpetid's prolongations were counted on top of the thorax they lie along)
     return out
 
 def BALL_SCALE(P):
@@ -378,7 +334,11 @@ def _body_id(P, spec):
     """Short hash of the RESOLVED rows (every row's numbers, the groups, the scale), for the cache key."""
     _isopod_body(); import rows as RW
     R = RW.plans(P, spec, strict=False)
-    blob = json.dumps(dict(rows=R["rows"], groups=R["groups"], scale=R["scale"], ts=R["term_spine"], model=R["model"]), sort_keys=True).encode()
+    key = dict(rows=R["rows"], groups=R["groups"], scale=R["scale"], ts=R["term_spine"], model=R["model"])
+    for k in ("free_spines", "margin_spines", "domes", "textures"):                  # 9 Nov 2026: the features drawn on the body are part of the animal too;
+        if R.get(k): key[k] = R[k]                                      # added only when present, so every existing key (and its cached build) stays
+    if (spec or {}).get("tail_spines") is not None: key["tail_spines"] = spec["tail_spines"]
+    blob = json.dumps(key, sort_keys=True, default=str).encode()
     return hashlib.sha1(blob).hexdigest()[:10]
 
 @app.route("/api/body_diagram", methods=["GET", "POST"])
@@ -447,7 +407,7 @@ def _save_body(q):
     if name in _presets() or name == "preset": raise ValueError(f"'{name}' is a preset's name")
     preset = q.get("preset") or schema.DEFAULT_PRESET
     if preset not in _presets(): raise KeyError("no such preset")
-    try: spec = dict(q.get("spec") or {}); RW.plans(schema.coerce(_presets()[preset], base=schema.table_defaults()), spec, strict=False)   # work in progress may be saved; the build refuses it
+    try: spec = dict(q.get("spec") or {}); RW.plans(_studio_params(preset), spec, strict=False)   # work in progress may be saved; the build refuses it. 9 Nov 2026: validated against the preset AS THE STUDIO HAS IT (its drawing block's segCount etc.), as the body is built
     except (KeyError, ValueError) as ex: raise ValueError(str(ex)[:200])
     head = str(q.get("head") or "crescent")                                                # the head it was drawn with (a style or a saved head)
     if head != "crescent" and _head_style(head) is None: raise KeyError(f"no such head '{head}'")
@@ -515,13 +475,17 @@ def _drawing_resolve(name, D):
     style = D.get("style") or IBODY.DEFAULT_HEAD
     if style not in HS.STYLES: raise KeyError(f"no such head style '{style}'")
     P = schema.coerce(dict(_presets()[name], **(D.get("params") or {})), base=schema.table_defaults())
-    outline = SH.outline_of(dict(dict(SH.OUTLINE, **HS.outline(style)), **{k: (v if k == "trace" else float(v)) for k, v in (D.get("outline") or {}).items()}))
+    outline = SH.outline_of(dict(dict(SH.OUTLINE, **HS.outline(style)), **{k: (v if k in ("trace", "dots") else float(v)) for k, v in (D.get("outline") or {}).items()}))
     face = dict(HS.style(style)[0], **{k: float(v) for k, v in (D.get("face") or {}).items()})
     from anatomy import head_crescent as HC
     head = dict(style=style, outline=outline, face=HC.face_of(IBODY.face_of(P, face)))   # face_of validates the keys
-    rows = D.get("rows") or {}
-    body = dict(rows=rows) if rows else None
-    return dict(P=P, style=style, outline=outline, face=face, rows=rows, head=head, body=body)
+    rows = dict(D.get("rows") or {})
+    # 9 Nov 2026: the block's rows may also carry the body's own features (domes, spike textures, tail lobes, free spines --
+    # any rows.BODY_KEYS key); the per-row edits are the digit keys (or a nested "rows")
+    per = {k: v for k, v in rows.items() if str(k).isdigit()}; extra = {k: v for k, v in rows.items() if not str(k).isdigit()}
+    if isinstance(extra.get("rows"), dict): per.update(extra.pop("rows"))
+    body = (dict(extra, **({"rows": per} if per else {}))) if rows else None
+    return dict(P=P, style=style, outline=outline, face=face, rows=per, head=head, body=body)
 
 def _drawing_block(name, q, old):
     """The page's state {"P", "outline", "face", "rows", "style"?, "doc"?} -> the stored block (edits only)."""
@@ -801,7 +765,6 @@ def api_build():
     """Print geometry: every part at the printed stop bevel (P['maxAngle']), one GLB each, cached by parameter hash."""
     body = request.get_json(force=True)
     P, notes = schema.coerce_report(body.get("P", {}), base=schema.table_defaults())
-    _record_point(P)                                       # log this animal's hash + prism coords (31 Oct 2026); deduped, no mesh
     joint = body.get("joint", "isopod")                    # "isopod" = the default (isopod model); "pin" = measured; "flexi"/"ball" = print joints
     fill = float(body.get("fill", 0.0) or 0.0)              # pin builds only: thicken the shell for printing (mm), print-only
     if joint == "isopod":
@@ -892,7 +855,6 @@ def api_measure():
 def _measure(P, notes, source):
     """Run the instrument on P (one at a time), remember the reading for the sheet, and record the animal. The page
     and the agent interface (web/agent.py) both measure through here."""
-    _record_point(P)                                       # the measured animal is a prism point too (31 Oct 2026)
     with LOCK:
         r, B = I.read(P)
     r = {k: v for k, v in r.items() if k not in ("scan_trace",)}

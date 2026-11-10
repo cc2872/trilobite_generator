@@ -78,7 +78,7 @@ CRESCENT_OUTLINE = dict(OUTLINE, length=1.08, front_exp=2.0, widest=0.08, genal=
 TRACE_MAX = 400     # points a traced outline may carry
 
 OUTLINE_RANGE = dict(   # what the silhouette is drawn for (11 Oct 2026: a 0.2-long head crashed in interp, a 3 x 3 x genal-3 one printed 2.7 m)
-    width=(0.5, 2.5), length=(0.4, 2.5), front_exp=(1.0, 8.0), front_point=(0.0, 1.5), widest=(0.0, 0.8), side=(0.0, 1.0), rear_taper=(0.0, 0.9),
+    width=(0.5, 4.0), length=(0.4, 2.5), front_exp=(1.0, 8.0), front_point=(0.0, 1.5), widest=(0.0, 0.8), side=(0.0, 1.0), rear_taper=(0.0, 0.9),
     corner=(0.0, 0.5), genal=(0.0, 3.5), genal_w=(0.02, 1.0), genal_tip=(0.0, 1.0), genal_angle=(-180.0, 180.0), genal_kink=(0.0, 0.9),
     genal_kink_angle=(-180.0, 180.0), genal_web=(0.0, 1.0), genal_web_round=(-1.0, 1.0),
     notch=(0.0, 1.0), notch_exp=(1.0, 8.0), dome_fill=(0.3, 1.0), horn_h=(0.0, 1.0), genal_sharp=(0.0, 1.0), horn_aspect=(0.3, 9.0), height=(0.2, 3.0), genal_at=(-1.0, 1.0),
@@ -434,6 +434,23 @@ class Shape:
         self.arc = np.r_[0, np.cumsum(np.hypot(*np.diff(out, axis=0).T))]
         inn = np.vstack(segs_i) if segs_i else np.array([[0.0, 1e4]]); self.T_in = cKDTree(inn)
         self.Lh = Lh
+        # 9 Nov 2026 -- ONE SURFACE for a brimmed head: the brim is measured from ONE outer margin, the head's own running on
+        # down the genal piece's outer edge to its tip, so the plate and the piece compute the same height where they meet
+        # (they are separate solids, unioned: two surfaces that disagree there leave creases, ledges and steps). The piece's
+        # inner edge is kept too: its section rounds off there.
+        self.T_oc = self.T_pi = None
+        if o["brim_w"] > 0 and self.piece is not None:
+            outer, inner = [], []
+            for nm_, ofn, _ in self.piece.bands:
+                if nm_ in ("root", "web"): continue
+                U_ = np.linspace(-1, 1, 241)
+                e1 = np.array([ofn(u_, 1.0) for u_ in U_]); e0 = np.array([ofn(u_, 0.0) for u_ in U_])
+                if np.abs(e0[:, 0]).mean() > np.abs(e1[:, 0]).mean(): e0, e1 = e1, e0       # the outer edge is the one farther out
+                outer.append(e1); inner.append(e0)
+            if outer:
+                po = _dense(np.vstack(outer)); pi = _dense(np.vstack(inner))
+                po = np.c_[np.abs(po[:, 0]), po[:, 1]]; pi = np.c_[np.abs(pi[:, 0]), pi[:, 1]]
+                self.T_oc = cKDTree(np.vstack([out, po])); self.T_pi = cKDTree(pi)
 
     def dot_shift(self, x, y):
         """How far the dots moved the margin nearest (x, y) (scale 1): (0, 0) without dots."""
@@ -461,18 +478,45 @@ class Shape:
         G = self.fields(ax, y); o = self.o
         z = HC._z_base(ax, Yh, face, geom=G)
         if o["brim_w"] > 0:                                        # the brim: its own surface between the margin and the vault
-            bw = o["brim_w"] * RO; do = G["do"]; fr = G["front"]; t = np.clip(do / bw, 0, 1); c = o["brim_curve"]
+            bw = o["brim_w"] * RO; do = G["do"]; fr = G["front"]; c = o["brim_curve"]
+            corner = np.ones_like(do)
+            if self.T_oc is not None:                              # 9 Nov 2026: one margin, head and genal piece (see __init__)
+                do = self.T_oc.query(np.column_stack([np.ravel(ax), np.ravel(y)]))[0].reshape(np.shape(ax))
+                pd0 = 0.88 * bw / max(int(o["brim_pits"]), 1)
+                # 1 on the head, 0 from the genal corner back: the whole rear lobe a crescent margin (notch) sweeps back into the
+                # piece's inner edge carries the piece's section, not the vault's rim and the posterior furrow (they crossed the
+                # piece's surface there in an X-shaped crease)
+                corner = 1 - smoothstep(self.yg - 2.5 * pd0, self.yg + 0.5 * pd0, y) * smoothstep(0.42 * RO, 0.6 * RO, ax)
+            t = np.clip(do / bw, 0, 1)
             prof = t ** (1.0 / (1.0 + c)) if c >= 0 else t ** (1.0 - c)
             hb = o["brim_rise"] * HC.RELIEF; edge = 0.55 * HC.RIM
             zb = edge + hb * prof
-            if int(o["brim_pits"]) > 0:
-                rows = int(o["brim_pits"]); pd = 0.88 * bw / rows; uu = do / pd; jr = np.clip(np.floor(uu), 0, rows - 1)
+            if int(o["brim_pits"]) > 0:                            # the pits stop short of the genal corner (the piece carries none)
+                rows = int(o["brim_pits"]); pd = 0.88 * bw / rows; uu = G["do"] / pd; jr = np.clip(np.floor(uu), 0, rows - 1)   # rows and arc from the SAME margin
                 s_ = G["arc"] / pd + 0.5 * np.mod(jr, 2)
-                zb = zb - 0.5 * np.exp(-(((uu - (jr + 0.5)) ** 2 + (s_ - np.round(s_)) ** 2) * pd ** 2) / (0.30 * pd) ** 2) * (do > 0.06 * bw) * (do < 0.94 * bw)
+                zb = zb - 0.5 * corner * np.exp(-(((uu - (jr + 0.5)) ** 2 + (s_ - np.round(s_)) ** 2) * pd ** 2) / (0.30 * pd) ** 2) * (G["do"] > 0.06 * bw) * (G["do"] < 0.94 * bw)
             w = (1 - smoothstep(0.92 * bw, 1.08 * bw, do)) * fr
             z = (1 - w) * (z + hb * fr) + w * zb                   # the vault stands on the brim's inner edge
-            z = z + o["brim_roll"] * HC.RELIEF * np.exp(-((do - bw) / (0.28 * bw)) ** 2) * fr
+            z = z + corner * o["brim_roll"] * HC.RELIEF * np.exp(-((do - bw) / (0.28 * bw)) ** 2) * fr
+            if self.T_oc is not None:                              # at the genal corner the plate takes the piece's own section, so
+                zp = self._piece_section(ax, y)                    # the posterior border's furrow and rim do not cross the brim there
+                z = corner * z + (1 - corner) * zp                 # (they made an X-shaped crease and a seam line at the root)
         return z + HC._detail(ax, Yh, face) if HC.has_detail(face) else z
+
+    def _piece_section(self, x, y):
+        """A brimmed head's genal piece (9 Nov 2026): the brim's profile from the combined outer margin (head + piece; see
+        __init__), with no pits and no girder roll, rounded off toward the piece's inner edge by a quarter round over 0.4 bw
+        (less where the blade is narrower). The plate takes this same section at the genal corner (z), so they are one."""
+        o = self.o; bw = o["brim_w"] * RO; c = o["brim_curve"]
+        q = np.column_stack([np.abs(np.ravel(x)), np.ravel(y)])
+        d_o = self.T_oc.query(q)[0].reshape(np.shape(x)); d_i = self.T_pi.query(q)[0].reshape(np.shape(x))
+        t = np.clip(d_o / bw, 0, 1)
+        prof = t ** (1.0 / (1.0 + c)) if c >= 0 else t ** (1.0 - c)
+        hb = o["brim_rise"] * HC.RELIEF; edge = 0.55 * HC.RIM
+        zb = edge + hb * prof
+        r_in = np.maximum(np.minimum(0.4 * bw, 0.45 * (d_o + d_i)), 1e-3)
+        f = np.sqrt(np.clip(1 - (1 - np.clip(d_i / r_in, 0, 1)) ** 2, 0, 1))
+        return edge + (zb - edge) * f
 
     def piece_z(self, name, s, v, x, y, face=None):
         """The genal piece's surface at scale 1 (relief 10), on band `name` at position s along it (0 root .. 1 tip) and v
@@ -481,7 +525,7 @@ class Shape:
         The web is a low plate at the edge floor; the root stub follows the head's surface just under it."""
         s = np.asarray(s, float); v = np.asarray(v, float)
         e_ = 0.6 * float(HC.face_of(face).get("rim", HC.RIM))                # 9 Nov 2026: the shield's edge floor follows the face's
-        if name in ("root", "web"): return np.full(np.shape(s), e_ + 0.15)   # rim (it was HC.RIM: a 0.9-unit plinth under every spine,
+        if name in ("root", "web") and not self.o["brim_w"] > 0: return np.full(np.shape(s), e_ + 0.15)   # rim (it was HC.RIM: a 0.9-unit plinth under every spine,
         gs = float(self.o.get("genal_sharp", 0.0))                           # the vertical walls that made the spines read as slabs)
         crest = self.o["horn_h"] * HC.RELIEF * (1 - (0.55 + 0.42 * gs) * np.clip(s, 0, 1))
         p = self.piece; hw_s = p.hw(np.clip(s, 0, 1) * p.Ls)                 # the band's half-width here (plan units)
@@ -489,6 +533,8 @@ class Shape:
         crest = np.minimum(crest, cap)                                        # than horn_aspect x its width, in real mm
         t_ = np.clip(1 - np.abs(2 * v - 1), 0, 1)
         sect = (1 - gs) * np.sqrt(np.clip(1 - (1 - t_) ** 2, 0, 1)) + gs * t_ ** 0.75   # round ridge .. sharp (triangular) spine
+        if self.o["brim_w"] > 0 and self.T_oc is not None:                    # 9 Nov 2026: a brimmed head's genal piece IS the brim running
+            return np.maximum(self._piece_section(x, y), e_)                  # on, on ONE surface with the plate (_piece_section)
         ridge = e_ + (crest - e_) * sect
         w = smoothstep(0.0, min(1.0, 1.5 * p.W / max(p.L, 1e-6)), s)   # the ridge rises out of the margin
         return e_ + w * (ridge - e_)
@@ -533,11 +579,11 @@ def plan(P, plans, K, outline=None, face=None, z_thorax=None):
 # them: every line below is read off Shape / head_crescent, nothing is redrawn by hand. Units: fractions of the
 # head's half-width (x) and the same unit along y and z, y = 0 at the rear margin on the axis, head toward -y.
 HANDLES = {            # diagram handle -> the outline / face keys it drags (what the site would bind)
-    "front":   ("length", "front_exp", "front_flat", "front_dent"),
+    "front":   ("length", "front_exp", "front_flat", "front_dent", "rim"),          # rim: the margin's height (9 Nov 2026)
     "process": ("front_point", "point_w", "point_fork"),
     "widest":  ("width", "widest", "side", "rear_taper"),
     "angle":   ("corner",),
-    "spine":   ("genal", "genal_angle", "genal_w", "genal_tip"),
+    "spine":   ("genal", "genal_angle", "genal_w", "genal_tip", "genal_sharp", "horn_aspect"),
     "kink":    ("genal_kink", "genal_kink_angle"),
     "web":     ("genal_web", "genal_web_round"),
     "root":    ("genal_at",),

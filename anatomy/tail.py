@@ -9,6 +9,8 @@ from fields import tail_halfwidth, furrow_amp
 from anatomy.common import pitch, ring_top, smoothstep, plateau, trough, vault, spine_solid, curved_spine, prong, GRID_TAIL
 from anatomy.port import Port
 
+AUTO_LOBE_BAND = 0.35   # 9 Nov 2026: the inner shield's smooth share when the lobes are curved (see tail_plan)
+
 def plan(P):
     """outline(u, v), zfun(x, y) and scalars for the tail. Transcribed from trilobite.build_pygidium, minus tubercles."""
     t, c, h = P["wall"] * P["tailWall"], P["clearance"], P["relief"] * P["tailRelief"]
@@ -68,7 +70,15 @@ def plan(P):
             L_full = float(sd.get("len", 0.0)); bl = float(sd.get("blade", 0.0)); phi_k = math.radians(float(sd.get("phi", 90.0)))
             if L_full > 0.5: spines.append(dict(phi=phi_k, Lk=L_full * bl, L_full=L_full, hh=hphi_f * float(sd.get("width", 1.0)), e=1.5 if bl < 0.999 else 1.2,
                                                 rise=float(sd.get("rise", 30.0)), roll=float(sd.get("roll", 0.0)), width=float(sd.get("width", 1.0)),
-                                                sweep=math.radians(float(sd.get("sweep", math.degrees(sw0))))))
+                                                sweep=math.radians(float(sd.get("sweep", math.degrees(sw0)))),
+                                                curve=math.radians(float(sd.get("curve", 0.0))),     # 9 Nov 2026: the lobe bends as it goes out (+ toward the rear)
+                                                aim=math.radians(float(sd.get("aim", 0.0)))))        # ... and leaves turned this far outward first (a pincer)
+        # 9 Nov 2026: curved (or aimed) lobes are smoothed inside automatically -- with the whole grid following a bent margin,
+        # each lobe was echoed in scaled copies across the shield as folds (undercut lips, small tunnels). The inner shield
+        # is then sampled on smooth rings and the lobes keep the outer AUTO_LOBE_BAND of it. A band set in the studio
+        # (pygLobeBand > 0) or deliberate creases (the fan ribs, pygRibFan) are left exactly as set.
+        if band < 0.01 and float(P.get("pygRibFan", 0.0) or 0.0) < 0.01 and any(abs(s_.get("curve", 0.0)) > 1e-6 or abs(s_.get("aim", 0.0)) > 1e-6 for s_ in spines):
+            band = AUTO_LOBE_BAND
         # 25 Oct 2026: a list of flat lobes (blade 1, no rise) stays a flat margin -- no solid spine runs on top of a lobe
         tube = any(abs(s_["rise"]) > 1e-6 or abs(s_["roll"]) > 1e-6 or s_["Lk"] < s_["L_full"] - 1e-6 for s_ in spines)
     else:
@@ -92,21 +102,35 @@ def plan(P):
         ad = np.abs(d)
         if k_or > 0: ep = k_or * OR.LOBE_ROUND * w; ad = np.sqrt(d * d + ep * ep) - ep   # |d| eased at the apex
         return np.clip(1 - ad / w, 0, 1) ** e
+    _LOBES = []                                                    # (pm, side, lobe) per candidate, for margin_pt's curved lobes
     def radial_extra(phi, lean_out=False):
-        ex = np.zeros_like(phi); ln = np.zeros_like(phi)
+        ex = np.zeros_like(phi); ln = np.zeros_like(phi); who = np.full(np.shape(phi), -1); _LOBES.clear()
         for sd in spines:
             if sd["Lk"] > 0.5:
                 for pm in (sd["phi"], math.pi - sd["phi"]):
                     sgn = 0.0 if abs(pm - math.pi / 2) < 1e-6 else (1.0 if pm < math.pi / 2 else -1.0)   # right side leans +, left side -, both toward the rear
                     b = sd["Lk"] * bump(phi, pm, sd["hh"], sd["e"], sd.get("skew", 0.0), sgn); win = b > ex
                     ex = np.where(win, b, ex); ln = np.where(win, sgn * sd.get("lean", 0.0), ln)
-        return (ex, ln) if lean_out else ex
+                    if lean_out: who = np.where(win, len(_LOBES), who); _LOBES.append((pm, sgn, sd))
+        return (ex, ln, who) if lean_out else ex
     def margin_pt(phi):
         x0, y0 = wp * se(np.cos(phi)), Lp * se(np.sin(phi))
         if nk > 0.005: x0 = x0 * neck_f(y0 / Lp)
-        r0 = np.maximum(np.hypot(x0, y0), 1e-6); ex, ln = radial_extra(phi, lean_out=True)
+        r0 = np.maximum(np.hypot(x0, y0), 1e-6); ex, ln, who = radial_extra(phi, lean_out=True)
         th = np.arctan2(y0, x0) + ln                                   # the radial direction, leaned toward the rear
-        return x0 + ex * np.cos(th), y0 + ex * np.sin(th)
+        X_, Y_ = x0 + ex * np.cos(th), y0 + ex * np.sin(th)
+        for i, (pm, sgn, sd) in enumerate(list(_LOBES)):               # 9 Nov 2026: a curved lobe (its `curve`, deg at the tip, + toward the
+            cv = float(sd.get("curve", 0.0)); aim = float(sd.get("aim", 0.0)); m = (who == i) & (ex > 1e-9)   # rear): the lobe's section at height b
+            if (abs(cv) < 1e-6 and abs(aim) < 1e-6) or not m.any(): continue   # out is turned by curve x b / Lk about the lobe's base centre and carried along the
+            bx, by = wp * se(math.cos(pm)), Lp * se(math.sin(pm))      # arc its centre line follows -- a bent lobe, not a sheared one
+            if nk > 0.005: bx = bx * neck_f(by / Lp)
+            th0 = math.atan2(by, bx) + sgn * (sd.get("lean", 0.0) - aim); kap = sgn * cv / max(sd["Lk"], 1e-6)   # aim: the centre line leaves turned out
+            b = ex[m]; al = kap * b
+            ax_ = np.where(np.abs(al) > 1e-9, (np.sin(th0 + al) - math.sin(th0)) / np.where(np.abs(kap) > 1e-12, kap, 1.0), b * math.cos(th0))
+            ay_ = np.where(np.abs(al) > 1e-9, (math.cos(th0) - np.cos(th0 + al)) / np.where(np.abs(kap) > 1e-12, kap, 1.0), b * math.sin(th0))
+            dx, dy = x0[m] - bx, y0[m] - by; c_, s_ = np.cos(al), np.sin(al)
+            X_[m] = bx + c_ * dx - s_ * dy + ax_; Y_[m] = by + s_ * dx + c_ * dy + ay_
+        return X_, Y_
     PHI_MIN = math.radians(1.5)   # the margin never reaches the front line: at phi = 0 the outer grid column would lie
     def outline(u, v):            # along y = 0 and its corner triangles would be collinear (the spline fit used to hide it)
         phi = PHI_MIN + (math.pi - 2 * PHI_MIN) * 0.5 * (1 - u)
@@ -155,15 +179,17 @@ def plan(P):
             z += nod * np.exp(-(((x / rn) ** 2) + (((y - yn) / rn) ** 2)))
         dy_k = Lp * ka / (n + 1.5)                                 # the furrow spacing
         r_at = float(P.get("pygRingAt", -1.0))                     # 8 Nov 2026 (schema 6.9): where the first ring furrow
-        for k in range(n):                                         # sits along the axis; -1 = (1 / (n + 1.5)), as built
-            yk = Lp * ka * ((k + 1) / (n + 1.5) if r_at < 0 else (r_at + k / (n + 1.5)))
-            fade = 1 - 0.6 * k / max(n, 1)
+        fan = float(P.get("pygRibFan", 0.0))                       # 9 Nov 2026 (schema 6.9): the pleural furrows as a FAN
+        for k in range(n):                                         # (the corynexochid tail) are surface DETAIL (fan_field, below,
+            yk = Lp * ka * ((k + 1) / (n + 1.5) if r_at < 0 else (r_at + k / (n + 1.5)))   # added after the grid's blur);
+            fade = 1 - 0.6 * k / max(n, 1)                         # the ring furrows stay in the base
             z -= 0.7 * F * fade * trough(y - yk, 0.8) * plateau(x, ay + 1.5, 1.0)
-            px = np.clip((ax - ay) / np.maximum(xm - ay, 1), 0, 1); ly = yk + px * 0.5 * Lp * ka / (n + 1.5)
-            z -= 0.6 * F * fade * trough(y - ly, 0.9) * (ax > ay + 1.0)
-            if rib > 0.01:                                         # the rib: a ridge with concave flanks and a crest, over the pleural field behind this furrow
-                lm = ly + 0.5 * dy_k; w_ = np.clip(1 - np.abs(y - lm) / (0.5 * dy_k), 0, 1)
-                z += rib * fade * (w_ ** 1.6) * smoothstep(ay + 0.5, ay + 2.5, ax) * (1 - 0.5 * px) * (1 - np.clip(ov_pre(ax, y), 0, 1))
+            if fan < 0.005:
+                px = np.clip((ax - ay) / np.maximum(xm - ay, 1), 0, 1); ly = yk + px * 0.5 * Lp * ka / (n + 1.5)
+                z -= 0.6 * F * fade * trough(y - ly, 0.9) * (ax > ay + 1.0)
+                if rib > 0.01:                                     # the rib: a ridge with concave flanks and a crest, over the pleural field behind this furrow
+                    lm = ly + 0.5 * dy_k; w_ = np.clip(1 - np.abs(y - lm) / (0.5 * dy_k), 0, 1)
+                    z += rib * fade * (w_ ** 1.6) * smoothstep(ay + 0.5, ay + 2.5, ax) * (1 - 0.5 * px) * (1 - np.clip(ov_pre(ax, y), 0, 1))
         if bwf > 0.005:
             bw = bwf * wp
             dist = np.minimum(xm - ax, (1 - yy) * Lp)
@@ -176,22 +202,65 @@ def plan(P):
         drop = np.minimum(t + c + 0.7 * F + 0.3, np.maximum(z - 1.2, 0))
         z -= drop * (1 - smoothstep(ovl - 1.5, ovl, y))
         return z
+    def fan_field(x, y):
+        """pygRibFan > 0: the pleural furrows radiate -- each leaves the axis flank at its ring and runs STRAIGHT to its own
+        point on the margin, the set from (nearly) transverse at the front corner round to the rear (crowding rearward,
+        as drawn), plus 0.4 n post-axial furrows leaving the axis' end so the fan closes behind it; the ribs
+        (pygRibRelief) crest midway between neighbouring furrows whatever their direction. A detail field: added AFTER
+        the grid's smoothing blur (mesh.sample_grid detail=), as the head's sutures are, so 1 mm furrows survive."""
+        fan = float(P.get("pygRibFan", 0.0)); n_ = int(P["pygRings"])
+        if fan < 0.005 or n_ < 1: return np.zeros_like(np.asarray(x, float))
+        ax = np.abs(np.asarray(x, float)); y = np.asarray(y, float); yy = np.clip(y / Lp, 0, 1); xm = xmax(y)
+        taper = float(P.get("pygAxisTaper", 0.85)); ayf = lambda yv: a * (1 - taper * np.clip(np.asarray(yv, float) / (Lp * ka), 0, 1)); ay = ayf(y)
+        r_at = float(P.get("pygRingAt", -1.0)); dy_k = Lp * ka / (n_ + 1.5); n_post = int(round(0.4 * n_)); N = n_ + n_post
+        out = np.zeros_like(ax); dists = []
+        for k in range(N):
+            if k < n_: yk = Lp * ka * ((k + 1) / (n_ + 1.5) if r_at < 0 else (r_at + k / (n_ + 1.5)))
+            else: yk = Lax * Lp - 0.5 * float(ayf(Lax * Lp)) * (1 - (k - n_ + 0.5) / max(n_post, 1))   # from the cap, in steps
+            fade = 1 - 0.6 * min(k, n_) / max(n_, 1)
+            ak = float(ayf(min(yk, Lax * Lp))) * (1.0 if k < n_ else 0.9 * (1 - (k - n_ + 0.5) / max(n_post, 1))); A_ = (ak, yk)
+            phi = math.radians(90.0 * ((k + 0.5) / N) ** 0.6)
+            Mf = (wp * se(math.cos(phi)), Lp * se(math.sin(phi)))
+            yt = min(yk + 0.5 * dy_k, 0.999 * Lp); Mt = (float(xmax(yt)), yt)        # the as-built end: pygRibFan blends the two
+            M_ = ((1 - fan) * Mt[0] + fan * Mf[0], (1 - fan) * Mt[1] + fan * Mf[1])
+            dx_, dy_ = M_[0] - A_[0], M_[1] - A_[1]; Ln = max(math.hypot(dx_, dy_), 1e-6)
+            tpar = ((ax - A_[0]) * dx_ + (y - A_[1]) * dy_) / Ln ** 2           # along the furrow, 0 at the axis, 1 at the margin
+            perp = np.abs((ax - A_[0]) * dy_ - (y - A_[1]) * dx_) / Ln           # distance from the furrow's line
+            d_ = np.where(tpar >= 0, perp, np.hypot(ax - A_[0], y - A_[1]))       # before the axis: the distance to its start
+            dists.append(d_)
+            out -= 0.55 * F * fade * trough(d_, 1.1) * ((ax > ay + 1.0) | (y > Lax * Lp + 0.5))
+        if rib > 0.01 and len(dists) >= 2:
+            D = np.sort(np.stack(dists), axis=0); d1, d2 = D[0], D[1]       # 4 d1 d2 / (d1 + d2)^2: 1 midway between neighbours, 0 on a furrow
+            w_ = 4 * d1 * d2 / np.maximum(d1 + d2, 1e-6) ** 2
+            out += rib * (0.5 - 0.5 * np.cos(np.pi * w_)) * smoothstep(ay + 0.5, ay + 2.5, ax) * (1 - 0.6 * yy ** 2)   # a rounded crest, fading rearward
+        keep = (1 - np.clip(np.where(y > 0.35 * Lp, outside(ax, y), 0.0), 0, 1))   # not on the margin spines, nor the front lip
+        keep = keep * smoothstep(ovl, ovl + 2.0, y) * (1 - smoothstep(xm - 1.2, xm, ax))   # ... nor over the rolled edge
+        if bwf > 0.005: keep = keep * smoothstep(bwf * wp - 0.5, bwf * wp + 1.0, np.minimum(xm - ax, (1 - yy) * Lp))   # the border stays smooth
+        return out * keep
+    has_fan = float(P.get("pygRibFan", 0.0)) >= 0.005 and int(P["pygRings"]) >= 1
+    zfun_base = zfun
+    if has_fan: zfun = lambda x, y: zfun_base(x, y) + fan_field(x, y)
     # the margin spines, for ornaments(): where each leaves the base margin and how far it runs as a bump (24 Oct 2026)
     def base_pt(phi):
         bx, by = wp * se(math.cos(phi)), Lp * se(math.sin(phi))
         return (bx * neck_f(by / Lp) if nk > 0.005 else bx), by
     def margin_xy(phi):
         mx, my = margin_pt(np.asarray(phi, float)); return np.c_[mx, my]
-    return dict(outline=outline, zfun=zfun, t=t, Lp=Lp, wp=wp, a=a, margin=margin, u_a=a / max(wp, 1e-6),
+    return dict(outline=outline, zfun=zfun, zfun_base=zfun_base, detail=fan_field if has_fan else None, t=t, Lp=Lp, wp=wp, a=a, margin=margin, u_a=a / max(wp, 1e-6),
                 axis_len=Lax, border_frac=bwf, outline_exp=nO, spines=spines, base_pt=base_pt, margin_xy=margin_xy, tube=tube)
 
+def _base(S): return (S.get("zfun_base", S["zfun"]), S.get("detail"))   # 9 Nov 2026: the fan furrows ride on the blurred base (anatomy/head._base)
+
+
 def shell(P, S, grid=GRID_TAIL):
-    tail = M.heightfield_shell(S["outline"], S["zfun"], S["t"], nu=grid[0], nv=grid[1])
-    env = M.under_envelope(S["outline"], S["zfun"], nu=grid[0], nv=grid[1])
+    zb, det = _base(S)
+    tail = M.heightfield_shell(S["outline"], zb, S["t"], nu=grid[0], nv=grid[1], detail=det)
+    env = M.under_envelope(S["outline"], zb, nu=grid[0], nv=grid[1], detail=det)
     return tail, env
 
 def solid(P, S, grid=GRID_TAIL):
-    return M.under_envelope(S["outline"], S["zfun"], nu=grid[0], nv=grid[1], floor=0.0)
+    zb, det = _base(S)
+    return M.under_envelope(S["outline"], zb, nu=grid[0], nv=grid[1], floor=0.0, detail=det)
 
 def ornaments(P, S):
     """Terminal spine, then the posterior prong. Forks and marginal spines are the margin itself (in the plan); with
@@ -244,6 +313,7 @@ def cells(P, lap=0.06, grid=GRID_TAIL):
     S = plan(P); ua = S["u_a"]
     ring_out = lambda u, v: S["outline"](u * ua, v)
     pl_out = lambda u, v: S["outline"]((ua - lap) + 0.5 * (u + 1) * (1 - (ua - lap)), v)
-    axis = M.heightfield_shell(ring_out, S["zfun"], S["t"], nu=grid[0] // 3 | 1, nv=grid[1])
-    pleura = M.heightfield_shell(pl_out, S["zfun"], S["t"], nu=grid[0] // 2 | 1, nv=grid[1], symmetric=False)
+    zb, det = _base(S)
+    axis = M.heightfield_shell(ring_out, zb, S["t"], nu=grid[0] // 3 | 1, nv=grid[1], detail=det)
+    pleura = M.heightfield_shell(pl_out, zb, S["t"], nu=grid[0] // 2 | 1, nv=grid[1], symmetric=False, detail=det)
     return dict(axis=axis, pleura_right=pleura, pleura_left=M.mirror_x(pleura))

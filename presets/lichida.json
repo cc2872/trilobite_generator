@@ -1,16 +1,848 @@
 {
  "base": "textured",
  "blurb": "Lichida \u2014 Gon p. 63. Tuberculate, wide spinose tail, inflated glabella, 10 segments.",
+ "drawing": {
+  "body": "lichida-drawing",
+  "doc": "Terataspis (Lichida), 9 Nov 2026: v38 -- dots-shaped head with the frontal lobe as a dome, forward genal spines with spike rows, rear-border spikes, oval thorax with longer pleural spines and tubercles, curved/aimed tail lobes with thorns, tail axis lobe, tubercles, tip spine and thorn field",
+  "face": {
+   "glab_len": 1.12,
+   "glab_round": 1.0,
+   "tubercles": 0.0
+  },
+  "head": "lichida-drawing",
+  "model": "isopod",
+  "outline": {
+   "dot_r": 0.1,
+   "dots": [
+    [
+     0.27,
+     -0.12,
+     0.06
+    ],
+    [
+     0.62,
+     -0.06,
+     0.0
+    ]
+   ],
+   "front_exp": 1.8,
+   "genal": 1.35,
+   "genal_angle": 82,
+   "genal_at": -0.35,
+   "genal_kink": 0.55,
+   "genal_kink_angle": 34,
+   "genal_sharp": 0.3,
+   "genal_tip": 0.04,
+   "genal_w": 0.42,
+   "genal_web_round": 0.4,
+   "length": 1.0,
+   "notch": 0.0,
+   "widest": 0.15,
+   "width": 1.05
+  },
+  "page": "/lichida",
+  "params": {
+   "bladeCamber": 0.08,
+   "bladeChord": 1.2,
+   "cephFrac": 0.22,
+   "eyePos": 0.45,
+   "eyeSize": 0.09,
+   "eyeSolid": 1,
+   "glabInflate": 1.5,
+   "glabLobes": 2,
+   "glabRise": 0.2,
+   "length": 210.0,
+   "lensD": 0.16,
+   "lensGap": 0.3,
+   "pygMarginal": 0,
+   "pygSpine": 0.0,
+   "ringArch": 0.12,
+   "segCount": 11,
+   "spineBase": 0.35,
+   "spineGrad": 0.1,
+   "spineSweep": 42.0,
+   "tipSweep": 0.22,
+   "tipTaper": 0.66,
+   "width": 100.0,
+   "widthTail": 0.8,
+   "widthThoraxFront": 0.9,
+   "widthThoraxRear": 0.8
+  },
+  "rows": {
+   "domes": [
+    {
+     "h": 15.3,
+     "l": 22.5,
+     "shape": 2.4,
+     "w": 22.5,
+     "x": 0.0,
+     "y": -51.5
+    },
+    {
+     "dx": 0.0,
+     "dy": 9.93,
+     "h": 1.0,
+     "l": 1.0,
+     "n": 11,
+     "shape": 2.0,
+     "taper": 1.0,
+     "w": 1.0,
+     "x": 4.5,
+     "y": 6.5
+    },
+    {
+     "dx": -0.3,
+     "dy": 9.93,
+     "h": 1.0,
+     "l": 1.0,
+     "n": 11,
+     "shape": 2.0,
+     "taper": 1.0,
+     "w": 1.0,
+     "x": 25.0,
+     "y": 6.5
+    },
+    {
+     "h": 2.6,
+     "l": 19.0,
+     "shape": 1.8,
+     "w": 8.5,
+     "x": 0.0,
+     "y": 133.0
+    },
+    {
+     "dx": 0.0,
+     "dy": 12.0,
+     "h": 1.0,
+     "l": 1.0,
+     "n": 2,
+     "shape": 2.0,
+     "taper": 1.0,
+     "w": 1.0,
+     "x": 3.8,
+     "y": 121.0
+    }
+   ],
+   "rows": {
+    "1": {
+     "tip": 19.88
+    },
+    "10": {
+     "tip": 30.65,
+     "width": 35.0
+    },
+    "11": {
+     "len": 17.75,
+     "width": 51.6
+    },
+    "12": {
+     "len": 17.75,
+     "width": 48.2
+    },
+    "13": {
+     "len": 17.75,
+     "width": 40.59
+    },
+    "14": {
+     "len": 17.75,
+     "width": 25.17
+    },
+    "2": {
+     "tip": 19.59
+    },
+    "3": {
+     "tip": 25.6,
+     "width": 41.5
+    },
+    "4": {
+     "tip": 25.91,
+     "width": 42.0
+    },
+    "5": {
+     "tip": 26.47,
+     "width": 42.0
+    },
+    "6": {
+     "tip": 27.23,
+     "width": 41.5
+    },
+    "7": {
+     "tip": 28.12,
+     "width": 40.5
+    },
+    "8": {
+     "tip": 29.04,
+     "width": 39.0
+    },
+    "9": {
+     "tip": 29.92,
+     "width": 37.0
+    }
+   },
+   "tail_spines": [
+    {
+     "blade": 1.0,
+     "curve": 12,
+     "len": 60,
+     "phi": 4.9,
+     "rise": 0,
+     "roll": 0,
+     "sweep": 0,
+     "width": 0.45
+    },
+    {
+     "blade": 1.0,
+     "curve": 45,
+     "len": 70,
+     "phi": 26.8,
+     "rise": 0,
+     "roll": 0,
+     "sweep": 15,
+     "width": 0.45
+    },
+    {
+     "blade": 1.0,
+     "curve": 30,
+     "len": 70,
+     "phi": 54.4,
+     "rise": 0,
+     "roll": 0,
+     "sweep": 10,
+     "width": 0.45
+    },
+    {
+     "aim": 15,
+     "blade": 1.0,
+     "curve": 55,
+     "len": 80,
+     "phi": 74.7,
+     "rise": 0,
+     "roll": 0,
+     "sweep": 0,
+     "width": 0.45
+    }
+   ],
+   "textures": [
+    {
+     "jit": 0.6,
+     "kind": "row",
+     "len": 5.5,
+     "pts": [
+      [
+       0.0,
+       0.88
+      ],
+      [
+       8.83,
+       0.88
+      ],
+      [
+       17.65,
+       0.61
+      ],
+      [
+       26.48,
+       -0.06
+      ],
+      [
+       33.09,
+       -0.55
+      ],
+      [
+       38.61,
+       -1.43
+      ],
+      [
+       44.13,
+       -2.81
+      ]
+     ],
+     "r": 1.3,
+     "rise": 22,
+     "seed": 3,
+     "sharp": 0.05,
+     "spacing": 3.0
+    },
+    {
+     "jit": 0.7,
+     "kind": "row",
+     "len": 6.0,
+     "pts": [
+      [
+       55.16,
+       -5.22
+      ],
+      [
+       60.67,
+       -7.86
+      ],
+      [
+       66.19,
+       -6.6
+      ],
+      [
+       71.7,
+       -4.81
+      ],
+      [
+       77.22,
+       -3.0
+      ],
+      [
+       82.74,
+       -0.96
+      ],
+      [
+       88.25,
+       1.71
+      ],
+      [
+       93.77,
+       4.67
+      ],
+      [
+       99.28,
+       7.47
+      ],
+      [
+       104.8,
+       11.01
+      ]
+     ],
+     "r": 1.1,
+     "rise": 8,
+     "seed": 7,
+     "sharp": 0.05,
+     "side": 1,
+     "spacing": 5.0
+    },
+    {
+     "jit": 0.0,
+     "kind": "row",
+     "len": 13.0,
+     "pts": [
+      [
+       81.67,
+       -1.9
+      ],
+      [
+       82.77,
+       -1.49
+      ]
+     ],
+     "r": 2.2,
+     "rise": 6,
+     "seed": 1,
+     "sharp": 0.04,
+     "side": 1,
+     "spacing": 20
+    },
+    {
+     "jit": 0.85,
+     "kind": "row",
+     "len": 3.4,
+     "pts": [
+      [
+       13.09,
+       187.22
+      ],
+      [
+       15.22,
+       192.28
+      ],
+      [
+       17.08,
+       197.82
+      ],
+      [
+       18.56,
+       203.72
+      ],
+      [
+       19.61,
+       209.9
+      ],
+      [
+       20.17,
+       216.28
+      ],
+      [
+       20.22,
+       222.74
+      ],
+      [
+       19.77,
+       229.17
+      ],
+      [
+       18.86,
+       235.42
+      ],
+      [
+       17.56,
+       241.3
+      ],
+      [
+       16.05,
+       246.57
+      ]
+     ],
+     "r": 0.75,
+     "rise": 15,
+     "seed": 11,
+     "sharp": 0.05,
+     "side": 1,
+     "spacing": 4.2
+    },
+    {
+     "jit": 0.85,
+     "kind": "row",
+     "len": 3.4,
+     "pts": [
+      [
+       16.67,
+       245.29
+      ],
+      [
+       18.99,
+       240.14
+      ],
+      [
+       21.08,
+       234.34
+      ],
+      [
+       22.8,
+       228.1
+      ],
+      [
+       24.05,
+       221.59
+      ],
+      [
+       24.79,
+       214.94
+      ],
+      [
+       25.02,
+       208.27
+      ],
+      [
+       24.75,
+       201.7
+      ],
+      [
+       24.01,
+       195.31
+      ],
+      [
+       22.88,
+       189.22
+      ],
+      [
+       21.45,
+       183.55
+      ]
+     ],
+     "r": 0.75,
+     "rise": 15,
+     "seed": 12,
+     "sharp": 0.05,
+     "side": 1,
+     "spacing": 4.2
+    },
+    {
+     "jit": 0.85,
+     "kind": "row",
+     "len": 3.4,
+     "pts": [
+      [
+       28.48,
+       174.22
+      ],
+      [
+       30.59,
+       178.72
+      ],
+      [
+       32.68,
+       183.78
+      ],
+      [
+       34.66,
+       189.24
+      ],
+      [
+       36.44,
+       195.0
+      ],
+      [
+       37.98,
+       200.99
+      ],
+      [
+       39.25,
+       207.12
+      ],
+      [
+       40.22,
+       213.27
+      ],
+      [
+       40.89,
+       219.3
+      ],
+      [
+       41.27,
+       224.97
+      ],
+      [
+       41.43,
+       229.93
+      ]
+     ],
+     "r": 0.75,
+     "rise": 15,
+     "seed": 13,
+     "sharp": 0.05,
+     "side": 1,
+     "spacing": 4.2
+    },
+    {
+     "jit": 0.85,
+     "kind": "row",
+     "len": 3.4,
+     "pts": [
+      [
+       41.66,
+       226.45
+      ],
+      [
+       42.35,
+       221.31
+      ],
+      [
+       42.81,
+       215.64
+      ],
+      [
+       42.99,
+       209.66
+      ],
+      [
+       42.89,
+       203.52
+      ],
+      [
+       42.48,
+       197.32
+      ],
+      [
+       41.8,
+       191.15
+      ],
+      [
+       40.86,
+       185.09
+      ],
+      [
+       39.7,
+       179.2
+      ],
+      [
+       38.36,
+       173.55
+      ],
+      [
+       36.92,
+       168.26
+      ]
+     ],
+     "r": 0.75,
+     "rise": 15,
+     "seed": 14,
+     "sharp": 0.05,
+     "side": 1,
+     "spacing": 4.2
+    },
+    {
+     "jit": 0.85,
+     "kind": "row",
+     "len": 3.4,
+     "pts": [
+      [
+       40.24,
+       151.38
+      ],
+      [
+       40.57,
+       150.78
+      ],
+      [
+       40.9,
+       150.17
+      ],
+      [
+       41.22,
+       149.55
+      ],
+      [
+       41.53,
+       148.94
+      ],
+      [
+       41.85,
+       148.31
+      ],
+      [
+       42.15,
+       147.69
+      ],
+      [
+       51.68,
+       152.54
+      ],
+      [
+       62.56,
+       163.86
+      ],
+      [
+       71.71,
+       178.18
+      ],
+      [
+       77.58,
+       192.94
+      ]
+     ],
+     "r": 0.75,
+     "rise": 15,
+     "seed": 15,
+     "sharp": 0.05,
+     "side": 1,
+     "spacing": 4.2
+    },
+    {
+     "jit": 0.85,
+     "kind": "row",
+     "len": 3.4,
+     "pts": [
+      [
+       78.03,
+       191.32
+      ],
+      [
+       77.43,
+       186.14
+      ],
+      [
+       76.35,
+       180.54
+      ],
+      [
+       74.79,
+       174.74
+      ],
+      [
+       72.75,
+       168.9
+      ],
+      [
+       70.28,
+       163.14
+      ],
+      [
+       67.42,
+       157.55
+      ],
+      [
+       64.22,
+       152.21
+      ],
+      [
+       60.77,
+       147.18
+      ],
+      [
+       57.14,
+       142.52
+      ],
+      [
+       53.49,
+       138.28
+      ]
+     ],
+     "r": 0.75,
+     "rise": 15,
+     "seed": 16,
+     "sharp": 0.05,
+     "side": 1,
+     "spacing": 4.2
+    },
+    {
+     "jit": 0.85,
+     "kind": "row",
+     "len": 3.4,
+     "pts": [
+      [
+       51.57,
+       122.82
+      ],
+      [
+       55.68,
+       122.61
+      ],
+      [
+       60.46,
+       122.58
+      ],
+      [
+       65.63,
+       122.69
+      ],
+      [
+       71.06,
+       122.95
+      ],
+      [
+       76.66,
+       123.34
+      ],
+      [
+       82.36,
+       123.88
+      ],
+      [
+       88.07,
+       124.53
+      ],
+      [
+       93.67,
+       125.27
+      ],
+      [
+       99.01,
+       126.05
+      ],
+      [
+       103.8,
+       126.76
+      ]
+     ],
+     "r": 0.75,
+     "rise": 15,
+     "seed": 17,
+     "sharp": 0.05,
+     "side": 1,
+     "spacing": 4.2
+    },
+    {
+     "jit": 0.85,
+     "kind": "row",
+     "len": 3.4,
+     "pts": [
+      [
+       107.2,
+       127.64
+      ],
+      [
+       106.0,
+       126.97
+      ],
+      [
+       104.6,
+       126.24
+      ],
+      [
+       103.03,
+       125.47
+      ],
+      [
+       101.34,
+       124.67
+      ],
+      [
+       99.53,
+       123.85
+      ],
+      [
+       97.64,
+       123.02
+      ],
+      [
+       95.67,
+       122.18
+      ],
+      [
+       93.65,
+       121.35
+      ],
+      [
+       91.59,
+       120.52
+      ],
+      [
+       89.49,
+       119.69
+      ]
+     ],
+     "r": 0.75,
+     "rise": 15,
+     "seed": 18,
+     "sharp": 0.05,
+     "side": 1,
+     "spacing": 4.2
+    },
+    {
+     "dir": 90,
+     "jit": 0.0,
+     "kind": "row",
+     "len": 7.0,
+     "pts": [
+      [
+       0.0,
+       147.5
+      ],
+      [
+       0.0,
+       148.5
+      ]
+     ],
+     "r": 1.6,
+     "rise": 18,
+     "seed": 1,
+     "sharp": 0.05,
+     "side": 1,
+     "spacing": 20
+    },
+    {
+     "dir": 15,
+     "jit": 0.9,
+     "kind": "patch",
+     "l": 26.0,
+     "len": 2.6,
+     "pts": [
+      [
+       28.0,
+       150.0
+      ]
+     ],
+     "r": 0.8,
+     "rise": 30,
+     "seed": 21,
+     "sharp": 0.05,
+     "spacing": 8.0,
+     "turn": -25,
+     "w": 17.0
+    }
+   ]
+  },
+  "saved_at": "2026-11-09T18:44:13",
+  "schema": "6.9",
+  "style": "lichas"
+ },
  "expect": {},
  "guide_edits_2026-10-02": {
-  "sutureEnd": [
-   null,
-   1.0
-  ],
-  "sutureDepth": [
-   null,
-   0.3
-  ],
   "lensD": [
    0.16,
    0.05
@@ -18,100 +850,108 @@
   "lensGap": [
    0.3,
    0.0
+  ],
+  "sutureDepth": [
+   null,
+   0.3
+  ],
+  "sutureEnd": [
+   null,
+   1.0
   ]
  },
  "length_policy": "pitch>=8: 150.0->183 mm",
  "order": "lichida",
  "params": {
-  "length": 183.0,
-  "width": 72.0,
-  "relief": 17.1,
-  "segCount": 10,
-  "cephFrac": 0.3,
-  "pygFrac": 0.26,
-  "marginHeight": 0.14,
-  "fulcrum": 0.55,
-  "overlap": 0.45,
-  "wall": 2.0,
-  "widthMaxPos": 0.2,
-  "widthHeadFront": 0.75,
-  "widthThoraxFront": 0.93,
-  "widthThoraxRear": 0.62,
-  "widthTail": 0.55,
+  "axialSpine": 0.0,
   "axisFrac": 0.28,
   "axisRise": 0.0,
-  "furrowDepth": 1.2,
-  "effacement": 0.0,
-  "tent": 1.0,
   "axisSigma": 0.55,
-  "pleuralSlope": 0.74,
-  "ringArch": 0.22,
+  "barrelR": 2.6,
   "bladeCamber": 0.14,
-  "headOutlineExp": 2.15,
-  "headDomeExp": 1.5,
-  "headDomeFill": 0.82,
-  "headWall": 1.0,
-  "tailWall": 1.0,
-  "headRelief": 1.0,
-  "tailRelief": 1.0,
-  "tailDomeExp": 2.0,
+  "bladeChord": 0.9,
+  "borderWidth": 0.1,
+  "boreDia": 1.95,
+  "cephFrac": 0.3,
   "cephParallel": 0.05,
-  "glabInflate": 1.6,
-  "glabRise": 0.18,
-  "glabLobes": 3,
-  "eyeSize": 0.16,
-  "eyePos": 0.62,
+  "clearance": 0.3,
+  "effacement": 0.0,
   "eyeArc": 150.0,
   "eyeHeight": 0.85,
   "eyeLat": 0.0,
+  "eyePos": 0.62,
   "eyeProfile": 4.0,
-  "eyeSolid": 0,
-  "eyeSlope": 15.0,
   "eyeShade": 0.0,
-  "lensD": 0.05,
-  "lensGap": 0.0,
-  "lensRise": 0.35,
-  "genalSweep": 0.3,
-  "borderWidth": 0.1,
-  "genalSpine": 0.45,
-  "headRearArc": 0.12,
-  "headRearExp": 2.0,
-  "genalWidth": 0.12,
-  "genalTip": 0.0,
-  "genalWidthMM": 5.0,
+  "eyeSize": 0.16,
+  "eyeSlope": 15.0,
+  "eyeSolid": 0,
+  "fulcrum": 0.55,
+  "furrowDepth": 1.2,
   "genalAngle": 6.2,
   "genalKink": 0.5,
   "genalKinkAngle": 17.8,
-  "tipSweep": 0.75,
-  "bladeChord": 0.9,
-  "tipTaper": 0.75,
-  "spineBase": 0.15,
-  "spineGrad": 0.15,
-  "macroIndex": -1,
+  "genalSpine": 0.45,
+  "genalSweep": 0.3,
+  "genalTip": 0.0,
+  "genalWidth": 0.12,
+  "genalWidthMM": 5.0,
+  "glabInflate": 1.6,
+  "glabLobes": 3,
+  "glabRise": 0.18,
+  "headDomeExp": 1.5,
+  "headDomeFill": 0.82,
+  "headOutlineExp": 2.15,
+  "headProngLen": 0.6,
+  "headProngSplay": 30,
+  "headProngs": 0,
+  "headRearArc": 0.12,
+  "headRearExp": 2.0,
+  "headRelief": 1.0,
+  "headWall": 1.0,
+  "length": 183.0,
+  "lensD": 0.05,
+  "lensGap": 0.0,
+  "lensRise": 0.35,
   "macroAmp": 0.8,
-  "spineSweep": 45.0,
-  "pygWidth": 1.0,
+  "macroIndex": -1,
+  "marginHeight": 0.14,
+  "maxAngle": 18.0,
+  "nKnuckles": 3,
+  "occipitalSpine": 0.0,
+  "overlap": 0.45,
+  "pleuralSlope": 0.74,
+  "pygFrac": 0.26,
+  "pygMarginal": 6,
+  "pygMarginalLen": 0.6,
   "pygRings": 4,
   "pygSpine": 0.35,
   "pygSplay": 16.0,
-  "termSpine": 0.0,
-  "axialSpine": 0.0,
-  "occipitalSpine": 0.0,
-  "pygMarginal": 6,
-  "pygMarginalLen": 0.6,
-  "headProngs": 0,
-  "headProngLen": 0.6,
-  "headProngSplay": 30,
-  "tailProngs": 0,
+  "pygWidth": 1.0,
+  "relief": 17.1,
+  "ringArch": 0.22,
+  "segCount": 10,
+  "spineBase": 0.15,
+  "spineGrad": 0.15,
+  "spineSweep": 45.0,
+  "sutureDepth": 0.3,
+  "sutureEnd": 1.0,
+  "tailDomeExp": 2.0,
   "tailProngLen": 0.5,
   "tailProngSplay": 30,
-  "maxAngle": 18.0,
-  "clearance": 0.3,
-  "boreDia": 1.95,
-  "barrelR": 2.6,
-  "nKnuckles": 3,
-  "sutureEnd": 1.0,
-  "sutureDepth": 0.3
+  "tailProngs": 0,
+  "tailRelief": 1.0,
+  "tailWall": 1.0,
+  "tent": 1.0,
+  "termSpine": 0.0,
+  "tipSweep": 0.75,
+  "tipTaper": 0.75,
+  "wall": 2.0,
+  "width": 72.0,
+  "widthHeadFront": 0.75,
+  "widthMaxPos": 0.2,
+  "widthTail": 0.55,
+  "widthThoraxFront": 0.93,
+  "widthThoraxRear": 0.62
  },
  "schema": "6.7"
 }

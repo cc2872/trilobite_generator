@@ -199,7 +199,8 @@ def sample_plan(S, nu, nv):
     """mesh.sample_grid for a plan, bit for bit, but vectorised when the plan's outline is u * X_tip across and the
     front/rear edges along (every thorax/rows plan: outline(u, v) = (u X_tip, yf + v (yr - yf))). The head and tail
     plans go through mesh.sample_grid itself. 11 Oct 2026: the per-point Python loop was 16 s of a 103 s build."""
-    if "edges" not in S or "X_tip" not in S: return M.sample_grid(S["outline"], S["zfun"], nu, nv)
+    if "edges" not in S or "X_tip" not in S:                                   # 9 Nov 2026: a plan's detail field (the tail's rib fan,
+        return M.sample_grid(S["outline"], S.get("zfun_base", S["zfun"]), nu, nv, detail=S.get("detail"))   # the classic head's sutures) is added after the blur
     if nu % 2 == 0: nu += 1
     passes = max(1, int(round(2 * ((nu - 1) / (M.REF_NU - 1)) ** 2)))
     mid = nu // 2
@@ -309,6 +310,8 @@ def head_ornaments(P, S, head):
     return head
 
 
+RAMP_MM = 40.0                   # print mm: beside the body the head plate's lift over it (the crescent's cheeks riding on segment 1)
+                                 # ramps down to the bed over this width -- plate and genal piece alike, so they meet as one surface
 HEAD_FILL = (16.0, 20.0, 30.0)   # isopod-head rear middle rebuilt before the socket half goes in: half-width, length ahead
                                  # of the rear face, height (print mm)
 HEAD_HEIGHT = 0.85               # head top / the tallest thorax piece's top, times the preset's headRelief (the isopod's
@@ -621,6 +624,14 @@ def body_ornaments(P, plans, parts, skip=()):
             sols = free_spine_solid(sd, parts[best[0]], P, others, zone=RW.free_zone(plans, best[0]))
             for h in sols: LAST_ORNAMENTS.append(dict(part=best[0], name="free spine", solid=h, before=parts[best[0]]))
             if sols: parts[best[0]] = M.union(parts[best[0]], *sols)
+    if ROWS_INFO.get("domes"):                                               # 9 Nov 2026: the domes on the body (the head's go on in _build)
+        import rows as _RW
+        dome_solids_on([d for d in _RW.dome_instances(ROWS_INFO["domes"]) if float(d["y"]) >= plans[1][3]], parts, plans, skip=skip)
+    if ROWS_INFO.get("textures"):                                            # 9 Nov 2026: the spike textures on the body (the head's go on in _build)
+        import rows as _RW
+        rest = ROWS_INFO.get("tex_body")
+        if rest is None: rest = [s for s in _RW.texture_spikes(ROWS_INFO["textures"]) if s["y"] >= plans[1][3]]
+        textures_on(rest, parts, plans, skip=skip)
 
 
 def margin_spine_solids(plans, parts, skip=()):
@@ -644,7 +655,98 @@ def margin_spine_solids(plans, parts, skip=()):
         parts[k] = M.union(parts[k], h, M.mirror_x(h))
 
 
-def genal_piece_solids(S, plans, off, ga, yr, face):
+def dome_solid(d, mesh, max_out=None):
+    """One dome (rows.dome_instances, 9 Nov 2026) standing on `mesh`: a superellipsoid, half-width w across and half-length
+    l along (turned by `turn` in plan), its top h above the surface at its centre, its profile `shape` (2 round, below 2
+    pointed, above 2 flat-topped). Its base reaches 1 mm below the LOWEST surface under its footprint, so it is seated
+    all round on a sloping or curved plate, and it is cut at the bed, so a dome that overhangs the margin (Terataspis'
+    frontal lobe) is a dome standing on the bed, never a ball under it. None when nothing is under it."""
+    x, y, w, l, h = float(d["x"]), float(d["y"]), float(d["w"]), float(d["l"]), float(d["h"])
+    p = float(d["shape"]); t = np.radians(float(d["turn"])); c, s_ = np.cos(t), np.sin(t)
+    ang = np.linspace(0, 2 * np.pi, 24, endpoint=False); rr = np.r_[0.0, 0.5, 1.0]
+    fx = np.concatenate([[0.0]] + [r * np.cos(ang) for r in rr[1:]]); fy = np.concatenate([[0.0]] + [r * np.sin(ang) for r in rr[1:]])
+    px = x + c * fx * w - s_ * fy * l; py = y + s_ * fx * w + c * fy * l
+    tops = _tops(mesh, px, py)
+    if not np.isfinite(tops).any(): return None
+    zc = float(tops[0]) if np.isfinite(tops[0]) else float(np.nanmax(tops))
+    zlow = float(np.nanmin(tops)); depth = max(zc - zlow, 0.0) + 1.0
+    U = trimesh.creation.icosphere(subdivisions=4, radius=1.0); V = U.vertices.copy()
+    rho = np.hypot(V[:, 0], V[:, 1]); vz = V[:, 2]
+    e = 2.0 / p
+    rho2 = np.power(np.clip(rho, 0, 1), e); z2 = np.sign(vz) * np.power(np.abs(vz), e)
+    k_ = np.where(rho > 1e-9, rho2 / np.maximum(rho, 1e-9), 0.0)
+    X = V[:, 0] * k_ * w; Y = V[:, 1] * k_ * l; Z = np.where(z2 > 0, z2 * h, z2 * depth)
+    V2 = np.c_[x + c * X - s_ * Y, y + s_ * X + c * Y, zc + Z]
+    dome = trimesh.Trimesh(V2, U.faces, process=True)
+    if not dome.is_volume: dome.fix_normals()
+    top_z = zc + h + 2.0                                                    # 9 Nov 2026: the box reaches above the dome's top (it was sized by
+    bed = trimesh.creation.box(extents=(4 * (w + l) + 4, 4 * (w + l) + 4, 2 * top_z)); bed.apply_translation((x, y, top_z))   # h + depth alone, so a
+    out = M.from_manifold(M.to_manifold(dome) ^ M.to_manifold(bed))         # small dome high on a plate fell above it and came back empty)
+    return out if len(out.faces) else None
+
+
+def spike_texture_solids(spikes, mesh):
+    """The spike texture's spikes standing on `mesh` (9 Nov 2026): each a tapered, optionally curved spine
+    (anatomy.common.curved_spine) rooted 0.8 r under the surface at (x, y), leaving along (yaw, rise). Spikes with no
+    surface under them (off the part) are skipped. One list of solids (for one union)."""
+    if not spikes: return []
+    X = np.array([s["x"] for s in spikes]); Y = np.array([s["y"] for s in spikes]); Z = _tops(mesh, X, Y); out = []
+    for s, z in zip(spikes, Z):
+        if not np.isfinite(z) or z < 0.5: continue
+        r = float(s["r"]); out.append(curved_spine(r, max(0.05, float(s["tip"]) * r), float(s["len"]) + 0.8 * r, (float(s["x"]), float(s["y"]), float(z) - 0.8 * r),
+                                                   yaw_deg=float(s["yaw"]), pitch_deg=float(s["rise"]), bend_deg=float(s["bend"]), plate=float(z)))
+    return out
+
+
+def textures_on(spikes, parts, plans, H=None, skip=()):
+    """The spike textures onto the animal: spikes ahead of the first row onto the head (returned for H), the rest onto
+    the topmost piece at each spike (one union per piece). Spikes that land on nothing are counted in LAST_AUDIT."""
+    if H is not None:                                                       # onto the head alone
+        out_H = spike_texture_solids(spikes, H); n = len(spikes) - len(out_H)
+        if n: LAST_AUDIT.append(f"spike texture: {n} spike{'s' if n > 1 else ''} off the head, not built")
+        return out_H
+    body_s = spikes; out_H = []; lost = 0; by = {}
+    for s in body_s:
+        best = None
+        for k in range(1, len(plans)):
+            if k in skip: continue
+            z = _surface_z(parts[k], float(s["x"]), float(s["y"]))
+            if z is not None and (best is None or z > best[1]): best = (k, z)
+        if best is None: lost += 1; continue
+        by.setdefault(best[0], []).append(s)
+    for k, ss in by.items():
+        sol = spike_texture_solids(ss, parts[k]); lost += len(ss) - len(sol)
+        if sol: parts[k] = M.union(parts[k], *sol)
+    if lost: LAST_AUDIT.append(f"spike texture: {lost} spike{'s' if lost > 1 else ''} off the animal, not built")
+    return out_H
+
+
+def dome_solids_on(domes, parts, plans, H=None, skip=()):
+    """Each dome onto the piece whose plate is under it: the head (built H, or parts[0]) ahead of the first row, else the
+    topmost plate at its centre -- or, where its centre overhangs a margin, the piece most of its footprint stands on."""
+    y_first = plans[1][3]; out_H = []
+    for d in domes:
+        if float(d["y"]) < y_first:
+            target = H if H is not None else parts[0]
+            sol = dome_solid(d, target)
+            if sol is not None: out_H.append(sol)
+            else: LAST_AUDIT.append(f"dome at ({d['x']:.1f}, {d['y']:.1f}) mm: off the head, not built")
+            continue
+        best = None
+        for k in range(1, len(plans)):
+            if k in skip: continue
+            z = _surface_z(parts[k], float(d["x"]), float(d["y"]))
+            if z is not None and (best is None or z > best[1]): best = (k, z)
+        if best is None:
+            LAST_AUDIT.append(f"dome at ({d['x']:.1f}, {d['y']:.1f}) mm: off the animal, not built"); continue
+        sol = dome_solid(d, parts[best[0]])
+        if sol is not None:
+            LAST_ORNAMENTS.append(dict(part=best[0], name="dome", solid=sol, before=parts[best[0]]))
+            parts[best[0]] = M.union(parts[best[0]], sol)
+    return out_H
+
+
+def genal_piece_solids(S, plans, off, ga, yr, face, ramp=None):
     """The shaped head's genal piece (1 Nov 2026, anatomy/genal.py through shaped_head.Shape.piece) as solids, both sides:
     each band of the piece a height field under Shape.piece_z, in model mm. Beside the body it is solid to the bed (it
     prints without supports, as the head's own spine did); over the body (behind the head's rear joint plane, inside a
@@ -695,51 +797,62 @@ def genal_piece_solids(S, plans, off, ga, yr, face):
             reach = np.where(m, np.maximum(reach, w_), reach)
             zz = np.full_like(Y, -np.inf); zz[m] = np.asarray(zf(np.minimum(np.abs(X[m]), w_), Y[m] - offk), float)   # its top at |x|, held at its edge beyond
             zth = np.maximum(zth, zz)
-        # 7 Nov 2026: a piece that only GRAZES the body (its inner edge over the pleural tips, most of its width beside them)
-        # no longer climbs over it -- that lifted its whole width into a box standing on a step at the root. Its inner edge
-        # is pulled out to just clear the body instead (each cross-section squeezed outward, the clearance line smoothed
-        # along the piece), and it stays at the head's own height, running straight on from the margin. A piece that lies
-        # over the body for most of its width still climbs over it as before.
-        lim = reach + 0.8 * ga + 0.6; behind = (Y > yr + 1.0) & (reach > 0)
-        share = (behind & (np.abs(X) < lim)).mean(axis=0)                  # per cross-section: how much of it is over the body
-        beside = share < 0.6
-        limc = np.where(behind, lim, 0.0).max(axis=0) * beside              # the clearance line, per cross-section
-        lo_c = np.abs(X).min(axis=0); hi_c = np.abs(X).max(axis=0)
-        inner = np.maximum(lo_c, limc)                                      # where each cross-section's inner edge must be
-        trimmed = np.zeros(nu_b, bool)
-        if (limc > lo_c).any():                                             # one smooth inner edge along the piece (its upper envelope
-            from scipy.ndimage import maximum_filter1d, gaussian_filter1d   # over ~1/6 of the piece, smoothed), never inside the body
-            w_ = max(3, nu_b // 6) | 1
-            inner_s = np.maximum(gaussian_filter1d(maximum_filter1d(inner, size=w_, mode="nearest"), w_ / 3.0, mode="nearest"), inner)
-            inner_s = np.where(beside, np.minimum(inner_s, hi_c - 1.0), lo_c)
-            for j in range(nu_b):
-                if inner_s[j] <= lo_c[j] + 0.02: continue
-                a = np.abs(X[:, j]); lo, hi = lo_c[j], hi_c[j]
-                X[:, j] = np.sign(X[:, j] + 1e-12) * (inner_s[j] + (a - lo) * (hi - inner_s[j]) / max(hi - lo, 1e-9)); trimmed[j] = True
-        stay = np.repeat((beside & (share > 0) | trimmed)[None, :], nv_b, 0)   # cross-sections that stay at the head's height
         # over the body (behind the rear joint plane, inside a part's reach): a WALL-thick plate clear of the thorax's top;
         # beside it: solid to the bed. The change between them is eased over ~2 mm (a hard switch per grid point left a comb).
         ease = 1.0                                                          # 9 Nov 2026: the LATERAL ease stays 1 mm whatever the organic strength --
                                                                             # it was 1 + 6 x strength, so a spine clearing the body by 2 mm was still
                                                                             # lifted onto it (the lift bug); rule 7's long curve runs ALONG the spine (below)
-        w_over = smoothstep(ease, -1.0, np.abs(X) - (reach + 0.8 * ga + 0.6)) * smoothstep(yr - 1.0, yr + 1.0, Y) * ~stay
-        lift = np.where(np.isfinite(zth), np.maximum(zth + 0.6 + WALL - Z, 0.0), 0.0) * smoothstep(yr + 1.0, yr + 5.0, Y)   # not on the head's own flap
-        top = np.maximum(Z + w_over * lift, 0.6)
-        for _ in range(2):                                                  # soften the lift (3-tap, both ways), as the head's grid is
-            tp = np.pad(top, 1, mode="edge"); top = np.maximum(0.25 * tp[1:-1, :-2] + 0.5 * tp[1:-1, 1:-1] + 0.25 * tp[1:-1, 2:], Z)
-            tp = np.pad(top, 1, mode="edge"); top = np.maximum(0.25 * tp[:-2, 1:-1] + 0.5 * tp[1:-1, 1:-1] + 0.25 * tp[2:, 1:-1], Z)
-        if _OR.strength() > 0 and nu_b > 5:                                 # organic rule 7: along its length the climb is one smooth curve --
-            from scipy.ndimage import maximum_filter1d, gaussian_filter1d   # the lift (never less) taken as the upper envelope over ~10 mm,
-            mid = nv_b // 2; step = float(np.mean(np.hypot(np.diff(X[mid]), np.diff(Y[mid])))) or 1.0   # smoothed, the same across the band
-            win = max(3, int(round(10.0 * _OR.strength() / step)) | 1)
-            lift_all = (top - Z).max(axis=0)
-            env = gaussian_filter1d(maximum_filter1d(lift_all, size=win, mode="nearest"), sigma=0.5 * win, mode="nearest")
-            env = np.maximum(env, lift_all)
-            top = np.maximum(top, Z + env[None, :] * smoothstep(yr + 1.0, yr + 5.0, Y) * ~stay)
-        for i in (0, nu_b - 1):
-            if np.ptp(x1[:, i]) < 1e-9 and np.ptp(y1[:, i]) < 1e-9: top[:, i] = top[:, i].mean()
-        bot = np.clip(w_over * (top - WALL), 0.0, top - 0.6)
-        m_ = M._closed(np.c_[X.ravel(), Y.ravel(), top.ravel()], np.c_[X.ravel(), Y.ravel(), bot.ravel()], nv_b, nu_b)
+        X_in, reach_in = X.copy(), reach.copy()                             # 9 Nov 2026: kept to retry the band (below)
+        for squeeze in (False, True):                                       # the trim as built; if the band cannot close (a band wholly inside
+            X, reach = X_in.copy(), reach_in.copy()                         # the clearance, the agnostid's root stub, collapses to zero width),
+            try:                                                            # once more with every grazing column squeezed into a 0.4 mm strip
+                reach_full = reach.copy()
+                # 9 Nov 2026 (the spine-root TAB): a band that only GRAZES the body -- its inner edge inside a segment's reach by less
+                # than half its width -- is trimmed in plan to the body's clearance instead of being hoisted onto the segment as a
+                # plate (the tab at the root of every spine running beside a wide thorax). Columns deeper over the body keep the lift.
+                clear_x = reach + 0.8 * ga + 0.6 + 0.3
+                inside = np.clip(clear_x - np.abs(X), 0.0, None) * (Y > yr + 1.0)
+                bw_mm = np.hypot(X[-1] - X[0], Y[-1] - Y[0])                        # the band's width at each column
+                graze = (inside.max(axis=0) > 0) & ((inside.max(axis=0) < 0.5 * np.maximum(bw_mm, 1e-6)) | (nm in ("root", "web")))   # the root stub never floats
+                if graze.any():
+                    col = graze[None, :] & (inside > 0)
+                    if squeeze:                                         # every grazing column mapped from [inner, outer] onto [clearance,
+                        ax_ = np.abs(X); cx = clear_x.max(axis=0); lo = ax_.min(axis=0); hi = ax_.max(axis=0)   # max(outer, clearance + 0.4)]
+                        hi2 = np.maximum(hi, cx + 0.4)
+                        sq = cx[None, :] + (ax_ - lo[None, :]) / np.maximum(hi - lo, 1e-9)[None, :] * (hi2 - cx)[None, :]
+                        X = np.where(graze[None, :], np.sign(X) * sq, X)
+                    else: X = np.where(col, np.sign(X) * clear_x, X)
+                    reach = np.where(col, -np.inf, reach)               # trimmed: nothing to lift there
+                w_over = smoothstep(ease, -1.0, np.abs(X) - (reach + 0.8 * ga + 0.6)) * smoothstep(yr - 1.0, yr + 1.0, Y)
+                lift = np.where(np.isfinite(zth), np.maximum(zth + 0.6 + WALL - Z, 0.0), 0.0) * smoothstep(yr + 1.0, yr + 5.0, Y)   # not on the head's own flap
+                if ramp is not None:                                                # 9 Nov 2026: the plate's ramp (shaped_head) on the piece too, so the
+                    D_ = ramp["D"]; xr_, yr_p = (np.ravel(np.asarray(a_, float)) for a_ in ramp["rear"])   # two meet as one surface; fading out along
+                    y_m = float(yr_p[np.argmax(np.abs(xr_))])                   # the piece within a ramp's width behind the GENAL CORNER (the plate's
+                                                                                # rear edge at its outer column), so only the piece's root climbs
+                    w_r = smoothstep(D_, -0.5, np.abs(X) - (reach_full + 0.8 * ga + 0.6)) ** 1.5 * (1 - smoothstep(y_m, y_m + D_, Y)) * smoothstep(yr + 1.0, yr + 5.0, Y)
+                    lift = np.maximum(lift * np.maximum(w_over, 0), np.where(np.isfinite(zth), np.maximum(zth + 0.6 + WALL - Z, 0.0), 0.0) * w_r)
+                    w_over_l = np.ones_like(w_over)
+                else: w_over_l = w_over
+                top = np.maximum(Z + w_over_l * lift, 0.6)
+                for _ in range(2):                                                  # soften the lift (3-tap, both ways), as the head's grid is
+                    tp = np.pad(top, 1, mode="edge"); top = np.maximum(0.25 * tp[1:-1, :-2] + 0.5 * tp[1:-1, 1:-1] + 0.25 * tp[1:-1, 2:], Z)
+                    tp = np.pad(top, 1, mode="edge"); top = np.maximum(0.25 * tp[:-2, 1:-1] + 0.5 * tp[1:-1, 1:-1] + 0.25 * tp[2:, 1:-1], Z)
+                if _OR.strength() > 0 and nu_b > 5:                                 # organic rule 7: along its length the climb is one smooth curve --
+                    from scipy.ndimage import maximum_filter1d, gaussian_filter1d   # the lift (never less) taken as the upper envelope over ~10 mm,
+                    mid = nv_b // 2; step = float(np.mean(np.hypot(np.diff(X[mid]), np.diff(Y[mid])))) or 1.0   # smoothed, the same across the band
+                    win = max(3, int(round(10.0 * _OR.strength() / step)) | 1)
+                    lift_all = (top - Z).max(axis=0)
+                    env = gaussian_filter1d(maximum_filter1d(lift_all, size=win, mode="nearest"), sigma=0.5 * win, mode="nearest")
+                    env = np.maximum(env, lift_all)
+                    top = np.maximum(top, Z + env[None, :] * smoothstep(yr + 1.0, yr + 5.0, Y))
+                for i in (0, nu_b - 1):
+                    if np.ptp(x1[:, i]) < 1e-9 and np.ptp(y1[:, i]) < 1e-9: top[:, i] = top[:, i].mean()
+                bot = np.clip(w_over * (top - WALL), 0.0, top - 0.6)
+                m_ = M._closed(np.c_[X.ravel(), Y.ravel(), top.ravel()], np.c_[X.ravel(), Y.ravel(), bot.ravel()], nv_b, nu_b)
+            except ValueError:
+                if squeeze: raise
+                continue
+            break
         out += [m_, M.mirror_x(m_)]
     return out
 
@@ -796,17 +909,29 @@ def shaped_head(P, plans, PV, K, J, outline, face):
             zth = np.maximum(zth, zz)                                       # cheeks (the crescent head, see below)
     beside = np.abs(xs) > reach + 0.8 * ga + 0.6
     over = (y > yr) & ~beside
+    # 9 Nov 2026: the lift (below) eased in over EASE_OVER mm beside the body's reach instead of switched on per grid point
+    # (the switch stood the trailing cheeks up as vertical cliffs and ledges beside segment 1)
+    D_ramp = RAMP_MM * K["s"]                                              # the ramp's width, model mm
+    clear = reach + 0.8 * ga + 0.6
+    w_ov = smoothstep(D_ramp, -0.5, np.abs(xs) - clear) ** 1.5 * (y > yr)     # 1 over the body, easing to 0 a ramp's width beside it
+    # the plate's rear edge (the crescent), per column: the genal piece's lift fades out behind it (genal_piece_solids)
+    y_rear_plate = (xs[-1, :], (S["flap"] + k * yr_[-1, :] + off) if np.ndim(yr_) == 2 else (S["flap"] + k * yr_ + off))
     # 9 Nov 2026 -- the CRESCENT head: a rear margin bowed back (outline `notch`) trails the cheeks over the first segments.
     # They were built at the dome's own height there, which at the head's rear corners is near the rim -- so the trailing
     # cheeks sat under the pleurae, invisible, and the studio's crescent came out as a straight edge. Now, like the genal
     # piece, the plate over the body is held clear of the segments' top (gap + WALL), climbing from the joint plane over
     # ~4 mm, so the cheeks lie ON the first segments as shingles and the crescent shows.
-    lift = np.where(over & np.isfinite(zth), np.maximum(zth + 0.6 + WALL - zs, 0.0), 0.0) * smoothstep(yr + 1.0, yr + 5.0, y)
-    for _ in range(2):                                                      # soften the climb (3-tap, both ways)
+    if np.isfinite(zth).any():                                              # 9 Nov 2026: the plate rides the segments' ENVELOPE (their tops
+        from scipy.ndimage import maximum_filter, gaussian_filter           # max-filtered over a rib and smoothed), not every rib and furrow
+        has = np.isfinite(zth); zf = np.where(has, zth, -1e3)               # -- following them rippled the trailing cheeks
+        env = gaussian_filter(maximum_filter(zf, size=(15, 7)), 2.5)
+        zth = np.where(has, np.maximum(env, zth), zth)
+    lift = np.where(np.isfinite(zth), np.maximum(zth + 0.6 + WALL - zs, 0.0), 0.0) * w_ov * smoothstep(yr + 1.0, yr + 5.0, y)
+    for _ in range(6):                                                      # soften the climb (3-tap, both ways)
         lp = np.pad(lift, 1, mode="edge"); lift = np.maximum(0.25 * lp[1:-1, :-2] + 0.5 * lp[1:-1, 1:-1] + 0.25 * lp[1:-1, 2:], lift * 0)
         lp = np.pad(lift, 1, mode="edge"); lift = 0.25 * lp[:-2, 1:-1] + 0.5 * lp[1:-1, 1:-1] + 0.25 * lp[2:, 1:-1]
     zs = zs + lift
-    bot = np.where(over, zs - WALL, 0.0)
+    bot = np.where(over, zs - WALL, 0.0)                                     # beside the body (the ramp included) solid to the bed
     bot = np.clip(np.minimum(bot, zs - 0.6), 0.0, None); top = np.maximum(zs, bot + 0.6)
     head = M._closed(np.c_[xs.ravel(), y.ravel(), top.ravel()], np.c_[xs.ravel(), y.ravel(), bot.ravel()], zs.shape[0], zs.shape[1])
     # the rear block (10 Oct 2026): the socket half is pasted in the strip |x| <= K.w from sock_start to the rear face; a
@@ -829,7 +954,7 @@ def shaped_head(P, plans, PV, K, J, outline, face):
     fill = M._closed(np.c_[FX.ravel(), FY.ravel(), fz.ravel()], np.c_[FX.ravel(), FY.ravel(), np.zeros(FX.size)], FX.shape[0], FX.shape[1])
     head = M.from_manifold(_force(M.to_manifold(head) + M.to_manifold(fill)))
     head = max(head.split(only_watertight=False), key=lambda b: b.volume)
-    pieces = genal_piece_solids(S, plans, off, ga, yr, fc)                 # 1 Nov 2026: the genal piece, its own solid, aimed anywhere
+    pieces = genal_piece_solids(S, plans, off, ga, yr, fc, ramp=dict(D=D_ramp, rear=y_rear_plate))   # 1 Nov 2026: the genal piece, its own solid, aimed anywhere
     if pieces: head = M.from_manifold(_force(M.to_manifold(head) + M.to_manifold(M.union(*pieces))))
     # the preset's ornaments, as isopod_head places them: on this head's own surface
     zt = lambda x_, y_: float(S["zfun"](np.array([abs(x_)]), np.array([y_ - off]))[0])
@@ -913,7 +1038,7 @@ def build(P, head=None, face=None, outline=None, rows=None, preview=False):
         ga = BALL.GAP_AXIAL_FRAC * BALL.ISO_PITCH * s                          # the joint gaps: constant in print mm
         J = dict(gap_axial=ga, gap_vertical=BALL.GAP_VERT_FRAC * BALL.ISO_PITCH * s, gap_lateral=BALL.GAP_LAT_FRAC * BALL.ISO_PITCH * s)
         K = iso_kit(P, s=s, kit=float(P.get("jointScale", 1.0) or 1.0)); PV = pivots(plans, J, K)
-        ROWS_INFO.clear(); ROWS_INFO.update(groups=R["groups"], scale=R["scale"], term_spine=R["term_spine"], rows=R["rows"], model=R["model"], free_spines=R.get("free_spines", []),
+        ROWS_INFO.clear(); ROWS_INFO.update(groups=R["groups"], scale=R["scale"], term_spine=R["term_spine"], rows=R["rows"], model=R["model"], free_spines=R.get("free_spines", []), domes=R.get("domes", []), textures=R.get("textures", []),
                                             margin_spines=R.get("margin_spines", []))
         return _build(P, head, face, outline, plans, J, K, PV, shell=(R["model"] == "slab"), term_spine=R["term_spine"])
     ROWS_INFO.clear()
@@ -1103,6 +1228,21 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
         hs = [h for pair in hs if pair for h in pair]
         for h in hs: LAST_ORNAMENTS.append(dict(part=0, name="free spine", solid=h, before=H))
         if hs: H = M.union(H, *hs)
+    DOMES = []
+    if ROWS_INFO.get("domes"):                                              # 9 Nov 2026: the domes (rows.dome_instances)
+        import rows as _RW; DOMES = _RW.dome_instances(ROWS_INFO["domes"])
+        if H is not None:
+            hd = dome_solids_on([d for d in DOMES if float(d["y"]) < plans[1][3]], None, plans, H=H)
+            for h_ in hd: LAST_ORNAMENTS.append(dict(part=0, name="dome", solid=h_, before=H))
+            if hd: H = M.union(H, *hd)
+    ROWS_INFO["tex_body"] = None
+    if ROWS_INFO.get("textures"):                                           # 9 Nov 2026: the spike textures -- every spike over the head's
+        import rows as _RW; TEX = _RW.texture_spikes(ROWS_INFO["textures"])  # footprint goes on the head (its rear flap lies over segment 0,
+        if H is not None:                                                   # so "ahead of the first row" is not the test), the rest on the body
+            on_h = np.isfinite(_tops(H, np.array([s["x"] for s in TEX]), np.array([s["y"] for s in TEX]))) if TEX else np.zeros(0, bool)
+            ht = spike_texture_solids([s for s, o in zip(TEX, on_h) if o], H)
+            if ht: H = M.union(H, *ht)
+            ROWS_INFO["tex_body"] = [s for s, o in zip(TEX, on_h) if not o]
     lap("head")
     parts = []
     for k in range(n):
@@ -1314,7 +1454,9 @@ def audit_ornaments(parts, plans, min_buried=0.5):
         except Exception: buried = float("nan")
         rec["buried"] = buried
         if not buried >= min_buried: LAST_AUDIT.append(f"{where}: root in the air ({buried:.1f} mm3 inside its part)")
-        V = h.vertices; out = ~before.contains(V)
+        V = h.vertices; out = ~before.contains(V) if nm != "dome" else np.zeros(len(V), bool)   # 9 Nov 2026: not for a dome -- it is seated by
+        # construction (base 1 mm under the lowest surface of its footprint, cut at the bed), and trimesh's ray test of its
+        # 2.5k points against a 170k-face head asked for 6 GB and took the server down
         if out.any():
             tops = _tops(before, V[out, 0], V[out, 1]); low = V[out][np.isfinite(tops) & (V[out, 2] < tops - 0.3)]
             if len(low):                                                     # outside the part yet below its top: beside it (fine), under its plate, or under the bed

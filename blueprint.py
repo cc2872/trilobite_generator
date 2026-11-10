@@ -800,3 +800,24 @@ def gallery(out_dir="out", path=None, title="TEN ORDERS — instrument 2.1"):
 if __name__ == "__main__" and (len(__import__("sys").argv) < 2 or __import__("sys").argv[1] == "gallery"):
     import sys as _sys                                   # python blueprint.py gallery [out_dir]
     print(gallery(_sys.argv[2] if len(_sys.argv) > 2 else "out"))
+
+
+def plan_card(parts, P, path, eye=None, px=900):
+    """The dorsal plan alone, for a menu card (9 Nov 2026, the tree page's blueprint menu): the same contours, strong
+    outline and eye facets as the isopod sheet's PLAN panel, white on black, with no labels, dimensions, joint lines
+    or scale bar; the animal centred in a portrait frame. parts: the pieces in their rest frame (print mm)."""
+    flat = trimesh.util.concatenate([p.copy() for p in parts]); cx = float(flat.centroid[0]); flat.apply_translation([-cx, 0, 0])
+    (x0, y0, z0), (x1, y1, z1) = flat.bounds; W, L = x1 - x0, y1 - y0
+    pad = 0.04 * max(W, L); fw, fh = 3.0, 4.0                              # a 3:4 portrait card
+    s = max((W + 2 * pad) / fw, (L + 2 * pad) / fh)
+    fig = plt.figure(figsize=(fw, fh), dpi=px / fw, facecolor=BG)
+    ax = fig.add_axes([0, 0, 1, 1]); ax.set_facecolor(BG); ax.set_aspect("equal"); ax.axis("off")
+    GX, GY, Z, Mask = _relief_grid(flat, view="top", field=False)
+    for c in _contours(flat, np.linspace(z0 + 0.4, z1 - 0.2, 14)): ax.plot(c[:, 0], c[:, 1], color=INK, lw=0.45, alpha=0.9)
+    if GX is not None: _strong_outline(ax, GX, GY, Mask, lw=1.2, draw=True)
+    try: _eye_lenses(ax, parts[0].copy().apply_translation([-cx, 0, 0]), P, eye=eye, cx=0.0)
+    except Exception: pass                                                 # facets are a nicety on a card; the plan stands without them
+    ym = 0.5 * (y0 + y1)
+    ax.set_xlim(-0.5 * fw * s, 0.5 * fw * s); ax.set_ylim(ym + 0.5 * fh * s, ym - 0.5 * fh * s)   # head up (the pieces' front is -y)
+    fig.savefig(path, facecolor=BG, dpi=px / fw); plt.close(fig)
+    return path

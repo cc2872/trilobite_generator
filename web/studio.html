@@ -49,7 +49,10 @@
   #sheetwrap{display:none;position:absolute;inset:0;background:#000;z-index:5;align-items:center;justify-content:center} #sheetwrap img{max-width:100%;max-height:100%;object-fit:contain}
   #sheetback{position:absolute;left:16px;top:14px;z-index:6;background:var(--bg);color:var(--ink);border:1px solid var(--ink);padding:8px 14px;font:inherit;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} #sheetback:hover{background:var(--soft)}
   #sheettoggle{position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:6;display:flex;border:1px solid var(--line)} #sheettoggle button{background:var(--bg);color:var(--mid);border:none;border-right:1px solid var(--line);padding:8px 14px;font:inherit;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} #sheettoggle button:last-child{border-right:none} #sheettoggle button.on{background:var(--ink);color:var(--bg)}
-  #view3dframe,#prismframe{display:none;width:100%;height:100%;border:0;background:#000}
+  #view3dframe{display:none;width:100%;height:100%;border:0;background:#000}
+  #sheetmenu{position:absolute;right:16px;top:14px;z-index:6;background:var(--bg);color:var(--ink);border:1px solid var(--line);padding:8px 14px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-decoration:none;text-transform:uppercase}
+  #sheetmenu:hover{border-color:var(--ink)}
+  #sheetwait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mid);font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;pointer-events:none}
   @media (max-width:760px){                                   /* mobile: the drawing on top, the controls below, the page scrolls */
     html,body{height:auto;overflow:auto}
     body{grid-template-columns:1fr;min-height:100%}
@@ -62,7 +65,7 @@
 <body>
 <div class="panel">
   <h1><span>Studio</span><span class="mono" style="color:var(--mid)">head + body</span></h1>
-  <div class="nav"><button onclick="location.href='/tree'" title="browse the orders as a ring/spiral family tree">family tree</button><button id="toprism" title="where this animal sits among the made animals and the fossils">prism</button><button id="generator" title="the instrument and advanced page: enrollment measurement (the ruler), all parameters, landmarks and share">measure / advanced →</button></div>
+  <div class="nav"><button onclick="location.href='/tree'" title="browse the orders as a ring/spiral family tree">family tree</button><button id="generator" title="the instrument and advanced page: enrollment measurement (the ruler), all parameters, landmarks and share">measure / advanced →</button></div>
   <div class="hint">One animal. Click the <b>head</b> or a <b>row</b> on the drawing; its controls appear below. Drag a handle to shape it.</div>
 
   <div class="sect"><span>Start from</span><span id="pg"></span></div>
@@ -91,7 +94,7 @@
   <div class="status" id="status"></div>
   <div class="links" id="links"></div>
 </div>
-<div id="stage"><div class="kv" id="kv"></div><button id="embedbuild" title="build the blueprint and 3D in the generator">build - blueprint + 3d</button><div id="sheetwrap"><button id="sheetback">← editor</button><span id="sheettoggle"><button id="toblue" class="on">blueprint</button><button id="to3d">view 3d</button><button id="tosprism" title="where this animal sits in the morphospace prism">prism</button></span><img id="sheetimg" alt="blueprint"><iframe id="view3dframe" title="3D view"></iframe><iframe id="prismframe" title="prism"></iframe></div></div>
+<div id="stage"><div class="kv" id="kv"></div><button id="embedbuild" title="build the blueprint and 3D in the generator">build - blueprint + 3d</button><div id="sheetwrap"><button id="sheetback">← editor</button><a id="sheetmenu" href="/tree" style="display:none">blueprints</a><span id="sheetwait" style="display:none">building blueprint…</span><span id="sheettoggle"><button id="toblue" class="on">blueprint</button><button id="to3d">view 3d</button></span><img id="sheetimg" alt="blueprint"><iframe id="view3dframe" title="3D view"></iframe></div></div>
 
 <script>
 const $=id=>document.getElementById(id);
@@ -118,6 +121,31 @@ function hornOf(r,i){ const P=S.P||{}; const thx=S.BD.rows.filter(x=>x.row.kind!
   if(+r.horn_own>=0.5) return {L:+r.horn_len, turn:+r.horn_rise, roll:+r.horn_roll, yaw:+r.horn_yaw, own:true};
   return {L:(+P.pleuralHorn||0)*(+r.width)*(1+(+P.pleuralHornGrad||0)*frac), turn:(+P.pleuralHornPitch||45)+(+P.pleuralHornBend||0), roll:(+P.pleuralHornRoll||0), yaw:0, own:false}; }
 const FSKEYS=['x','y','len','rise','roll','yaw','bend','hook','turn_at','tines','splay','stem','curl']; const FSR={x:[0,120], y:[-80,400], len:[0,200], rise:[-180,180], roll:[-180,180], yaw:[-180,180], bend:[-360,360], hook:[-1,1], turn_at:[-1,1], tines:[1,5], splay:[0,180], stem:[0,0.9], curl:[-60,60]};
+// 9 Nov 2026: domes -- inflated lobes, bosses, bullae, tubercle rows (rows.DOME_RANGE); w/l are half-sizes in model mm
+const DMKEYS=['x','y','w','l','h','shape','turn','n','dx','dy','taper']; const DMR={x:[0,120], y:[-120,400], w:[0.3,60], l:[0.3,60], h:[0,60], shape:[0.6,8], turn:[-180,180], n:[1,40], dx:[-60,60], dy:[-60,60], taper:[0.3,1.5]};
+const DMTAG={x:'mm across (0 = on the axis, else mirrored)', y:'mm along (- = on the head)', w:'half-width across, mm', l:'half-length along, mm', h:'height above the surface at its centre, mm', shape:'profile: 1 pointed, 2 round, 4+ flat-topped', turn:'deg, plan rotation', n:'how many in a row', dx:'mm across to the next one', dy:'mm along to the next one', taper:'each next one\'s size x this'};
+function growDome(){ const d=S.pending; if(!d) return; S.spec.domes=S.spec.domes||[]; const rel=(S.P&&+S.P.relief)||17;
+  S.spec.domes.push({x:d.x, y:d.y, w:+(0.35*rel).toFixed(1), l:+(0.35*rel).toFixed(1), h:+(0.3*rel).toFixed(1), shape:2, turn:0, n:1, dx:0, dy:+(0.9*rel).toFixed(1), taper:1});
+  S.pending=null; S.sel={type:'dome',j:S.spec.domes.length-1}; status('dome added - drag its dots (centre, width + turn, length, row step) or use the sliders; it shows in 3D on Build',false); sendBody(); renderContext(); renderTable(); }
+function domeInst(q){ const out=[]; let s_=1; for(let i=0;i<Math.max(1,Math.round(q.n||1));i++){ const x=q.x+i*(q.dx||0), y=q.y+i*(q.dy||0);   // = rows.dome_instances
+    out.push({x, y, w:q.w*s_, l:q.l*s_, h:q.h*s_, turn:q.turn||0, i}); if(Math.abs(x)>=0.75) out.push({x:-x, y, w:q.w*s_, l:q.l*s_, h:q.h*s_, turn:-(q.turn||0), i, mirror:true}); s_*=(q.taper||1); } return out; }
+// 9 Nov 2026: spike textures -- rows along a path, or patches -- of thorns anywhere (rows.TEX_RANGE); mm in model units
+const TXKEYS=['spacing','len','r','sharp','rise','dir','side','bend','jit','seed']; const TXPATCH=['w','l','turn'];
+const TXR={spacing:[0.5,30], len:[0.2,40], r:[0.1,6], sharp:[0,1], rise:[-30,90], dir:[-180,180], side:[-1,1], bend:[-120,120], jit:[0,1], seed:[0,99], w:[0.5,120], l:[0.5,120], turn:[-180,180]};
+const TXTAG={spacing:'mm between spikes', len:'mm long', r:'root radius, mm', sharp:'tip / root: 0 needle .. 1 blunt peg', rise:'deg up from the surface (90 = straight up)', dir:'deg: a row, turned from square to the path; a patch, its heading (0 = back)', side:'a row leans to this side of its path (-1 / +1)', bend:'deg, curve over its length', jit:'irregularity: place, size, lean', seed:'another arrangement of the irregularity', w:'patch half-width, mm', l:'patch half-length, mm', turn:'patch turn, deg'};
+function growTexture(kind){ const d=S.pending; if(!d) return; S.spec.textures=S.spec.textures||[]; const rel=(S.P&&+S.P.relief)||17;
+  const q={kind, spacing:+(0.18*rel).toFixed(1), len:+(0.3*rel).toFixed(1), r:+(0.06*rel).toFixed(2), sharp:0.1, rise:kind==='row'?25:60, dir:0, side:1, bend:0, jit:0.4, seed:1};
+  if(kind==='row') q.pts=[[d.x,d.y],[+(d.x+rel).toFixed(2),d.y]]; else Object.assign(q,{pts:[[d.x,d.y]], w:+(0.5*rel).toFixed(1), l:+(0.5*rel).toFixed(1), turn:0});
+  S.spec.textures.push(q); S.pending=null; S.sel={type:'tex',j:S.spec.textures.length-1};
+  status(kind==='row'?'spike row added - drag its path dots (+ point to extend it), double-click a dot to remove it; sliders for spacing, size, sharpness, lean':'spike patch added - drag its centre / size dots; sliders for spacing, size, sharpness, lean',false); sendBody(); renderContext(); renderTable(); }
+function texBase(q){ const out=[]; const sp=Math.max(0.5,+q.spacing||4);          // = rows.texture_spikes without the irregularity (the build adds it)
+  if(q.kind==='row'){ const P=q.pts; const s=[0]; for(let i=1;i<P.length;i++) s.push(s[i-1]+Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1])); const L=s[s.length-1]; if(L<1e-6) return out;
+    const at=t=>{ let i=1; while(i<s.length-1&&s[i]<t) i++; const f=(t-s[i-1])/Math.max(s[i]-s[i-1],1e-9); return [P[i-1][0]+f*(P[i][0]-P[i-1][0]), P[i-1][1]+f*(P[i][1]-P[i-1][1])]; };
+    const n=Math.max(1,Math.round(L/sp)+1); for(let k=0;k<n;k++){ const t=n>1?k*L/(n-1):0; const p=at(t), a=at(Math.max(0,t-0.5)), b=at(Math.min(L,t+0.5)); const tx=b[0]-a[0], ty=b[1]-a[1];
+      const yaw=(q.side>=0?Math.atan2(-ty,tx):Math.atan2(ty,-tx))*180/Math.PI+(+q.dir||0); out.push([p[0],p[1],yaw]); } }
+  else { const [cx,cy]=q.pts[0]; const w=+q.w, l=+q.l, tr=(+q.turn||0)*Math.PI/180, c=Math.cos(tr), s_=Math.sin(tr), hy=sp*0.866; const nx=Math.floor(w/sp)+1, ny=Math.floor(l/hy)+1;
+    for(let i=-ny;i<=ny;i++) for(let k=-nx;k<=nx;k++){ const u=(k+0.5*(((i%2)+2)%2))*sp, v=i*hy; if((u/w)**2+(v/l)**2>1) continue; out.push([cx+c*u-s_*v, cy+s_*u+c*v, +q.dir||0]); } }
+  const crosses=out.some(b=>b[0]>0.75)&&out.some(b=>b[0]<-0.75); const R=[]; for(const b of out){ if(crosses&&b[0]<-0.75) continue; let [x,y,yw]=b; if(x<-0.75){ x=-x; yw=-yw; } R.push([x,y,yw]); if(Math.abs(x)>=0.75) R.push([-x,y,-yw]); } return R; }
 let addMode=false; $('addfeature').onclick=()=>{ addMode=!addMode; $('addfeature').classList.toggle('on',addMode); $('stage').classList.toggle('placing',addMode); if(!addMode){ S.pending=null; renderContext(); } status(addMode?'click on the animal to place a dot there':'' ,false); };
 // the placed dot, before it is anything (25 Oct 2026): S.pending = {x, y}; the panel asks what grows from it
 function growFeature(kind){ const d=S.pending; if(!d) return; S.spec.spines=S.spec.spines||[]; const rel=(S.P&&+S.P.relief)||17; const prong=kind==='prong';
@@ -127,7 +155,7 @@ function freeList(){ const D=S.BD; const L=S.spec.spines||[]; const info=(D&&D.f
   return Object.assign({}, q, {x:rt[0], y:rt[1], z:(f&&f.z!=null)?f.z:((S.P&&+S.P.relief)||17)*0.6, part:f?f.part:null, moved:f?f.moved:0, cover:f?f.cover:1, thin:(f&&f.thin!=null)?f.thin:1}); }); }
 function freeAngles(rise){ rise=+rise||0; const p=rise>=0?Math.max(0.35*rise,Math.min(rise,30)):0.35*rise; return [p, rise-p]; }   // = rows.free_spine_angles: leave at >= 30 degrees, bend the rest
 function snapFreeRoots(){ const info=(S.BD&&S.BD.free)||[]; let n=0; (S.spec.spines||[]).forEach((q,j)=>{ const f=info[j]; if(f&&f.root&&f.moved>0.05){ q.x=+f.root[0].toFixed(2); q.y=+f.root[1].toFixed(2); n++; } }); return n; }   // the spec takes the snapped roots (so the dots sit where the spines will be)
-const TSKEYS=['phi','len','width','rise','roll','blade']; const TSR={phi:[0,90], len:[0,200], width:[0.3,2.5], rise:[-180,180], roll:[-180,180], blade:[0,1]};
+const TSKEYS=['phi','len','width','curve','aim','rise','roll','blade']; const TSR={phi:[0,90], len:[0,200], width:[0.3,2.5], curve:[-90,90], aim:[-60,60], rise:[-180,180], roll:[-180,180], blade:[0,1]};
 function ownTail(){ if(S.spec.tail_spines) return; const T=S.BD&&S.BD.tail; S.spec.tail_spines=(T?T.spines:[]).map(q=>({phi:q.phi, len:q.len, rise:q.rise, roll:q.roll, blade:q.blade, width:(q.width==null?1:q.width)})); }
 // a tail lobe's root corners on the margin (25 Oct 2026): the margin point at phi +/- hh, hh = 13 deg x pygSpineWidth x the lobe's own width
 function tailCorners(T,q){ const wk=(S.P&&+S.P.pygSpineWidth)||1; const hh=13*wk*(q.width==null?1:q.width)*Math.PI/180; const ph=q.phi*Math.PI/180;
@@ -139,7 +167,7 @@ function axialOf(r,i){ const P=S.P||{}; const rel=+P.relief||17; const thx=S.BD.
   return {L:(+P.axialSpine||0)*rel*(1+(+P.axialGrad||0)*frac), pitch:(+P.axialPitch||60), bend:(+P.axialBend||0), own:false}; }
 const ALIAS={glabInflate:'glab_inflate', eyePos:'eye_pos', eyeLat:'eye_lat', eyeSize:'eye_size', glabRise:'glab_rise'};
 const RH={
-  width:[0.6,2.0], length:[0.5,2.0], front_exp:[1.0,6.0], front_point:[0,0.6], widest:[0,0.6], side:[0,0.6], rear_taper:[0,0.6], corner:[0,0.5],
+  width:[0.6,4.0], length:[0.5,2.0], front_exp:[1.0,6.0], front_point:[0,0.6], widest:[0,0.6], side:[0,0.6], rear_taper:[0,0.6], corner:[0,0.5],
   genal:[0,2.5], genal_w:[0.03,0.6], genal_tip:[0,1.0], genal_angle:[-180,180], genal_kink:[0,0.9], genal_kink_angle:[-180,180], genal_web:[0,1], genal_web_round:[-1,1], notch:[0,1], notch_exp:[1,6], dome_fill:[0.4,1],
   horn_h:[0,0.6], height:[0.4,2.0], genal_at:[-1,1], front_flat:[0,0.9], front_dent:[0,0.3], point_w:[0.02,0.5], point_fork:[0,0.8],
   brim_w:[0,0.6], brim_rise:[0,0.4], brim_curve:[-1,1], brim_roll:[0,0.3], brim_pits:[0,6,1],
@@ -147,7 +175,8 @@ const RH={
   glab_front:[1,6], glab_lobes:[0,6,1], furrow:[0,2.5], border_w:[0,0.3], suture_end:[-1,1], suture_depth:[0,0.6], eye_ridge:[0,1.5],
   glab_len:[0.3,1.2], glab_bulge:[-0.3,0.3], glab_round:[0,1], glab_boss:[0,0.45], boss_rise:[0,1], furrow_cross:[0,1], furrow_splay:[0,1],
   dot_r:[0.02,0.3], bullae:[0,0.3], node:[0,1.5], eye_len:[0.5,3], caeca:[0,1], brim:[0,0.5], brim_drop:[0,1.5], tubercles:[0,1], tub_all:[0,1,1], efface:[0,1],
-  dome_exp:[1.2,3.5], bullae_at:[0,0.9], bullae_rise:[0,0.4], furrow_at:[-1,0.95], node_at:[0.05,0.9], collar:[0,0.4], front_furrow:[0,1], front_cap:[0.3,1.5], genal_sharp:[0,1]};   // 7-9 Nov 2026 (schema 6.9) face keys
+  dome_exp:[1.2,3.5], bullae_at:[0,0.9], bullae_rise:[0,0.4], furrow_at:[-1,0.95], node_at:[0.05,0.9], collar:[0,0.4], front_furrow:[0,1], front_cap:[0.3,1.5], genal_sharp:[0,1], horn_aspect:[0.3,2.0], rim:[0,2.5],
+  fringe_n:[0,24,1], fringe_len:[0.02,1.0], fringe_w:[0.005,0.15], fringe_from:[0,1], fringe_to:[0,1], fringe_rise:[-30,60]};   // 9 Nov 2026: the side margin's fringe (its sliders had no range here)   // 7-9 Nov 2026 (schema 6.9) face keys
 
 // ---------- head key helpers ----------
 const isFace=k=>S.headMeta && (k in S.headMeta.face_defaults);
@@ -231,7 +260,7 @@ function slider(box,k,val,lo,hi,step,onin,tag,faint){ const d=document.createEle
 function renderContext(rebuild=true){ const box=$('context');
   if(S.pending){ $('ctxname').textContent=`New feature at (${S.pending.x.toFixed(1)}, ${S.pending.y.toFixed(1)})${S.pending.x<0.75?' - on the axis':' - mirrored'}`; $('ctxtools').innerHTML='';
     box.innerHTML='<div class="hint">What grows from the dot?</div>'; box.dataset.k='pending'; const row=document.createElement('div'); row.className='row'; row.style.marginTop='8px';
-    for(const [t,f,tip] of [['spine',()=>growFeature('spine'),'one curved spine'],['prong',()=>growFeature('prong'),'a forked spine: tines, fan, stem'],['cancel',()=>{ S.pending=null; renderContext(); },'']]){ const b=document.createElement('button'); b.className='btn small'; b.textContent=t; b.title=tip; b.onclick=f; row.appendChild(b); }
+    for(const [t,f,tip] of [['spine',()=>growFeature('spine'),'one curved spine'],['prong',()=>growFeature('prong'),'a forked spine: tines, fan, stem'],['dome',()=>growDome(),'an inflated lobe, boss or bulla (or a row of them)'],['spike row',()=>growTexture('row'),'a row of thorns along a path you draw: a spiny border, a crest'],['spike patch',()=>growTexture('patch'),'a field of thorns over an area'],['cancel',()=>{ S.pending=null; renderContext(); },'']]){ const b=document.createElement('button'); b.className='btn small'; b.textContent=t; b.title=tip; b.onclick=f; row.appendChild(b); }
     box.appendChild(row); return; }
   if(!S.sel){ if(rebuild){ box.innerHTML='<div class="hint">Click the head or a row on the drawing to edit it.</div>'; $('ctxname').textContent='Nothing selected'; $('ctxtools').innerHTML=''; } return; }
   if(S.sel.type==='head'){ $('ctxname').textContent='Head - '+(S.savedHead||S.head); $('ctxtools').innerHTML='';
@@ -248,6 +277,30 @@ function renderContext(rebuild=true){ const box=$('context');
     else { for(const k of keys){ const s=$('s_'+k); if(s&&document.activeElement!==s){ const v=headCur(k); s.value=v; $('v_'+k).textContent=fmt(v); $('v_'+k).classList.toggle('on',Math.abs(v-headBaseOf(k))>1e-9); } }
       if(S.P) for(const p of [...S.eyeParams,...S.hornParams]){ const s=$('s_'+p.key); if(s&&document.activeElement!==s){ s.value=S.P[p.key]; $('v_'+p.key).textContent=fmt(S.P[p.key]); } } }
     return; }
+  if(S.sel.type==='tex'){ const j=S.sel.j; const L=S.spec.textures||[]; if(j>=L.length){ S.sel=null; return renderContext(); } const q=L[j];
+    $('ctxname').textContent=`Spike ${q.kind==='row'?'row':'patch'} ${j} - ${texBase(q).length} spikes`; $('ctxtools').innerHTML='';
+    if(rebuild||box.dataset.k!=='tx'+j){ box.innerHTML=''; box.dataset.k='tx'+j;
+      box.insertAdjacentHTML('beforeend',`<div class="hint">${q.kind==='row'?'Drag the path dots; double-click one to remove it.':'Drag the centre and size dots.'} The ticks show where each spike goes and which way it leans; the build adds the irregularity.</div>`);
+      for(const k of [...TXKEYS,...(q.kind==='patch'?TXPATCH:[])]){ const rr=TXR[k]; slider(box,'tx_'+k,q[k],rr[0],rr[1],(k==='side'||k==='seed')?(k==='side'?2:1):(rr[1]-rr[0])/300,val=>{ q[k]=k==='side'?(+val<0?-1:1):(k==='seed'?Math.round(+val):+(+val).toFixed(3)); sendBody(); renderContext(false); },TXTAG[k]); }
+      const row=document.createElement('div'); row.className='row'; row.style.marginTop='8px';
+      const acts=[['duplicate',()=>{ const c=JSON.parse(JSON.stringify(q)); c.pts=c.pts.map(p=>[p[0],p[1]+(q.kind==='row'?6:2*(q.l||5))]); L.splice(j+1,0,c); S.sel={type:'tex',j:j+1}; sendBody(); renderContext(); }],
+                  ['- spikes',()=>{ L.splice(j,1); if(!L.length) delete S.spec.textures; S.sel=L.length?{type:'tex',j:Math.min(j,L.length-1)}:null; sendBody(); renderContext(); }]];
+      if(q.kind==='row') acts.unshift(['+ point',()=>{ const P=q.pts, a=P[P.length-2], b=P[P.length-1]; if(P.length>=16) return status('a row takes at most 16 points',true); P.push([+(b[0]+(b[0]-a[0])).toFixed(2), +(b[1]+(b[1]-a[1])).toFixed(2)]); sendBody(); renderContext(); }]);
+      for(const [t_,f] of acts){ const b=document.createElement('button'); b.className='btn small'; b.textContent=t_; b.onclick=f; row.appendChild(b); }
+      box.appendChild(row); }
+    else for(const k of [...TXKEYS,...TXPATCH]){ const s=$('s_tx_'+k); if(s&&document.activeElement!==s&&q[k]!=null){ s.value=q[k]; $('v_tx_'+k).textContent=fmt(q[k]); } }
+    return; }
+  if(S.sel.type==='dome'){ const j=S.sel.j; const L=S.spec.domes||[]; if(j>=L.length){ S.sel=null; return renderContext(); } const q=L[j];
+    $('ctxname').textContent=`Dome ${j}${q.x<0.75?' - on the axis':' - mirrored'}${(q.n||1)>1?' - a row of '+Math.round(q.n):''}`; $('ctxtools').innerHTML='';
+    if(rebuild||box.dataset.k!=='dm'+j){ box.innerHTML=''; box.dataset.k='dm'+j;
+      box.insertAdjacentHTML('beforeend','<div class="hint">Plan dots: centre (move), side (width and turn), front-back (length), last of the row (step). Height and profile show on Build / 3D.</div>');
+      for(const k of DMKEYS){ const rr=DMR[k]; slider(box,'dm_'+k,q[k],rr[0],rr[1],k==='n'?1:(rr[1]-rr[0])/300,val=>{ q[k]=k==='n'?Math.round(+val):+(+val).toFixed(3); sendBody(); },DMTAG[k]); }
+      const row=document.createElement('div'); row.className='row'; row.style.marginTop='8px';
+      for(const [t,f] of [['duplicate',()=>{ L.splice(j+1,0,Object.assign({},q,{y:q.y+2*q.l})); S.sel={type:'dome',j:j+1}; sendBody(); renderContext(); }],
+                          ['- dome',()=>{ L.splice(j,1); if(!L.length) delete S.spec.domes; S.sel=L.length?{type:'dome',j:Math.min(j,L.length-1)}:null; sendBody(); renderContext(); }]]){ const b=document.createElement('button'); b.className='btn small'; b.textContent=t; b.onclick=f; row.appendChild(b); }
+      box.appendChild(row); }
+    else for(const k of DMKEYS){ const s=$('s_dm_'+k); if(s&&document.activeElement!==s){ s.value=q[k]; $('v_dm_'+k).textContent=fmt(q[k]); } }
+    return; }
   if(S.sel.type==='free'){ const j=S.sel.j; const L=S.spec.spines||[]; if(j>=L.length){ S.sel=null; return renderContext(); } const q=L[j];
     $('ctxname').textContent=`${(q.tines||1)>1?'Prong':'Spine'} ${j}${q.x<0.75?' - on the axis':' - mirrored'}`; $('ctxtools').innerHTML='';
     if(rebuild||box.dataset.k!=='fs'+j){ box.innerHTML=''; box.dataset.k='fs'+j;
@@ -261,7 +314,7 @@ function renderContext(rebuild=true){ const box=$('context');
   if(S.sel.type==='tailspine'){ const j=S.sel.j; const L=S.spec.tail_spines||[]; if(j>=L.length){ S.sel=null; return renderContext(); } const q=L[j];
     $('ctxname').textContent=`Tail spine ${j}`; $('ctxtools').innerHTML='';
     if(rebuild||box.dataset.k!=='ts'+j){ box.innerHTML=''; box.dataset.k='ts'+j;
-      for(const k of TSKEYS){ const rr=TSR[k]; slider(box,k,q[k],rr[0],rr[1],(rr[1]-rr[0])/300,val=>{ q[k]=+(+val).toFixed(3); sendBody(); },{phi:'deg along the margin',len:'mm',width:'root width, x the built lobe',rise:'deg',roll:'deg',blade:'flat share'}[k]); }
+      for(const k of TSKEYS){ const rr=TSR[k]; slider(box,k,q[k]!=null?q[k]:0,rr[0],rr[1],(rr[1]-rr[0])/300,val=>{ q[k]=+(+val).toFixed(3); sendBody(); },{phi:'deg along the margin',len:'mm',curve:'deg the lobe bends by its tip (+ toward the rear)',aim:'deg it first leaves turned outward, before the curve (a pincer)',width:'root width, x the built lobe',rise:'deg',roll:'deg',blade:'flat share'}[k]); }
       const row=document.createElement('div'); row.className='row'; row.style.marginTop='8px';
       for(const [t,f] of [['+ spine',()=>{ L.splice(j+1,0,Object.assign({},q,{phi:Math.max(0,q.phi-8)})); S.sel={type:'tailspine',j:j+1}; sendBody(); renderContext(); }],
                           ['- spine',()=>{ L.splice(j,1); S.sel=L.length?{type:'tailspine',j:Math.min(j,L.length-1)}:null; sendBody(); renderContext(); }],
@@ -314,23 +367,14 @@ $('build').onclick=async()=>{ const b=$('build'); b.disabled=true; const t0=Date
       $('links').innerHTML=`<a href="/api/stl/${m.key}">download STL (all pieces, print mm)</a>`;
       try{ status('drawing blueprint…',true); const sr=await fetch('/api/sheet',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, joint:'isopod', cmap:'none', head:headArg(), body:S.spec})}); const sj=await sr.json(); if(sj.url){ showSheet(sj.url); status(`built - ${m.parts.length} pieces - blueprint ready`,false); } else status('built - blueprint failed',true); }catch(_){ status('built - blueprint failed',true); } }
   }catch(e){ clearInterval(tick); status('build failed - '+e,true); } b.disabled=false; };
-function showSheet(url){ $('sheetimg').src=url+(url.indexOf('?')>=0?'&':'?')+'t='+Date.now(); setView('blue'); $('sheetwrap').style.display='flex'; }   // Build shows the blueprint over the drawing; "← editor" returns to editing
-function _draft(){ try{ sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec, P:S.P})); }catch(_){} }
-function setView(v){   // 31 Oct 2026: three sheet views -- 'blue' (blueprint), '3d' (the generator's viewer), 'prism' (where this point sits)
-  $('sheetimg').style.display=v==='blue'?'block':'none';
-  const f=$('view3dframe'), pf=$('prismframe'); f.style.display=v==='3d'?'block':'none'; pf.style.display=v==='prism'?'block':'none';
-  if(v==='3d'){ _draft();
-    const want='/generator?preset='+encodeURIComponent(S.preset)+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+'&bodydraft=1&only3d=1'+(S.built?'&sig='+encodeURIComponent(S.built):'');   // the generator's proven 3D, panel hidden; sig=build key so a rebuilt animal reloads the iframe
+function showSheet(url){ $('sheetwait').style.display='none'; $('sheetimg').src=url+(url.indexOf('?')>=0?'&':'?')+'t='+Date.now(); mode3d(false); $('sheetwrap').style.display='flex'; }   // Build shows the blueprint over the drawing; "← editor" returns to editing
+function mode3d(on){ $('sheetimg').style.display=on?'none':'block'; const f=$('view3dframe'); f.style.display=on?'block':'none';
+  if(on){ try{ sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec, P:S.P})); }catch(_){}
+    const want='/generator?preset='+encodeURIComponent(S.preset)+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+'&bodydraft=1&only3d=1'+(S.built?'&sig='+encodeURIComponent(S.built):'');   // the generator's proven 3D, panel hidden; sig=build key so a rebuilt animal reloads the iframe (reads the fresh draft) instead of showing the old mesh
     if(f.getAttribute('src')!==want) f.setAttribute('src',want); }
-  if(v==='prism'){ _draft();
-    const fp=JSON.stringify([S.preset,S.head,S.headOutline,S.headFace,S.spec,S.P]);   // reload the prism only when the animal actually changed (it reads the draft to mark 'you')
-    if(pf._fp!==fp){ pf._fp=fp; pf.setAttribute('src','/prism?mine=1&embed=1&sig='+Date.now()); } }
-  $('toblue').classList.toggle('on',v==='blue'); $('to3d').classList.toggle('on',v==='3d'); $('tosprism').classList.toggle('on',v==='prism'); }
-function mode3d(on){ setView(on?'3d':'blue'); }   // kept: other callers still flip blueprint <-> 3D
+  $('toblue').classList.toggle('on',!on); $('to3d').classList.toggle('on',on); }
 $('sheetback').onclick=()=>{ $('sheetwrap').style.display='none'; };
-$('toblue').onclick=()=>setView('blue'); $('to3d').onclick=()=>setView('3d'); $('tosprism').onclick=()=>setView('prism');
-$('toprism').onclick=()=>{ try{ sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec, P:S.P})); }catch(_){}   // 30 Oct 2026: the prism reads this draft (?mine=1)
-  location.href='/prism?mine=1'; };
+$('toblue').onclick=()=>mode3d(false); $('to3d').onclick=()=>mode3d(true);
 $('generator').onclick=()=>{ try{ if(S.edited) sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, spec:S.spec, savedName:S.savedBody})); }catch(_){}
   location.href='/?preset='+encodeURIComponent(S.preset||'')+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+(S.edited?'&bodydraft=1':'')+(S.savedBody?'&body='+encodeURIComponent(S.savedBody):''); };
 
@@ -363,6 +407,24 @@ new p5(s=>{
       if(tn>1){ dots.push(['fs_fork',pr.split,false]); dots.push(['fs_splay',pr.tines[0][16],false]); }   // the fork point (drag along: the stem's share) and the other outer tine's tip (drag: the fan)
       for(const [k,p_,big] of dots){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):s.color(255,210)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(k==='fs_root'?s.color(255,120):0)); s.circle(sx,sy,on?(big?9:7):(big?6:4.5)); HP.push({kind:'fs',j,k,sx,sy}); }
       if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`spine ${j} - ${q.len.toFixed(1)} mm - rise ${Math.round(q.rise)}° - roll ${Math.round(q.roll)}° - yaw ${Math.round(q.yaw)}°${(q.tines||1)>1?' - '+Math.round(q.tines)+' tines, fan '+Math.round(q.splay)+'°, stem '+Math.round(100*q.stem)+'%':''}${q.part==null?'':q.part<0?' - on the head':' - on piece '+(q.part+1)}${q.thin<0.999?' - '+Math.round(q.thin*100)+'% thick (the room on the plate)':''}${q.cover<0.999?' - collar '+Math.round(q.cover*100)+'% on the plate':''}`, X(tp[0])+9, Y(tp[1])-6); } }); }
+  function drawTextures(){ const L=S.spec.textures||[]; if(!L.length) return; const TC=s.color(235,190,120);
+    L.forEach((q,j)=>{ const on=S.sel&&S.sel.type==='tex'&&S.sel.j===j; const col=on?s.color(246,112,79):TC;
+      for(const [x,y,yw] of texBase(q)){ const a=yw*Math.PI/180, Lp=(+q.len)*Math.cos((+q.rise||0)*Math.PI/180); s.stroke(col); s.strokeWeight(on?1.4:1); s.line(X(x),Y(y),X(x+Lp*Math.sin(a)),Y(y+Lp*Math.cos(a))); s.noStroke(); s.fill(col); s.circle(X(x),Y(y),Math.min(5,Math.max(2,(+q.r)*px))); }
+      const dots=[];
+      if(q.kind==='row'){ s.stroke(on?s.color(246,112,79,140):s.color(235,190,120,110)); s.strokeWeight(1); s.noFill(); for(const m of (q.pts.every(p=>Math.abs(p[0])<0.75)?[1]:[1,-1])){ s.beginShape(); for(const p of q.pts) s.vertex(X(m*p[0]),Y(p[1])); s.endShape(); }
+        q.pts.forEach((p,i)=>dots.push(['tx_p'+i,p,i===0])); }
+      else { const [cx,cy]=q.pts[0], tr=(+q.turn||0)*Math.PI/180; for(const m of (Math.abs(cx)<0.75?[1]:[1,-1])){ s.push(); s.translate(X(m*cx),Y(cy)); s.rotate(m*tr); s.stroke(on?s.color(246,112,79,160):s.color(235,190,120,120)); s.noFill(); s.strokeWeight(1); s.ellipse(0,0,2*q.w*px,2*q.l*px); s.pop(); }
+        dots.push(['tx_c',[cx,cy],true],['tx_w',[cx+Math.cos(tr)*q.w,cy+Math.sin(tr)*q.w],false],['tx_l',[cx-Math.sin(tr)*q.l,cy+Math.cos(tr)*q.l],false]); }
+      for(const [k,p_,big] of dots){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(col); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(big?s.color(235,190,120,150):0)); s.rect(sx-(on?4:3),sy-(on?4:3),on?8:6,on?8:6); HP.push({kind:'tx',j,k,sx,sy}); }
+      if(on){ const p0=q.pts[q.pts.length-1]; s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`spikes ${j} - ${texBase(q).length} x ${(+q.len).toFixed(1)} mm, every ${(+q.spacing).toFixed(1)} mm, rise ${Math.round(q.rise)}°`, X(p0[0])+10, Y(p0[1])-6); } }); }
+  function drawDomes(){ const L=S.spec.domes||[]; if(!L.length) return; const DC=s.color(150,200,255);
+    L.forEach((q,j)=>{ const on=S.sel&&S.sel.type==='dome'&&S.sel.j===j; const I=domeInst(q);
+      for(const d of I){ s.push(); s.translate(X(d.x),Y(d.y)); s.rotate(d.turn*Math.PI/180); if(on){ s.stroke(246,112,79); s.strokeWeight(1.4); } else { s.stroke(DC); s.strokeWeight(1); } s.noFill();
+        s.ellipse(0,0,2*d.w*px,2*d.l*px); s.stroke(on?s.color(246,112,79,90):s.color(150,200,255,70)); s.ellipse(0,0,d.w*px,d.l*px); s.pop(); }   // the footprint, and its half-height ring
+      const t=(q.turn||0)*Math.PI/180, c=Math.cos(t), sn=Math.sin(t); const last=I.filter(d=>!d.mirror).slice(-1)[0];
+      const dots=[['dm_c',[q.x,q.y],true],['dm_w',[q.x+c*q.w,q.y+sn*q.w],false],['dm_l',[q.x-sn*q.l,q.y+c*q.l],false]]; if((q.n||1)>1) dots.push(['dm_step',[last.x,last.y],false]);
+      for(const [k,p_,big] of dots){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):DC); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(big?s.color(150,200,255,140):0)); s.circle(sx,sy,on?(big?9:7):(big?6:4.5)); HP.push({kind:'dm',j,k,sx,sy}); }
+      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`dome ${j} - ${(2*q.w).toFixed(1)} x ${(2*q.l).toFixed(1)} mm - ${q.h.toFixed(1)} mm high - shape ${(+q.shape).toFixed(1)}${(q.n||1)>1?' - row of '+Math.round(q.n):''}`, X(q.x+Math.abs(c*q.w))+9, Y(q.y)-6); } }); }
   function tailList(){ const D=S.BD, T=D&&D.tail; if(!T) return []; const own=!!S.spec.tail_spines;
     return own?S.spec.tail_spines.map(q=>{ const ph=q.phi*Math.PI/180; const x0=T.wp*Math.cos(ph), y0=T.y0+T.Lp*Math.sin(ph); const r0=Math.hypot(x0,y0-T.y0)||1e-6; return Object.assign({}, q, {root:[x0,y0], dir:[x0/r0,(y0-T.y0)/r0]}); }):T.spines; }
   const X=x=>ox+x*px, Y=y=>oy+y*px;
@@ -422,6 +484,8 @@ new p5(s=>{
     drawHorn(headOn);                                                                // the genal horn (P.genalHorn*), drawn live from P, with its handles
     drawBodySpines();                                                                // axial spines, pleural horns, tail spines: live from P (24 Oct 2026)
     drawFreeSpines();                                                                // the free spines: anywhere, with root / tip / mid dots
+    drawDomes();                                                                     // the domes (9 Nov 2026): footprints in plan, with centre / size / step dots
+    drawTextures();                                                                  // the spike textures (9 Nov 2026): path / patch, a tick per spike
     s.noStroke(); s.fill(255,90); s.textAlign(s.RIGHT,s.BOTTOM); s.text(((inflightB||inflightH)?'drawing…':'')+' ', W-12, H-10);
     window.__hp=HP;                                                                  // the handles this frame (for scripted tests)
   };
@@ -472,10 +536,12 @@ new p5(s=>{
     list.forEach((q,j)=>{ const yaw=Math.atan2(q.dir[0],q.dir[1])*180/Math.PI; const flat=(q.blade>=0.999)&&Math.abs(q.rise)<1e-6;   // a flat lobe of the shield: a triangle in plan; else the arc
       const pts=arcPts([q.root[0],q.root[1],0.6],q.len,yaw,0,flat?0:q.rise,q.roll,16); const on=S.sel&&S.sel.type==='tailspine'&&S.sel.j===j; const C=tailCorners(T,q);
       if(on) orange(1.3); else if(own) hair(255,1.2); else hair(200,1.0);
-      for(const m of [1,-1]){ if(flat){ s.beginShape(); for(const p_ of [C.a,pts[16],C.b]) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); } else { s.beginShape(); for(const p_ of pts) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); } }
+      const cvr=(+q.curve||0)*Math.PI/180, amr=(+q.aim||0)*Math.PI/180, lobePt=(c,f)=>{ const bx=c[0]+f*(q.root[0]-c[0]), by=c[1]+f*(q.root[1]-c[1]), a=cvr*f*0.5-amr, dx=q.dir[0]*Math.cos(a)-q.dir[1]*Math.sin(a), dy=q.dir[0]*Math.sin(a)+q.dir[1]*Math.cos(a); return [bx+f*q.len*dx, by+f*q.len*dy]; };   // 9 Nov 2026: a curved lobe, as tail.py bends it
+      if(flat&&(cvr||amr)){ const fl=c=>Array.from({length:13},(_,i)=>lobePt(c,i/12)); const A=fl(C.a), B=fl(C.b).reverse(); pts[16]=A[12]; pts[8]=lobePt(q.root,0.5); for(const m of [1,-1]){ s.beginShape(); for(const p_ of [...A,...B]) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); } }
+      else for(const m of [1,-1]){ if(flat){ s.beginShape(); for(const p_ of [C.a,pts[16],C.b]) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); } else { s.beginShape(); for(const p_ of pts) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); } }
       const tp=pts[16], md=pts[8]; const dots=[['ts_tip',tp],['ts_root',q.root],['ts_width',C.a]]; if(!flat) dots.push(['ts_mid',md]);   // tip: length (+ where); root: where on the margin; width: the lobe's root corner
       for(const [k,p_] of dots){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):s.color(255,200)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(k==='ts_root'?s.color(255,120):0)); s.circle(sx,sy,on?7:4.5); HP.push({kind:'ts',j,k,sx,sy}); }
-      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`tail ${flat?'lobe':'spine'} ${j} - ${q.len.toFixed(1)} mm - at ${Math.round(q.phi)}° - width ${(q.width==null?1:q.width).toFixed(2)}${flat?'':' - rise '+Math.round(q.rise)+'° - roll '+Math.round(q.roll)+'°'}`, X(tp[0])+9, Y(tp[1])-6); } }); }
+      if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`tail ${flat?'lobe':'spine'} ${j} - ${q.len.toFixed(1)} mm - at ${Math.round(q.phi)}° - width ${(q.width==null?1:q.width).toFixed(2)}${q.curve?' - curve '+Math.round(q.curve)+'°':''}${flat?'':' - rise '+Math.round(q.rise)+'° - roll '+Math.round(q.roll)+'°'}`, X(tp[0])+9, Y(tp[1])-6); } }); }
   function drawHorn(headOn){ const P=S.P; if(!P||!S.HD) return; const pts=hornPts(P,hornRoot(),24); if(!pts) return;
     for(const m of [1,-1]){ if(headOn) orange(1.3); else hair(255,1.1); s.beginShape(); for(const q of pts) s.vertex(headSX([m*q[0],q[1]]), headSY(q)); s.endShape(); }
     if(!headOn) return;
@@ -510,8 +576,10 @@ new p5(s=>{
   function nearest(mx,my){ let best=null,bd=12; for(const h of HP){ const d=Math.hypot(h.sx-mx,h.sy-my); if(d<bd){ bd=d; best=h; } } return best; }
   s.mouseMoved=()=>{ const h=nearest(s.mouseX,s.mouseY); const hi=h&&h.kind==='row'?h.i:null; if(hi!==S.hover){ S.hover=hi; } stage.style.cursor=h?'grab':'default'; };
   s.mousePressed=()=>{ if(s.mouseX<0||s.mouseY<0||s.mouseX>W||s.mouseY>H) return; const h=nearest(s.mouseX,s.mouseY);
-    if(addMode&&!(h&&h.kind==='fs')){ const mx=Math.abs((s.mouseX-ox)/px), my=(s.mouseY-oy)/px; if(s.mouseX>oxE-10) return;      // add mode: a click in plan grows a spine there
-      S.pending={x:+(mx<1.5?0:mx).toFixed(2), y:+my.toFixed(2)}; S.sel=null; addMode=false; $('addfeature').classList.remove('on'); $('stage').classList.remove('placing'); status('dot placed - choose what grows from it (spine or prong) in the panel',false); renderContext(false); return; }
+    if(addMode&&!(h&&(h.kind==='fs'||h.kind==='dm'||h.kind==='tx'))){ const mx=Math.abs((s.mouseX-ox)/px), my=(s.mouseY-oy)/px; if(s.mouseX>oxE-10) return;      // add mode: a click in plan grows a spine there
+      S.pending={x:+(mx<1.5?0:mx).toFixed(2), y:+my.toFixed(2)}; S.sel=null; addMode=false; $('addfeature').classList.remove('on'); $('stage').classList.remove('placing'); status('dot placed - choose what grows from it (spine, prong, dome or spikes) in the panel',false); renderContext(false); return; }
+    if(h&&h.kind==='tx'){ S.sel={type:'tex',j:h.j}; S.drag={kind:'tx',j:h.j,k:h.k}; renderContext(); renderTable(); stage.style.cursor='grabbing'; return; }
+    if(h&&h.kind==='dm'){ const q=(S.spec.domes||[])[h.j]; S.sel={type:'dome',j:h.j}; S.drag={kind:'dm',j:h.j,k:h.k}; renderContext(); renderTable(); stage.style.cursor='grabbing'; return; }
     if(h&&h.kind==='fs'){ S.sel={type:'free',j:h.j}; S.drag={kind:'fs',j:h.j,k:h.k}; renderContext(); renderTable(); stage.style.cursor='grabbing'; return; }
     if(h&&h.kind==='row'){ S.sel={type:'row',i:h.i}; S.pinned=h.i; S.drag={kind:'row',i:h.i,k:h.k,x0:s.mouseX,y0:s.mouseY,start:Object.assign({},rowOf(h.i))}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='eye'){ S.sel={type:'head'}; S.eyeSel=h.k; S.drag={kind:'eye',k:h.k,d:h}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
@@ -527,9 +595,11 @@ new p5(s=>{
       S.headSel='dot'+j; S.drag={kind:'hdot',j,side:r.side,x0:s.mouseX,y0:s.mouseY,d0:[dots[j][1],dots[j][2]]}; sendHead(); stage.style.cursor='grabbing'; }
     else if(h&&h.kind==='head'){ S.sel={type:'head'}; S.headSel=h.k; S.drag={kind:'head',k:h.k,elev:!!h.elev,x0:s.mouseX,y0:s.mouseY,start:headSnapshot(),H0:JSON.parse(JSON.stringify((S.HD&&S.HD.diagram.handles)||{}))}; renderContext(); renderTable(); stage.style.cursor='grabbing'; }
     else { S.sel=null; S.drag=null; renderContext(); renderTable(); } };
-  s.doubleClicked=()=>{ const h=nearest(s.mouseX,s.mouseY); if(!h||h.kind!=='hdot') return; const dots=(S.headOutline.dots||[]).slice(); dots.splice(h.j,1);
+  s.doubleClicked=()=>{ const h=nearest(s.mouseX,s.mouseY);
+    if(h&&h.kind==='tx'&&h.k.startsWith('tx_p')){ const q=(S.spec.textures||[])[h.j]; if(q&&q.pts.length>2){ q.pts.splice(+h.k.slice(4),1); S.drag=null; sendBody(); renderContext(); } return; }
+    if(!h||h.kind!=='hdot') return; const dots=(S.headOutline.dots||[]).slice(); dots.splice(h.j,1);
     if(dots.length) S.headOutline.dots=dots; else delete S.headOutline.dots; S.headSel=null; S.drag=null; sendHead(); };
-  s.mouseReleased=()=>{ if(S.drag){ if(['ax','ph','ts','fs'].includes(S.drag.kind)) sendBody(); S.drag=null; stage.style.cursor='grab'; } };
+  s.mouseReleased=()=>{ if(S.drag){ if(['ax','ph','ts','fs','dm','tx'].includes(S.drag.kind)) sendBody(); S.drag=null; stage.style.cursor='grab'; } };
   s.mouseDragged=()=>{ if(!S.drag) return;
     if(S.drag.kind==='hdot'){ const d=S.drag, pxH=headScale()*px, dots=S.headOutline.dots||[]; const q=dots[d.j]; if(!q) return;
       const cl=v=>Math.max(-1.5,Math.min(1.5,v)); q[1]=+cl(d.d0[0]+d.side*(s.mouseX-d.x0)/pxH).toFixed(5); q[2]=+cl(d.d0[1]+(s.mouseY-d.y0)/pxH).toFixed(5); sendHead(); return; }
@@ -545,6 +615,18 @@ new p5(s=>{
         S.P.eyeStalk=Math.max(0,Math.min(4,+dist.toFixed(2))); S.P.eyeLean=Math.max(0,Math.min(90,Math.round(lean))); }
       else if(S.drag.k==='height'){ const proj=((mx-d.bx)*d.dx+(my-d.by)*d.dy)/d.er; S.P.eyeHeight=Math.max(0.2,Math.min(1.6,+proj.toFixed(2))); }
       S.edited=true; renderContext(false); return; }
+    if(S.drag.kind==='tx'){ const d=S.drag, q=(S.spec.textures||[])[d.j]; if(!q) return; const mx=(s.mouseX-ox)/px, my=(s.mouseY-oy)/px; const r2=v=>+v.toFixed(2);
+      if(d.k.startsWith('tx_p')){ const i=+d.k.slice(4); q.pts[i]=[r2(Math.abs(mx)<1.5?0:mx), r2(my)]; }
+      else if(d.k==='tx_c'){ q.pts[0]=[r2(Math.abs(mx)<1.5?0:Math.abs(mx)), r2(my)]; }
+      else if(d.k==='tx_w'){ const vx=mx-q.pts[0][0], vy=my-q.pts[0][1]; q.w=r2(Math.max(0.5,Math.hypot(vx,vy))); q.turn=Math.round(Math.atan2(vy,vx)*180/Math.PI); }
+      else if(d.k==='tx_l'){ const t=(q.turn||0)*Math.PI/180; q.l=r2(Math.max(0.5,Math.abs(-(mx-q.pts[0][0])*Math.sin(t)+(my-q.pts[0][1])*Math.cos(t)))); }
+      renderContext(false); return; }
+    if(S.drag.kind==='dm'){ const d=S.drag, q=(S.spec.domes||[])[d.j]; if(!q) return; const mx=(s.mouseX-ox)/px, my=(s.mouseY-oy)/px; const cl=(v,k)=>Math.max(DMR[k][0],Math.min(DMR[k][1],v));
+      if(d.k==='dm_c'){ q.x=+cl(Math.abs(mx)<1.5?0:Math.abs(mx),'x').toFixed(2); q.y=+cl(my,'y').toFixed(2); }
+      else if(d.k==='dm_w'){ const vx=mx-q.x, vy=my-q.y; q.w=+cl(Math.hypot(vx,vy),'w').toFixed(2); q.turn=Math.round(Math.atan2(vy,vx)*180/Math.PI); }
+      else if(d.k==='dm_l'){ const t=(q.turn||0)*Math.PI/180; q.l=+cl(Math.abs(-(mx-q.x)*Math.sin(t)+(my-q.y)*Math.cos(t)),'l').toFixed(2); }
+      else if(d.k==='dm_step'){ const m=Math.max(1,Math.round(q.n)-1); q.dx=+cl((mx-q.x)/m,'dx').toFixed(2); q.dy=+cl((my-q.y)/m,'dy').toFixed(2); }
+      renderContext(false); return; }
     if(S.drag.kind==='fs'){ const d=S.drag, q=(S.spec.spines||[])[d.j]; if(!q) return; const mx=Math.abs((s.mouseX-ox)/px), my=(s.mouseY-oy)/px; const z=freeList()[d.j].z;
       if(d.k==='fs_root'){ q.x=+(mx<1.5?0:mx).toFixed(2); q.y=+my.toFixed(2); }
       else if(d.k==='fs_fork'){ const pit=freeAngles(q.rise)[0]*Math.PI/180, yw=q.yaw*Math.PI/180; const ux=Math.sin(yw)*Math.cos(pit), uy=Math.cos(yw)*Math.cos(pit);   // along the stem's plan direction
@@ -631,13 +713,17 @@ function headKeysFor(h){ const ks=((S.headMeta&&S.headMeta.handles[h])||[]).map(
 
 // ---------- start ----------
 (async()=>{ const u=new URLSearchParams(location.search); S.head=u.get('head')||'plain';
-  try{ const sc=await (await fetch('/api/schema')).json(); const EK=new Set(['eyeSize','eyeArc','eyePos','eyeLat','eyeHeight','eyeProfile','eyeStalk','eyeStalkR','eyeStalkBend','eyeLean','eyeSphere','lensD','lensGap']);
+  try{ const sc=await (await fetch('/api/schema')).json(); const EK=new Set(['eyeSize','eyeArc','eyePos','eyeLat','eyeHeight','eyeProfile','eyeStalk','eyeStalkR','eyeStalkBend','eyeLean','eyeSphere','lensD','lensGap','eyeSolid','eyeLobe','eyeElong','eyeHalf','eyeRoll','eyeSlope']);   // 9 Nov 2026: the solid eye's shape (drum/lobe, elongation, half, roll, slope)
        S.eyeParams=(sc.params||[]).filter(p=>EK.has(p.key)); S.prongParams=(sc.params||[]).filter(p=>p.group==='Prongs'); S.hornParams=(sc.params||[]).filter(p=>p.key.startsWith('genalHorn'));
-       const SK=['axialSpine','axialPitch','axialBend','axialGrad','pleuralHorn','pleuralHornPitch','pleuralHornBend','pleuralHornRoll','pleuralHornGrad','spineBase','spineGrad','spineSweep','tipTaper'];
-       const TK=['pygRings','pygRibRelief','pygFurrowScale','pygSpine','pygSplay','pygMarginal','pygMarginalLen','pygSpineRise','pygSpineBend','pygSpineGrow','pygSpineBlade','pygSpineWidth','termSpine','termBend','tailOutlineExp','pygBorderWidth'];
+       const SK=['axialSpine','axialPitch','axialBend','axialGrad','pleuralHorn','pleuralHornPitch','pleuralHornBend','pleuralHornRoll','pleuralHornGrad','spineBase','spineGrad','spineSweep','tipTaper','macroIndex','macroAmp'];
+       const TK=['pygRings','pygRibRelief','pygFurrowScale','pygRibFan','pygSpine','pygSplay','pygMarginal','pygMarginalLen','pygSpineRise','pygSpineBend','pygSpineGrow','pygSpineBlade','pygSpineWidth','termSpine','termBend','tailOutlineExp','pygBorderWidth','pygAxisEnd','pygAxisCap','pygAxisTaper','pygAxisRound'];
        const by=k=>(sc.params||[]).find(p=>p.key===k); S.spineParams=SK.map(by).filter(Boolean); S.tailParams=TK.map(by).filter(Boolean); }catch(_){ S.eyeParams=[]; S.prongParams=[]; S.hornParams=[]; S.spineParams=[]; S.tailParams=[]; }   // the eye and prong params -> their panel sliders
   const body=u.get('body'); if(body){ const b=(await (await fetch('/api/bodies')).json()).find(x=>x.name===body); if(b){ if(b.head) S.head=b.head; await loadAll(b.preset, body); return; } }
-  if(u.get('preset')) await loadAll(u.get('preset')); else { S.head='diagram'; await loadAll('diagram'); } })();   // 25 Oct 2026: the studio starts on the textbook trilobite (preset + head 'diagram')
+  if(u.get('preset')) await loadAll(u.get('preset')); else { S.head='diagram'; await loadAll('diagram'); }
+  if(u.get('view')==='blueprint'){                     // 9 Nov 2026: from the tree's blueprint menu -- open on the animal's blueprint + 3D,
+    $('sheetback').textContent='\u2190 edit in studio'; $('sheetmenu').style.display='block';   // "edit in studio" drops into the editor
+    $('sheetimg').removeAttribute('src'); $('sheetwait').style.display='flex'; $('sheetwrap').style.display='flex';
+    $('build').click(); } })();   // 25 Oct 2026: the studio starts on the textbook trilobite (preset + head 'diagram')
 </script>
 </body>
 </html>

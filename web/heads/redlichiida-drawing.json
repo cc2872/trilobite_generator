@@ -1,0 +1,20 @@
+{
+ "name": "redlichiida-drawing",
+ "style": "olenellus",
+ "outline": {
+  "genal": 1.0,
+  "genal_tip": 0.08
+ },
+ "face": {
+  "eye_size": 0.07,
+  "eye_pos": 0.35,
+  "axis_frac": 0.22,
+  "glab_inflate": 1.6,
+  "glab_rise": 0.2,
+  "glab_bulge": 0.15,
+  "glab_round": 0.8,
+  "glab_boss": 0.0
+ },
+ "doc": "the redlichiida preset's drawing block (2026-11-09); its parameters live on /redlichiida",
+ "saved_at": "2026-11-09T14:28:01"
+}

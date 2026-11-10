@@ -109,7 +109,7 @@ const LABEL={front_exp:'front_exp - pointiness (1.2 sharp, 1.6 ogival, 2 round, 
 const ALIAS={glabInflate:'glab_inflate', eyePos:'eye_pos', eyeLat:'eye_lat', eyeSize:'eye_size', glabRise:'glab_rise'};
 // slider ranges (the page's, not the schema's: shaped_head.OUTLINE / head_crescent.FACE carry defaults and comments, no ranges)
 const R={
-  width:[0.6,2.0], length:[0.5,2.0], front_exp:[1.0,6.0], front_point:[0,0.6], widest:[0,0.6], side:[0,0.6], rear_taper:[0,0.6], corner:[0,0.5],
+  width:[0.6,4.0], length:[0.5,2.0], front_exp:[1.0,6.0], front_point:[0,0.6], widest:[0,0.6], side:[0,0.6], rear_taper:[0,0.6], corner:[0,0.5],
   genal:[0,2.5], genal_w:[0.03,0.6], genal_tip:[0,1.0], genal_angle:[-180,180], genal_kink:[0,0.9], genal_kink_angle:[-180,180], genal_web:[0,1], genal_web_round:[-1,1], notch:[0,1], notch_exp:[1,6], dome_fill:[0.4,1],
   horn_h:[0,0.6], height:[0.4,2.0], genal_at:[-1,1], front_flat:[0,0.9], front_dent:[0,0.3], point_w:[0.02,0.5], point_fork:[0,0.8],
   brim_w:[0,0.6], brim_rise:[0,0.4], brim_curve:[-1,1], brim_roll:[0,0.3], brim_pits:[0,6,1],
@@ -117,7 +117,7 @@ const R={
   glab_front:[1,6], glab_lobes:[0,6,1], furrow:[0,2.5], border_w:[0,0.3], suture_end:[-1,1], suture_depth:[0,0.6], eye_ridge:[0,1.5],
   glab_len:[0.3,1.2], glab_bulge:[-0.3,0.3], glab_round:[0,1], glab_boss:[0,0.45], boss_rise:[0,1], furrow_cross:[0,1], furrow_splay:[0,1],
   bullae:[0,0.3], node:[0,1.5], eye_len:[0.5,3], caeca:[0,1], brim:[0,0.5], brim_drop:[0,1.5], tubercles:[0,1], tub_all:[0,1,1], efface:[0,1],
-  dome_exp:[1.2,3.5], bullae_at:[0,0.9], bullae_rise:[0,0.4], furrow_at:[-1,0.95], node_at:[0.05,0.9], collar:[0,0.4], front_furrow:[0,1], front_cap:[0.3,1.5], genal_sharp:[0,1]};   // 7-9 Nov 2026 (schema 6.9) face keys
+  dome_exp:[1.2,3.5], bullae_at:[0,0.9], bullae_rise:[0,0.4], furrow_at:[-1,0.95], node_at:[0.05,0.9], collar:[0,0.4], front_furrow:[0,1], front_cap:[0.3,1.5], genal_sharp:[0,1], horn_aspect:[0.3,2.0], rim:[0,2.5]};   // 7-9 Nov 2026 (schema 6.9) face keys
 const isFace=k=>S.meta && (k in S.meta.face_defaults);
 const isOut=k=>S.meta && (k in S.meta.outline_defaults);
 const baseOf=k=>isOut(k)?S.baseOutline[k]:S.baseFace[k];        // the style's own value (what "reset" returns to)

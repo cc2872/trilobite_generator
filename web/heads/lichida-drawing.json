@@ -1,0 +1,45 @@
+{
+ "name": "lichida-drawing",
+ "style": "lichas",
+ "outline": {
+  "width": 1.05,
+  "length": 1.0,
+  "front_exp": 1.8,
+  "widest": 0.15,
+  "genal": 1.35,
+  "genal_w": 0.42,
+  "genal_tip": 0.04,
+  "genal_angle": 82.0,
+  "genal_kink": 0.55,
+  "genal_kink_angle": 34.0,
+  "genal_web_round": 0.4,
+  "notch": 0.0,
+  "genal_sharp": 0.3,
+  "dot_r": 0.1,
+  "genal_at": -0.35,
+  "dots": [
+   [
+    0.27,
+    -0.12,
+    0.06
+   ],
+   [
+    0.62,
+    -0.06,
+    0.0
+   ]
+  ]
+ },
+ "face": {
+  "eye_pos": 0.45,
+  "eye_height": 0.85,
+  "eye_lat": 0.0,
+  "suture_end": 1.0,
+  "suture_depth": 0.3,
+  "glab_len": 1.12,
+  "glab_round": 1.0,
+  "tubercles": 0.0
+ },
+ "doc": "the lichida preset's drawing block (2026-11-09); its parameters live on /lichida",
+ "saved_at": "2026-11-09T18:44:13"
+}
