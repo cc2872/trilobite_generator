@@ -632,6 +632,9 @@ def body_ornaments(P, plans, parts, skip=()):
         rest = ROWS_INFO.get("tex_body")
         if rest is None: rest = [s for s in _RW.texture_spikes(ROWS_INFO["textures"]) if s["y"] >= plans[1][3]]
         textures_on(rest, parts, plans, skip=skip)
+    if ROWS_INFO.get("grooves"):                                             # 9 Nov 2026: the grooves on the body (the head's are carved in _build)
+        rest = ROWS_INFO.get("groove_body")
+        grooves_on(ROWS_INFO["grooves"] if rest is None else rest, parts, skip=skip)
 
 
 def margin_spine_solids(plans, parts, skip=()):
@@ -719,6 +722,52 @@ def textures_on(spikes, parts, plans, H=None, skip=()):
         if sol: parts[k] = M.union(parts[k], *sol)
     if lost: LAST_AUDIT.append(f"spike texture: {lost} spike{'s' if lost > 1 else ''} off the animal, not built")
     return out_H
+
+
+def groove_solid(g, mesh_list):
+    """One groove (9 Nov 2026) as the solid to carve: a round-bottomed channel of half-width w following the path (x, y),
+    its floor d below the surface -- the top of whichever mesh in `mesh_list` is highest at each sample. Spheres every
+    0.5 w along the path, each consecutive pair hulled into a capsule; mirrored unless the path lies on the axis. None
+    if no point of it is over the animal."""
+    from manifold3d import Manifold
+    P = np.asarray(g["pts"], float); w, d = float(g["w"]), float(g["d"])
+    seg = np.hypot(*np.diff(P, axis=0).T); s = np.r_[0, np.cumsum(seg)]
+    if s[-1] < 1e-6: return None
+    n = max(2, int(np.ceil(s[-1] / (0.5 * w))) + 1); t = np.linspace(0, s[-1], n)
+    X = np.interp(t, s, P[:, 0]); Y = np.interp(t, s, P[:, 1])
+    Z = np.full(n, -np.inf)
+    for m in mesh_list:
+        z = _tops(m, X, Y); Z = np.where(np.isfinite(z) & (z > Z), z, Z)
+    ok = np.isfinite(Z) & (Z > d + 0.2)                                    # never through a plate thinner than the groove
+    if not ok.any(): return None
+    caps = []; prev = None
+    for i in range(n):
+        if not ok[i]: prev = None; continue
+        sph = Manifold.sphere(w, 16).translate((float(X[i]), float(Y[i]), float(Z[i] - d + w)))
+        if prev is not None: caps.append(Manifold.batch_hull([prev, sph]))
+        else: caps.append(sph)
+        prev = sph
+    tool = Manifold.batch_boolean(caps, __import__("manifold3d").OpType.Add) if len(caps) > 1 else caps[0]
+    if (np.abs(P[:, 0]) >= 0.75).any(): tool = tool + tool.mirror((1.0, 0.0, 0.0))
+    return M.from_manifold(tool)
+
+
+def grooves_on(grooves, parts, H=None, skip=()):
+    """Carve every groove from the head (H, when given) or the body parts whose plan it crosses. Returns the new H."""
+    for g in grooves or []:
+        if H is not None:
+            tool = groove_solid(g, [H])
+            if tool is not None: H = M.difference(H, tool)
+            continue
+        idx = [k for k in range(1, len(parts)) if k not in skip]
+        tool = groove_solid(g, [parts[k] for k in idx])
+        if tool is None: continue
+        lo, hi = tool.bounds
+        for k in idx:
+            b0, b1 = parts[k].bounds
+            if (hi < b0).any() or (lo > b1).any(): continue
+            parts[k] = M.difference(parts[k], tool)
+    return H
 
 
 def dome_solids_on(domes, parts, plans, H=None, skip=()):
@@ -1038,7 +1087,7 @@ def build(P, head=None, face=None, outline=None, rows=None, preview=False):
         ga = BALL.GAP_AXIAL_FRAC * BALL.ISO_PITCH * s                          # the joint gaps: constant in print mm
         J = dict(gap_axial=ga, gap_vertical=BALL.GAP_VERT_FRAC * BALL.ISO_PITCH * s, gap_lateral=BALL.GAP_LAT_FRAC * BALL.ISO_PITCH * s)
         K = iso_kit(P, s=s, kit=float(P.get("jointScale", 1.0) or 1.0)); PV = pivots(plans, J, K)
-        ROWS_INFO.clear(); ROWS_INFO.update(groups=R["groups"], scale=R["scale"], term_spine=R["term_spine"], rows=R["rows"], model=R["model"], free_spines=R.get("free_spines", []), domes=R.get("domes", []), textures=R.get("textures", []),
+        ROWS_INFO.clear(); ROWS_INFO.update(groups=R["groups"], scale=R["scale"], term_spine=R["term_spine"], rows=R["rows"], model=R["model"], free_spines=R.get("free_spines", []), domes=R.get("domes", []), textures=R.get("textures", []), grooves=R.get("grooves", []),
                                             margin_spines=R.get("margin_spines", []))
         return _build(P, head, face, outline, plans, J, K, PV, shell=(R["model"] == "slab"), term_spine=R["term_spine"])
     ROWS_INFO.clear()
@@ -1243,6 +1292,13 @@ def _build(P, head, face, outline, plans, J, K, PV, shell=False, term_spine=0.0)
             ht = spike_texture_solids([s for s, o in zip(TEX, on_h) if o], H)
             if ht: H = M.union(H, *ht)
             ROWS_INFO["tex_body"] = [s for s, o in zip(TEX, on_h) if not o]
+    ROWS_INFO["groove_body"] = None
+    if ROWS_INFO.get("grooves") and H is not None:                          # 9 Nov 2026: grooves -- the head's carved here (any groove
+        import rows as _RW                                                  # with a point over the head's footprint), the rest on the body
+        G = ROWS_INFO["grooves"]
+        on_h = [bool(np.isfinite(_tops(H, np.array([p[0] for p in g["pts"]], float), np.array([p[1] for p in g["pts"]], float))).any()) for g in G]
+        H = grooves_on([g for g, o in zip(G, on_h) if o], None, H=H)
+        ROWS_INFO["groove_body"] = [g for g, o in zip(G, on_h) if not o]
     lap("head")
     parts = []
     for k in range(n):

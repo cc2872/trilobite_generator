@@ -1,0 +1,26 @@
+{
+ "name": "harpetida-drawing",
+ "style": "harpes",
+ "outline": {
+  "width": 1.8,
+  "genal": 1.55,
+  "genal_w": 0.45,
+  "genal_tip": 0.05,
+  "genal_angle": 3.0,
+  "genal_kink_angle": -18.0,
+  "genal_web": 0.6,
+  "genal_web_round": 0.4,
+  "notch": 0.4,
+  "notch_exp": 1.8,
+  "genal_sharp": 0.3
+ },
+ "face": {
+  "eye_size": 0.03,
+  "eye_lat": 0.2,
+  "axis_frac": 0.12,
+  "glab_inflate": 0.8,
+  "rim": 0.5
+ },
+ "doc": "the harpetida preset's drawing block (2026-11-09); its parameters live on /harpetida",
+ "saved_at": "2026-11-09T09:44:31"
+}

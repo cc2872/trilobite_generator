@@ -1,0 +1,33 @@
+{
+ "name": "odontopleurida-drawing",
+ "style": "odontopleura",
+ "outline": {
+  "width": 0.5,
+  "length": 0.65,
+  "front_exp": 2.0,
+  "widest": 0.3,
+  "genal": 5.0,
+  "genal_w": 0.14,
+  "genal_tip": 0.12,
+  "genal_angle": 86.0,
+  "genal_kink": 0.45,
+  "genal_kink_angle": 10.0,
+  "genal_web_round": 0.6,
+  "dome_fill": 1.0,
+  "genal_at": -0.5
+ },
+ "face": {
+  "eye_size": 0.06,
+  "eye_pos": 0.55,
+  "eye_height": 1.6,
+  "eye_lat": 0.5,
+  "glab_inflate": 1.0,
+  "glab_rise": 0.18,
+  "suture_end": 1.0,
+  "suture_depth": 0.3,
+  "tubercles": 0.0,
+  "tub_all": 0.0
+ },
+ "doc": "the odontopleurida preset's drawing block (2026-11-09); its parameters live on /odontopleurida",
+ "saved_at": "2026-11-09T21:17:02"
+}

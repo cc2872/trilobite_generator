@@ -1,15 +1,296 @@
 {
  "base": "spiny",
  "blurb": "Odontopleurida \u2014 Gon p. 63. Spines everywhere: pleural, marginal, occipital, axial; 9 segments.",
+ "drawing": {
+  "body": "odontopleurida-drawing",
+  "doc": "Boedaspis (Odontopleurida), 9 Nov 2026: lobed smooth head, long genal arcs, frontal horns over the body, 10 segments with long and short pleural spines, tail shield with a peg comb and two long pairs",
+  "face": {
+   "tub_all": 0,
+   "tubercles": 0.0
+  },
+  "head": "odontopleurida-drawing",
+  "model": "isopod",
+  "outline": {
+   "dome_fill": 1.0,
+   "front_exp": 2.0,
+   "genal": 5.0,
+   "genal_angle": 86,
+   "genal_at": -0.5,
+   "genal_kink": 0.45,
+   "genal_kink_angle": 10,
+   "genal_tip": 0.12,
+   "genal_w": 0.14,
+   "genal_web_round": 0.6,
+   "length": 0.65,
+   "widest": 0.3,
+   "width": 0.5
+  },
+  "page": "/odontopleurida",
+  "params": {
+   "bladeChord": 1.1,
+   "eyeLat": 0.5,
+   "eyePos": 0.55,
+   "eyeSize": 0.06,
+   "eyeStalkBend": 75.0,
+   "glabInflate": 1.0,
+   "occipitalBend": -35.0,
+   "occipitalSpine": 0.0,
+   "occipitalSplay": 18.0,
+   "occipitalTines": 2,
+   "pygMarginal": 0,
+   "pygSpine": 0.0,
+   "spineSweep": 12.0,
+   "tipSweep": 0.3,
+   "tipTaper": 0.6
+  },
+  "rows": {
+   "print_scale": 0.8,
+   "pyg_len": 42,
+   "pyg_rows": 2,
+   "rows": {
+    "0": {
+     "axis": 0.42,
+     "curve": -20.0,
+     "sweep": 2.0,
+     "tip": 56.0,
+     "width": 34.0
+    },
+    "1": {
+     "axis": 0.42,
+     "curve": -12.8,
+     "sweep": 4.2,
+     "tip": 57.11,
+     "width": 33.56
+    },
+    "10": {
+     "width": 56
+    },
+    "11": {
+     "width": 50
+    },
+    "2": {
+     "axis": 0.42,
+     "curve": -5.6,
+     "sweep": 6.4,
+     "tip": 59.14,
+     "width": 33.11
+    },
+    "3": {
+     "axis": 0.42,
+     "curve": 1.7,
+     "sweep": 8.7,
+     "tip": 61.77,
+     "width": 32.67
+    },
+    "4": {
+     "axis": 0.42,
+     "curve": 8.9,
+     "sweep": 10.9,
+     "tip": 64.89,
+     "width": 32.22
+    },
+    "5": {
+     "axis": 0.42,
+     "curve": 16.1,
+     "sweep": 13.1,
+     "tip": 68.42,
+     "width": 31.78
+    },
+    "6": {
+     "axis": 0.42,
+     "curve": 23.3,
+     "sweep": 15.3,
+     "tip": 72.33,
+     "width": 31.33
+    },
+    "7": {
+     "axis": 0.42,
+     "curve": 30.6,
+     "sweep": 17.6,
+     "tip": 76.58,
+     "width": 30.89
+    },
+    "8": {
+     "axis": 0.42,
+     "curve": 37.8,
+     "sweep": 19.8,
+     "tip": 81.14,
+     "width": 30.44
+    },
+    "9": {
+     "axis": 0.42,
+     "curve": 45.0,
+     "sweep": 22.0,
+     "tip": 86.0,
+     "width": 30.0
+    }
+   },
+   "spines": [
+    {
+     "bend": 58,
+     "len": 152.0,
+     "rise": 8.0,
+     "roll": -90.0,
+     "x": 7.0,
+     "y": -24.0,
+     "yaw": 40
+    },
+    {
+     "bend": 26.0,
+     "len": 128.0,
+     "rise": 10.0,
+     "roll": -90.0,
+     "x": 28.0,
+     "y": 133.0,
+     "yaw": 16.0
+    },
+    {
+     "bend": 0.0,
+     "len": 72.0,
+     "rise": 8.0,
+     "roll": 0.0,
+     "x": 10.0,
+     "y": 146.0,
+     "yaw": 2.0
+    }
+   ],
+   "tail_spines": [],
+   "textures": [
+    {
+     "jit": 0.15,
+     "kind": "row",
+     "len": 9.0,
+     "pts": [
+      [
+       43.69,
+       143.51
+      ],
+      [
+       40.13,
+       146.77
+      ],
+      [
+       36.13,
+       149.73
+      ],
+      [
+       31.74,
+       152.36
+      ],
+      [
+       27.0,
+       154.64
+      ],
+      [
+       21.96,
+       156.54
+      ],
+      [
+       16.69,
+       158.04
+      ],
+      [
+       11.23,
+       159.13
+      ],
+      [
+       5.64,
+       159.78
+      ],
+      [
+       0.0,
+       160.0
+      ]
+     ],
+     "r": 1.4,
+     "rise": 0,
+     "seed": 3,
+     "sharp": 0.7,
+     "side": -1,
+     "spacing": 3.6
+    },
+    {
+     "dir": -8,
+     "jit": 0.0,
+     "kind": "row",
+     "len": 34.0,
+     "pts": [
+      [
+       27.0,
+       11.8
+      ],
+      [
+       27.0,
+       24.13
+      ],
+      [
+       27.0,
+       36.47
+      ],
+      [
+       27.0,
+       48.8
+      ],
+      [
+       27.0,
+       61.2
+      ]
+     ],
+     "r": 1.6,
+     "rise": 6,
+     "seed": 1,
+     "sharp": 0.15,
+     "side": -1,
+     "spacing": 12.35
+    },
+    {
+     "dir": -15,
+     "jit": 0.0,
+     "kind": "row",
+     "len": 46.0,
+     "pts": [
+      [
+       27.0,
+       73.6
+      ],
+      [
+       27.0,
+       86.0
+      ],
+      [
+       27.0,
+       98.6
+      ],
+      [
+       27.0,
+       111.2
+      ]
+     ],
+     "r": 1.6,
+     "rise": 8,
+     "seed": 1,
+     "sharp": 0.15,
+     "side": -1,
+     "spacing": 12.55
+    }
+   ],
+   "thorax_len": 120.0,
+   "thorax_rows": 10
+  },
+  "saved_at": "2026-11-09T21:17:02",
+  "schema": "6.9",
+  "style": "odontopleura"
+ },
  "expect": {},
+ "eye_source": "photos, \u00b115\u201320 % (8 Sep 2026)",
  "guide_edits_2026-10-02": {
-  "sutureEnd": [
+  "eyeRidge": [
    null,
-   1.0
+   0.6
   ],
-  "sutureDepth": [
-   null,
-   0.3
+  "glabInflate": [
+   1.25,
+   0.95
   ],
   "lensD": [
    0.16,
@@ -19,113 +300,112 @@
    0.3,
    0.0
   ],
-  "eyeRidge": [
-   null,
-   0.6
-  ],
-  "glabInflate": [
-   1.25,
-   0.95
-  ],
   "pygRings": [
    4,
    3
+  ],
+  "sutureDepth": [
+   null,
+   0.3
+  ],
+  "sutureEnd": [
+   null,
+   1.0
   ]
  },
- "eye_source": "photos, \u00b115\u201320 % (8 Sep 2026)",
  "length_policy": "pitch>=8: 130.0->139 mm",
  "order": "odontopleurida",
  "params": {
-  "length": 139.0,
-  "width": 69.5,
-  "relief": 17.1,
-  "segCount": 9,
-  "cephFrac": 0.32,
-  "pygFrac": 0.16,
-  "marginHeight": 0.14,
-  "fulcrum": 0.55,
-  "overlap": 0.45,
-  "wall": 2.0,
-  "widthMaxPos": 0.2,
-  "widthHeadFront": 0.75,
-  "widthThoraxFront": 0.93,
-  "widthThoraxRear": 0.62,
-  "widthTail": 0.5,
+  "axialSpine": 0.4,
   "axisFrac": 0.28,
   "axisRise": 0.0,
-  "furrowDepth": 1.2,
-  "effacement": 0.0,
-  "tent": 1.0,
   "axisSigma": 0.55,
-  "pleuralSlope": 0.74,
-  "ringArch": 0.22,
+  "barrelR": 2.6,
   "bladeCamber": 0.14,
-  "headOutlineExp": 2.15,
-  "headDomeExp": 1.5,
-  "headDomeFill": 0.82,
-  "headWall": 1.0,
-  "tailWall": 1.0,
-  "headRelief": 1.0,
-  "tailRelief": 1.0,
-  "tailDomeExp": 2.0,
+  "bladeChord": 0.9,
+  "borderWidth": 0.1,
+  "boreDia": 1.95,
+  "cephFrac": 0.32,
   "cephParallel": 0.05,
-  "glabInflate": 0.95,
-  "glabRise": 0.18,
-  "glabLobes": 3,
-  "eyeSize": 0.11,
-  "eyePos": 0.7,
+  "clearance": 0.3,
+  "effacement": 0.0,
   "eyeArc": 180.0,
   "eyeHeight": 1.6,
   "eyeLat": 0.7,
+  "eyePos": 0.7,
   "eyeProfile": 4.0,
-  "eyeSolid": 1,
-  "eyeSlope": 0.0,
+  "eyeRidge": 0.6,
   "eyeShade": 0.15,
-  "lensD": 0.05,
-  "lensGap": 0.0,
-  "lensRise": 0.35,
-  "genalSweep": 0.3,
-  "borderWidth": 0.1,
-  "genalSpine": 0.8,
-  "headRearArc": 0.0,
-  "headRearExp": 2.2,
-  "genalWidth": 0.12,
-  "genalTip": 0.0,
-  "genalWidthMM": 0.0,
+  "eyeSize": 0.11,
+  "eyeSlope": 0.0,
+  "eyeSolid": 1,
+  "fulcrum": 0.55,
+  "furrowDepth": 1.2,
   "genalAngle": 5.1,
   "genalKink": 0.5,
   "genalKinkAngle": 14.9,
-  "tipSweep": 0.75,
-  "bladeChord": 0.9,
-  "tipTaper": 0.9,
-  "spineBase": 0.8,
-  "spineGrad": 0.3,
-  "macroIndex": -1,
+  "genalSpine": 0.8,
+  "genalSweep": 0.3,
+  "genalTip": 0.0,
+  "genalWidth": 0.12,
+  "genalWidthMM": 0.0,
+  "glabInflate": 0.95,
+  "glabLobes": 3,
+  "glabRise": 0.18,
+  "headDomeExp": 1.5,
+  "headDomeFill": 0.82,
+  "headOutlineExp": 2.15,
+  "headProngLen": 0.6,
+  "headProngSplay": 30,
+  "headProngs": 0,
+  "headRearArc": 0.0,
+  "headRearExp": 2.2,
+  "headRelief": 1.0,
+  "headWall": 1.0,
+  "length": 139.0,
+  "lensD": 0.05,
+  "lensGap": 0.0,
+  "lensRise": 0.35,
   "macroAmp": 0.8,
-  "spineSweep": 40.0,
-  "pygWidth": 0.82,
+  "macroIndex": -1,
+  "marginHeight": 0.14,
+  "maxAngle": 18.0,
+  "nKnuckles": 3,
+  "occipitalSpine": 0.5,
+  "overlap": 0.45,
+  "pleuralSlope": 0.74,
+  "pygFrac": 0.16,
+  "pygMarginal": 6,
+  "pygMarginalLen": 0.9,
   "pygRings": 3,
   "pygSpine": 1.0,
   "pygSplay": 14.0,
-  "termSpine": 0.0,
-  "axialSpine": 0.4,
-  "occipitalSpine": 0.5,
-  "pygMarginal": 6,
-  "pygMarginalLen": 0.9,
-  "headProngs": 0,
-  "headProngLen": 0.6,
-  "headProngSplay": 30,
-  "tailProngs": 0,
+  "pygWidth": 0.82,
+  "relief": 17.1,
+  "ringArch": 0.22,
+  "segCount": 9,
+  "spineBase": 0.8,
+  "spineGrad": 0.3,
+  "spineSweep": 40.0,
+  "sutureDepth": 0.3,
+  "sutureEnd": 1.0,
+  "tailDomeExp": 2.0,
   "tailProngLen": 0.5,
   "tailProngSplay": 30,
-  "maxAngle": 18.0,
-  "clearance": 0.3,
-  "boreDia": 1.95,
-  "barrelR": 2.6,
-  "nKnuckles": 3,
-  "sutureEnd": 1.0,
-  "sutureDepth": 0.3,
-  "eyeRidge": 0.6
+  "tailProngs": 0,
+  "tailRelief": 1.0,
+  "tailWall": 1.0,
+  "tent": 1.0,
+  "termSpine": 0.0,
+  "tipSweep": 0.75,
+  "tipTaper": 0.9,
+  "wall": 2.0,
+  "width": 69.5,
+  "widthHeadFront": 0.75,
+  "widthMaxPos": 0.2,
+  "widthTail": 0.5,
+  "widthThoraxFront": 0.93,
+  "widthThoraxRear": 0.62
  },
  "schema": "6.7"
 }

@@ -1,0 +1,40 @@
+{
+ "name": "corynexochida-drawing",
+ "style": "olenoides",
+ "outline": {
+  "corner": 0.3,
+  "genal": 0.9,
+  "genal_w": 0.08,
+  "genal_tip": 0.1,
+  "genal_angle": 5.0,
+  "genal_kink": 0.45,
+  "genal_kink_angle": -5.0,
+  "genal_web": 0.7,
+  "genal_web_round": 0.4,
+  "notch": 0.3,
+  "notch_exp": 4.0,
+  "dome_fill": 0.85,
+  "horn_aspect": 0.9,
+  "genal_sharp": 0.45
+ },
+ "face": {
+  "eye_size": 0.07,
+  "eye_pos": 0.47,
+  "axis_frac": 0.18,
+  "glab_inflate": 1.25,
+  "glab_rise": 0.32,
+  "glab_front": 2.0,
+  "glab_lobes": 3.0,
+  "furrow": 2.0,
+  "border_w": 0.08,
+  "suture_end": 1.0,
+  "suture_depth": 0.3,
+  "eye_ridge": 0.6,
+  "glab_bulge": -0.1,
+  "glab_round": 0.6,
+  "dome_exp": 1.7,
+  "rim": 0.4
+ },
+ "doc": "the corynexochida preset's drawing block (2026-11-09); its parameters live on /corynexochida",
+ "saved_at": "2026-11-09T08:21:59"
+}

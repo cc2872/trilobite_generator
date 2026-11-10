@@ -1,0 +1,21 @@
+{
+ "name": "proetida-drawing",
+ "style": "dalmanites",
+ "outline": {
+  "width": 1.08,
+  "length": 0.86,
+  "front_exp": 2.0,
+  "front_point": 0.0,
+  "genal_angle": -6.0,
+  "notch": 0.4,
+  "point_w": 0.28
+ },
+ "face": {
+  "eye_size": 0.1,
+  "eye_pos": 0.23,
+  "eye_lat": 0.42,
+  "glab_inflate": 1.1
+ },
+ "doc": "the proetida preset's drawing block (2026-11-09); its parameters live on /proetida",
+ "saved_at": "2026-11-09T22:58:45"
+}

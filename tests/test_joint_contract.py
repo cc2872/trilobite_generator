@@ -29,32 +29,13 @@ def test_template_surface(built):
     assert 0 < J.stop_deg(P) <= 90
 
 
-def _part_fault(J, m, k):
-    """Why part k is not one watertight body, or None. Symmetry is NOT asserted here. The parts ARE symmetric by
-    construction (0.0000 mm built on Windows), but manifold3d's Linux wheel triangulates a sphere/hinge boolean enough
-    differently that an assembled part reads past any print-scale tolerance on CI, and it flaked repeatedly across tol
-    bumps (0.05 -> 0.2 -> 0.35) and 3x rebuilds -- the difference is consistent per platform, so neither helps. The
-    component shells' symmetry is covered in test_mesh / test_parts; this contract only needs each part to be one
-    watertight body."""
-    if not m.is_watertight: return f"{J.NAME} part {k} not watertight"
-    n = len(m.split(only_watertight=False))
-    if n != 1: return f"{J.NAME} part {k} is {n} bodies"
-    return None
-
 def test_every_part_is_one_watertight_body(built):
-    # Manifold's parallel booleans are nondeterministic run-to-run (its Python binding exposes no thread knob), so a part
-    # can occasionally come back a touch asymmetric or non-watertight though the geometry is valid by construction. Rebuild
-    # up to 3x and require one clean build: a real defect fails every rebuild, a flake clears on a retry (flexi then ball
-    # tripped a single-shot symmetry check on CI's forked workers).
-    J, P, _ = built
-    last = "no build"
-    for _ in range(3):
-        parts = assemble.animal(schema.coerce(ANIMAL), J)
-        assert len(parts) == int(P["segCount"]) + 2
-        faults = [f for f in (_part_fault(J, m, k) for k, m in enumerate(parts)) if f]
-        if not faults: return
-        last = faults[0]
-    assert False, last + " (failed 3 rebuilds)"
+    J, P, parts = built
+    assert len(parts) == int(P["segCount"]) + 2
+    for k, m in enumerate(parts):
+        assert m.is_watertight, f"{J.NAME} part {k} not watertight"
+        assert len(m.split(only_watertight=False)) == 1, f"{J.NAME} part {k} is {len(m.split(only_watertight=False))} bodies"
+        assert M.is_symmetric(m), f"{J.NAME} part {k} is not mirror-symmetric"
 
 
 def test_pose_shape_and_identity(built):

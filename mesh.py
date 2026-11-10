@@ -132,13 +132,11 @@ def mirror_x(m):
     v = m.vertices.copy(); v[:, 0] *= -1
     return trimesh.Trimesh(v, m.faces[:, ::-1], process=False)
 
-def is_symmetric(m, tol=0.2, n=6000, seed=0):
+def is_symmetric(m, tol=0.05, n=6000, seed=0):
     """True if the SURFACE is invariant under x -> -x: points sampled on the mesh, mirrored, lie on the mesh within tol.
     (A vertex-set test is wrong after a boolean: Manifold may triangulate a flat face with an extra vertex on one side
     without changing the shape. The raw height field IS vertex-symmetric; booleans keep the geometry symmetric to Manifold's
-    tolerance — measured 0.03 mm on a hinge at a 20 deg bevel. 9 Nov 2026: the default tol is 0.2 mm (was 0.05): manifold3d's
-    Linux wheel triangulates a boolean a hair differently than Windows, and its parallel booleans vary run-to-run, so on CI
-    a part symmetric by construction occasionally read 0.05-0.2 mm asymmetric and flaked. 0.2 mm is invisible on any nozzle.)"""
+    tolerance — measured 0.03 mm on a hinge at a 20 deg bevel — so the default tol is 0.05 mm, under any nozzle.)"""
     pts, _ = trimesh.sample.sample_surface(m, n, seed=seed)
     pts = pts.copy(); pts[:, 0] *= -1
     _, d, _ = trimesh.proximity.closest_point(m, pts)

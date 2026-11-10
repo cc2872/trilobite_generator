@@ -79,7 +79,7 @@ TRACE_MAX = 400     # points a traced outline may carry
 
 OUTLINE_RANGE = dict(   # what the silhouette is drawn for (11 Oct 2026: a 0.2-long head crashed in interp, a 3 x 3 x genal-3 one printed 2.7 m)
     width=(0.5, 4.0), length=(0.4, 2.5), front_exp=(1.0, 8.0), front_point=(0.0, 1.5), widest=(0.0, 0.8), side=(0.0, 1.0), rear_taper=(0.0, 0.9),
-    corner=(0.0, 0.5), genal=(0.0, 3.5), genal_w=(0.02, 1.0), genal_tip=(0.0, 1.0), genal_angle=(-180.0, 180.0), genal_kink=(0.0, 0.9),
+    corner=(0.0, 0.5), genal=(0.0, 5.0), genal_w=(0.02, 1.0), genal_tip=(0.0, 1.0), genal_angle=(-180.0, 180.0), genal_kink=(0.0, 0.9),
     genal_kink_angle=(-180.0, 180.0), genal_web=(0.0, 1.0), genal_web_round=(-1.0, 1.0),
     notch=(0.0, 1.0), notch_exp=(1.0, 8.0), dome_fill=(0.3, 1.0), horn_h=(0.0, 1.0), genal_sharp=(0.0, 1.0), horn_aspect=(0.3, 9.0), height=(0.2, 3.0), genal_at=(-1.0, 1.0),
     front_flat=(0.0, 0.9), front_dent=(0.0, 0.5), point_w=(0.02, 1.0), point_fork=(0.0, 0.9), brim_w=(0.0, 1.0), brim_rise=(-0.5, 1.0),

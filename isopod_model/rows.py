@@ -82,6 +82,7 @@ BODY_KEYS = dict(
     pyg_len=("mm", "length of the pygidium (all pygidial rows together)"),
     term_spine=("mm", "a terminal spine from the pygidium's tip (0 = none)"),
     tail_spines=("list", "the tail's own margin spines (24 Oct 2026): [{phi: deg along the margin (0 front corner .. 90 rear tip), len: mm, rise: deg, roll: deg, blade: 0..1}], right side; absent = the preset's pair + marginals"),
+    grooves=("list", "9 Nov 2026: grooves carved anywhere on the animal -- the posterior border furrow, an occipital furrow, a suture-like line: [{pts: [[x, y], ...] (mm, as for domes; mirrored unless every point is on the axis), w: half-width (mm), d: depth below the surface (mm)}]"),
     textures=("list", "9 Nov 2026: spike textures anywhere on the animal -- the spiny borders, thorny rows and prickly fields of so many trilobites: [{kind: 'row' (along a path of pts) or 'patch' (an ellipse at pts[0], half-sizes w x l, turned by turn), pts: [[x, y], ...] (mm, as for domes; a row's spikes are mirrored unless on the axis), spacing: mm between spikes, len: mm, r: root radius mm, sharp: tip radius / root radius (0 needle .. 1 blunt peg), rise: deg up from the surface (0 flat, 90 straight up), dir: deg, for a row the turn from square to the path (toward `side`), for a patch the heading (0 = rearward), side: +1 / -1 which side of a row they lean to, bend: deg the spike curves over its length, jit: 0..1 irregularity of place, size and lean, seed}]"),
     domes=("list", "9 Nov 2026: domes anywhere on the animal -- inflated lobes, bosses, bullae, tubercles: [{x: mm across (>= 0, mirrored unless on the axis), y: mm along the body (0 = the first row's front; negative = on the head), w: half-width across, l: half-length along (mm), h: height above the surface at its centre (mm), shape: profile (2 round, 1 pointed, 4+ flat-topped), turn: plan rotation (deg), n: how many in a row, dx, dy: the step to the next one (mm), taper: each next one's size x this}]; a dome may overhang the margin (it is cut at the bed)"),
     spines=("list", "free spines anywhere on the animal (24 Oct 2026): [{x: mm across (>= 0, mirrored unless on the axis), y: mm along the body (0 = the first row's front; negative = on the head), len: mm, rise: deg, roll: deg, yaw: deg (0 straight back, + outward), hook: -1..1 (where it turns: 1 a hook at the root then a straight run, -1 a hooked tip), bend: deg, extra turn on top of the rise's (in the roll's plane; leaves the leave angle alone), turn_at: 0..1 where the turn is gathered (a hairpin; -1 = off, hook's profile)}]"),
@@ -270,6 +271,27 @@ def texture_spikes(textures):
     return out
 
 
+GROOVE_RANGE = dict(w=(0.1, 30.0), d=(0.05, 30.0))
+GROOVE_DEFAULT = dict(w=1.0, d=0.8)
+MAX_GROOVES = 32
+
+def validate_grooves(lst):
+    """The grooves (9 Nov 2026): up to MAX_GROOVES dicts, pts 2..MAX_TEX_PTS [x, y] points, w and d inside GROOVE_RANGE."""
+    if not isinstance(lst, list): raise ValueError("grooves is not a list")
+    if len(lst) > MAX_GROOVES: raise ValueError(f"{len(lst)} grooves: at most {MAX_GROOVES}")
+    out = []
+    for j, d in enumerate(lst):
+        if not isinstance(d, dict): raise ValueError(f"groove {j} is not a dict")
+        bad = set(d) - set(GROOVE_RANGE) - {"pts"}
+        if bad: raise KeyError(f"groove {j}: unknown keys {sorted(bad)} (have pts, {sorted(GROOVE_RANGE)})")
+        q = dict(GROOVE_DEFAULT, **d); pts = q.get("pts")
+        if not isinstance(pts, list) or not (2 <= len(pts) <= MAX_TEX_PTS): raise ValueError(f"groove {j}: pts is 2..{MAX_TEX_PTS} [x, y] points")
+        q["pts"] = [[_num(p[0], "x", -400.0, 400.0, f"groove {j}"), _num(p[1], "y", -400.0, 2000.0, f"groove {j}")] for p in pts]
+        for k, (lo, hi) in GROOVE_RANGE.items(): q[k] = _num(q[k], k, lo, hi, f"groove {j}")
+        out.append(q)
+    return out
+
+
 def validate_domes(lst):
     """The body's domes (9 Nov 2026): up to MAX_DOMES dicts, every number inside DOME_RANGE (missing ones default)."""
     if not isinstance(lst, list): raise ValueError("domes is not a list")
@@ -348,6 +370,7 @@ def apply(rows, edits=None):
     if edits.get("spines") is not None: validate_free_spines(edits["spines"])
     if edits.get("domes") is not None: validate_domes(edits["domes"])
     if edits.get("textures") is not None: validate_textures(edits["textures"])
+    if edits.get("grooves") is not None: validate_grooves(edits["grooves"])
     for k, (lo, hi) in BODY_RANGE.items():
         if edits.get(k) is not None: _num(edits[k], k, lo, hi, "body")
     if edits.get("list") is not None: rows = validate_list(edits["list"])
@@ -665,6 +688,7 @@ def plans(P, spec=None, strict=True):
                 free_spines=validate_free_spines(spec["spines"]) if spec.get("spines") is not None else [], margin_spines=margin_spines,
                 domes=validate_domes(spec["domes"]) if spec.get("domes") is not None else [],
                 textures=validate_textures(spec["textures"]) if spec.get("textures") is not None else [],
+                grooves=validate_grooves(spec["grooves"]) if spec.get("grooves") is not None else [],
                 term_spine=float(spec.get("term_spine") or 0.0), mode=("list" if spec.get("list") is not None else "preset"))
 
 

@@ -13,3 +13,9 @@ web/heads/
 web/bodies/
 segment/out/
 web/heads_cache/
+
+# local (not part of the project)
+.venv312/
+isopod_model/source/cache/
+prism_points.csv
+PREREG_block2_percolation.md

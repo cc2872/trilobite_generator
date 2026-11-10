@@ -1,0 +1,8 @@
+{
+ "name": "ptychopariida-drawing",
+ "preset": "ptychopariida",
+ "head": "ptychopariida-drawing",
+ "spec": {},
+ "doc": "the ptychopariida preset's drawing block (2026-11-09); its parameters live on /ptychopariida",
+ "saved_at": "2026-11-09T23:04:45"
+}

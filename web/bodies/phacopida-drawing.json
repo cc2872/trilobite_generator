@@ -1,0 +1,8 @@
+{
+ "name": "phacopida-drawing",
+ "preset": "phacopida",
+ "head": "phacopida-drawing",
+ "spec": {},
+ "doc": "the phacopida preset's drawing block (2026-11-09); its parameters live on /phacopida",
+ "saved_at": "2026-11-09T22:44:14"
+}

@@ -149,7 +149,7 @@
   <div class="panel">
     <div class="controls">
       <h1>Trilobite Morphospace</h1>
-      <div class="nav"><button id="familytree" onclick="location.href='/tree'" title="browse the orders as a ring/spiral family tree">family tree</button><button id="toprism" title="where this animal sits among the made animals and the fossils">prism</button><button id="editor" title="edit the head and body together on the whole-animal drawing">head + body editor</button></div>
+      <div class="nav"><button id="familytree" onclick="location.href='/tree'" title="browse the orders as a ring/spiral family tree">family tree</button><button id="editor" title="edit the head and body together on the whole-animal drawing">head + body editor</button></div>
       <div class="ctrl"><div class="lab"><span>Order</span></div><select id="preset"></select></div>
       <svg class="map" id="map" viewBox="0 0 384 396" xmlns="http://www.w3.org/2000/svg"></svg>
       <div id="dhint"><span class="x" id="dhintx" title="dismiss">×</span><b>Tip:</b> the diagram is the control. <b>Drag</b> the marks to shape the animal, <b>tap</b> a region to edit it, <b>tap</b> a prong to add a tine.</div>
@@ -710,8 +710,6 @@ function shareURL(){ try{ const d={}; for(const k in P) if(k in DFLT && P[k]!==D
   if(joint!=='isopod') u+='&joint='+encodeURIComponent(joint); if(joint==='isopod'&&headStyle&&headStyle!=='crescent') u+='&head='+encodeURIComponent(headStyle);   // the link carries the joint and the head too (9 Oct 2026)
   if(joint==='isopod'&&bodyName) u+='&body='+encodeURIComponent(bodyName);
   return u; }catch(_){ return location.href; } }
-$('toprism').onclick=()=>{ const q=(shareURL().split('?p=')[1]||'').split('&')[0];   // 30 Oct 2026: the same encoding as the share link
-  location.href='/prism?p='+q+'&preset='+encodeURIComponent(($('preset')||{}).value||''); };
 $('share').onclick=async()=>{ const u=shareURL();
   try{ await navigator.clipboard.writeText(u); status('link copied',false); }
   catch(_){ const t=document.createElement('textarea'); t.value=u; document.body.appendChild(t); t.select();

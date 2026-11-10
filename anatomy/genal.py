@@ -42,7 +42,11 @@ class Piece:
         # to a round tip however pointed it is asked to be (rule 2), a kink bent through a fillet (rule 5)
         k = OR.strength(organic); self.k = k
         if k > 0:
-            W1 = max(W, 2 * k * L / OR.SLENDER_PLAN); tip = max(tip, k * OR.TIP_FRAC)
+            W_sl = 2 * k * L / OR.SLENDER_PLAN; W1 = max(W, W_sl)
+            tip = max(tip, k * OR.TIP_FRAC * min(1.0, W_sl / max(W, 1e-9)))   # 9 Nov 2026: the round end no thinner than a slender
+            #                                                                  spine's would be (TIP_FRAC x the slenderness width),
+            #                                                                  so a BROAD blade (a harpetid prolongation) still draws
+            #                                                                  to a point instead of ending 40 % of its root wide
             if W1 > W:                                             # widened on its outer side only: the inner edge stays where the
                 d0 = dirv(a1); R = R + 0.5 * (W1 - W) * np.array([d0[1], -d0[0]])   # body expects it (a prolongation beside the
             W = W1                                                 # thorax must not grow into it)

@@ -1,0 +1,53 @@
+{
+ "name": "harpetida-drawing",
+ "preset": "harpetida",
+ "head": "harpetida-drawing",
+ "spec": {
+  "rows": {
+   "0": {
+    "len": 7.712
+   },
+   "1": {
+    "len": 7.438
+   },
+   "10": {
+    "len": 4.974
+   },
+   "11": {
+    "len": 4.7
+   },
+   "12": {
+    "len": 4.426
+   },
+   "13": {
+    "len": 4.153
+   },
+   "2": {
+    "len": 7.164
+   },
+   "3": {
+    "len": 6.89
+   },
+   "4": {
+    "len": 6.617
+   },
+   "5": {
+    "len": 6.343
+   },
+   "6": {
+    "len": 6.069
+   },
+   "7": {
+    "len": 5.795
+   },
+   "8": {
+    "len": 5.521
+   },
+   "9": {
+    "len": 5.248
+   }
+  }
+ },
+ "doc": "the harpetida preset's drawing block (2026-11-09); its parameters live on /harpetida",
+ "saved_at": "2026-11-09T09:44:31"
+}

@@ -1,0 +1,21 @@
+{
+ "name": "ptychopariida-drawing",
+ "style": "dalmanites",
+ "outline": {
+  "width": 1.08,
+  "length": 0.86,
+  "front_exp": 2.0,
+  "front_point": 0.0,
+  "genal_angle": -6.0,
+  "notch": 0.4,
+  "point_w": 0.28
+ },
+ "face": {
+  "eye_size": 0.07,
+  "eye_pos": 0.23,
+  "eye_lat": 0.38,
+  "glab_inflate": 0.8
+ },
+ "doc": "the ptychopariida preset's drawing block (2026-11-09); its parameters live on /ptychopariida",
+ "saved_at": "2026-11-09T23:04:45"
+}
