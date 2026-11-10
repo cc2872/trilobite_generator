@@ -264,15 +264,12 @@ def _polyline_dist(x, y, pts):
     return np.sqrt(d2)
 
 def eye_solid(R, H, slope_deg, shade, arc_deg, lensD, lensGap, lensRise, stalk=0.0, stalk_r=0.45, lean=0.0, embed=1.0, max_lenses=400, clip_x=None,
-              sphere=False, bend_deg=30.0, axial=1.0, tall=1.0, sink_frac=0.55, lobe=True, elong=1.0, half=False):
+              sphere=False, bend_deg=30.0, axial=1.0, tall=1.0, sink_frac=0.55, lobe=True):
     """The eye as its own solid (eye_solid.py on Manifold): revolved drum over the visual arc, a palpebral lobe inward,
     spherical-cap lenses on a hex lattice within +-arc/2 of the outward (+x) direction. Frame: axis z, outward +x,
     base at z = -embed. Returns (mesh, n_lenses).
     27 Sep 2026: a stalked eye is always a SPHERE on a CURVED stalk (sphere_eye); sphere=True asks for a sphere on a
-    sessile eye too. The drum below is unchanged for the sessile default (the frozen phacopid head).
-    9 Nov 2026: elong > 1 stretches the drum (and lobe) fore-aft, along y, and lays the lenses on the stretched surface at
-    equal arc length, so they stay round (the olenellid's long crescentic eye); half=True keeps only the outer half of the
-    drum, x >= 0, its flat face toward the glabella. Both default off: every existing eye is unchanged."""
+    sessile eye too. The drum below is unchanged for the sessile default (the frozen phacopid head)."""
     if stalk > 0.05 or sphere:
         return sphere_eye(R, arc_deg, lensD, lensGap, lensRise, stalk=stalk, stalk_r=stalk_r, lean=lean, embed=embed,
                           max_lenses=max_lenses, bend_deg=bend_deg, axial=axial, tall=tall, sink_frac=sink_frac)
@@ -295,45 +292,24 @@ def eye_solid(R, H, slope_deg, shade, arc_deg, lensD, lensGap, lensRise, stalk=0
     else:                                                             # 9 Nov 2026 (eyeLobe 0): the whole drum, lenses all round
         body = drum
         if arc_deg >= 359: arc = 2 * math.pi
-    if half:                                                          # only the outer half of the drum (x >= 0)
-        body = body ^ M.to_manifold(M.box(2 * big, 4 * big, 4 * big, at=(big, 0, 0)))
-    e_ = max(float(elong), 1.0)
-    if e_ > 1.0 + 1e-6: body = body.scale((1.0, e_, 1.0))           # stretched fore-aft (y)
     D = lensD * R; rise = lensRise * D / 2; rho = max((rise ** 2 + (D / 2) ** 2) / (2 * rise), 0.35)
     if D < 0.5: return M.from_manifold(body), 0                       # holochroal facets below FDM relief: smooth band
     nx, nz = math.cos(slope), math.sin(slope)
     pitch_ = D * (1 + lensGap); rows = max(1, int(H / (0.87 * pitch_))); cs = []
-    full = arc >= 2 * math.pi - 1e-6
     for i in range(rows):
         s = (i + 0.5) * 0.87 * pitch_
         if s > H - 0.5 * D: break
-        r = R + (H - s) * math.tan(slope); off = 0.5 * (i % 2)
-        if e_ <= 1.0 + 1e-6:                                          # the round drum, as built
-            n = max(1, int(arc * r / pitch_))
-            for k in range(n):
-                th = -arc / 2 + (k + off + 0.5) * arc / (n + 0.5) if not full else -math.pi + (k + off) * 2 * math.pi / n
-                if abs(th) <= arc / 2 + 1e-9: cs.append((th, s, r))
-        else:                                                         # the stretched drum: equal ARC LENGTH along the ellipse
-            ph = np.linspace(-arc / 2, arc / 2, 721)                  # x = r cos(ph), y = e r sin(ph)
-            ds = r * np.sqrt(np.sin(ph) ** 2 + (e_ * np.cos(ph)) ** 2)
-            Ls = np.concatenate([[0.0], np.cumsum(0.5 * (ds[1:] + ds[:-1]) * np.diff(ph))]); Lt = float(Ls[-1])
-            n = max(1, int(Lt / pitch_))
-            for k in range(n):
-                t_ = (k + off + 0.5) * Lt / (n + 0.5) if not full else (k + off) * Lt / n
-                if t_ <= Lt + 1e-9: cs.append((float(np.interp(t_, Ls, ph)), s, r))
+        r = R + (H - s) * math.tan(slope); n = max(1, int(arc * r / pitch_)); off = 0.5 * (i % 2)
+        for k in range(n):
+            th = -arc / 2 + (k + off + 0.5) * arc / (n + 0.5) if arc < 2 * math.pi - 1e-6 else -math.pi + (k + off) * 2 * math.pi / n
+            if abs(th) <= arc / 2 + 1e-9: cs.append((th, s, r))
     cs = cs[:max_lenses]
     import trimesh
     sph = trimesh.creation.icosphere(subdivisions=2, radius=rho)
     spheres = []
     for th, s, r in cs:
         depth = rho - rise
-        if e_ <= 1.0 + 1e-6:
-            c = ((r - depth * nx) * math.cos(th), (r - depth * nx) * math.sin(th), s + depth * nz)
-        else:                                                         # on the ellipse, sunk along its own normal
-            px, py = r * math.cos(th), e_ * r * math.sin(th)
-            hx, hy = e_ * math.cos(th), math.sin(th); hn = math.hypot(hx, hy); hx, hy = hx / hn, hy / hn
-            c = (px - depth * nx * hx, py - depth * nx * hy, s + depth * nz)
-        if half and c[0] < -1e-6: continue
+        c = ((r - depth * nx) * math.cos(th), (r - depth * nx) * math.sin(th), s + depth * nz)
         spheres.append(M.to_manifold(sph.copy().apply_translation(c)))
     if spheres: body = body + Manifold.batch_boolean(spheres, __import__("manifold3d").OpType.Add)
     if stalk > 0.05:                                                  # pedunculate eye: a tapered stalk under the drum,
@@ -444,7 +420,7 @@ def eye_params(P, eR):
                 stalk=P.get("eyeStalk", 0.0) * eR, stalk_r=P.get("eyeStalkR", 0.45), lean=P.get("eyeLean", 0.0),
                 sphere=P.get("eyeSphere", 0.0) > 0.5, bend_deg=P.get("eyeStalkBend", 30.0),
                 axial=P.get("eyeAxial", 1.0), tall=P.get("eyeTall", 1.0), sink_frac=P.get("eyeSink", 0.55),
-                lobe=P.get("eyeLobe", 1) > 0.5, elong=P.get("eyeElong", 1.0), half=P.get("eyeHalf", 0) > 0.5)
+                lobe=P.get("eyeLobe", 1) > 0.5)
 
 def _base(S): return (S.get("zfun_base", S["zfun"]), S.get("detail"))   # a replacement head may give zfun alone
 
@@ -467,20 +443,8 @@ def ornaments(P, S, notes=None):
     if P.get("eyeSolid", 0) > 0.5 and P["eyeSize"] > 0.01:
         G = S["eye"]; EP = eye_params(P, G["eR"])
         xm = float(S["xmax"](np.array([G["ye"]]))[0]) - 0.4
-        zc = float(S["zfun"](np.array([G["xe"]]), np.array([G["ye"]]))[0])
-        roll = float(P.get("eyeRoll", 0.0)); elong = max(float(EP.get("elong", 1.0)), 1.0)
-        if (roll != 0.0 or elong > 1.0) and EP["stalk"] <= 0.05 and not EP["sphere"]:
-            # 9 Nov 2026: seated on the head under its WHOLE footprint, not at its centre: the base reaches the lowest point
-            # of the head surface beneath it (a long eye on a curved cheek otherwise lifts at its ends), plus the depth a
-            # rolled eye's outer edge needs
-            yy = G["ye"] + np.linspace(-1.0, 1.0, 9) * elong * G["eR"]; xx = G["xe"] + np.linspace(-1.0, 1.0, 5) * G["eR"]
-            XX, YY = np.meshgrid(xx, yy); zmin = float(np.min(S["zfun"](XX.ravel(), YY.ravel())))
-            EP = dict(EP, embed=1.0 + max(zc - zmin, 0.0) + abs(math.sin(math.radians(roll))) * 1.2 * G["eR"])
         eye, n_lens = eye_solid(**EP, clip_x=None if (EP["stalk"] > 0.05 or EP["sphere"]) else xm - G["xe"])   # a stalked or spherical eye may overhang
-        if roll != 0.0:                                          # eyeRoll: tipped about its long axis (y) at the base, + = the top
-            import trimesh                                       # leans outward, so the lens band faces down and out
-            eye.apply_transform(trimesh.transformations.rotation_matrix(math.radians(roll), (0, 1, 0), (0, 0, 0)))
-        zb = zc - 0.3 + EP["stalk"]
+        zb = float(S["zfun"](np.array([G["xe"]]), np.array([G["ye"]]))[0]) - 0.3 + EP["stalk"]
         out.append(("eyes", [eye.copy().apply_translation((G["xe"], G["ye"], zb))], "mirror"))
         if notes is not None: notes.append(("head", "eye solid", f"{n_lens} lenses/eye"))
     yf = float(S["outline"](0.0, 1.0)[1])                     # front margin at the axis (u = 0, v = 1)
