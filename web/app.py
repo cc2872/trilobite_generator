@@ -847,6 +847,34 @@ def api_preset(name):
 def _kinematics(P):
     return dict(hinge_z=PIN.hinge_z(P), offsets=PIN.joint_offsets(P), names=I.part_names(P))
 
+import contextvars
+_SYNC_BUILD = contextvars.ContextVar("trilo_sync_build", default=False)   # set while the server builds for itself (the sheet)
+KEEPALIVE_S = 5.0
+
+def _keepalive(work):
+    """10 Nov 2026: a long build answered without a timeout. The site's tunnel drops any request whose answer has not
+    STARTED within ~100 s (it then sends the browser its own HTML error page, which the studio could not read as JSON),
+    and a hand-sized build of a spiny animal can take longer. The work runs in a thread; the answer starts at once and
+    sends a space every KEEPALIVE_S seconds until the build is done, then the manifest. Leading spaces are valid JSON,
+    so the pages read it exactly as before. A build that fails says so in the JSON ("error", build_notes; no parts) --
+    the status line is already sent by then. If the browser goes away the build still finishes and is cached."""
+    import threading
+    res = {}
+    def run():
+        try: res["r"] = work()
+        except Exception as ex: res["r"] = (500, json.dumps(dict(parts=[], error=f"build failed: {str(ex)[:200]}", build_notes=[("isopod", "build failed", str(ex)[:200])])))
+    th = threading.Thread(target=run, daemon=True); th.start()
+    def gen():
+        yield " "
+        while True:
+            th.join(KEEPALIVE_S)
+            if not th.is_alive(): break
+            yield " "
+        yield res["r"][1]
+    r = app.response_class(gen(), mimetype="application/json")
+    r.headers["X-Accel-Buffering"] = "no"; r.headers["Cache-Control"] = "no-store"
+    return r
+
 @app.post("/api/build")
 def api_build():
     """Print geometry: every part at the printed stop bevel (P['maxAngle']), one GLB each, cached by parameter hash."""
@@ -869,23 +897,28 @@ def api_build():
         if os.path.exists(manifest):
             PROGRESS.update(done=n_parts); return send_file(manifest)
         if body.get("peek"): return jsonify(pending=True)          # 25 Oct 2026: the viewer asks first; a cached build is shown at once, no preview
-        with LOCK:
-            if os.path.exists(manifest):
-                PROGRESS.update(done=n_parts); return send_file(manifest)
-            t0 = time.time(); os.makedirs(folder, exist_ok=True); bnotes = []
-            _isopod_body().PROGRESS_HOOK = lambda done, total: PROGRESS.update(done=done, total=total)   # the build reports parts as they finish
-            try:
-                out, kin, checks = _build_isopod(P, folder, head, bspec, preview=preview)
-            except Exception as ex:
-                shutil.rmtree(folder, ignore_errors=True)               # never cache a failed build — a retry must rebuild, not serve the error
-                PROGRESS.update(done=n_parts)
-                return jsonify(key=key, parts=[], kinematics=_kinematics(P), joint="isopod",
-                               build_notes=[("isopod", "build failed", str(ex)[:160])], build_seconds=round(time.time() - t0, 1)), 500
-            man = dict(key=key, parts=out, kinematics=kin, print=checks, schema_notes=notes,
-                       build_notes=bnotes, build_seconds=round(time.time() - t0, 1), schema=schema.SCHEMA_VERSION, joint="isopod", fill_mm=0,
-                       head=head or "crescent", body=bspec)
-            json.dump(P, open(os.path.join(folder, "params.json"), "w")); json.dump(man, open(manifest, "w")); _evict()
-            PROGRESS.update(done=n_parts); return jsonify(man)
+        def work():
+            """The build itself -> (HTTP status, the manifest's JSON text)."""
+            with LOCK:
+                if os.path.exists(manifest):
+                    PROGRESS.update(done=n_parts); return 200, open(manifest, encoding="utf-8").read()
+                t0 = time.time(); os.makedirs(folder, exist_ok=True); bnotes = []
+                _isopod_body().PROGRESS_HOOK = lambda done, total: PROGRESS.update(done=done, total=total)   # the build reports parts as they finish
+                try:
+                    out, kin, checks = _build_isopod(P, folder, head, bspec, preview=preview)
+                except Exception as ex:
+                    shutil.rmtree(folder, ignore_errors=True)               # never cache a failed build — a retry must rebuild, not serve the error
+                    PROGRESS.update(done=n_parts)
+                    return 500, json.dumps(dict(key=key, parts=[], kinematics=_kinematics(P), joint="isopod", error=f"build failed: {str(ex)[:160]}",
+                                                build_notes=[("isopod", "build failed", str(ex)[:160])], build_seconds=round(time.time() - t0, 1)), default=str)
+                man = dict(key=key, parts=out, kinematics=kin, print=checks, schema_notes=notes,
+                           build_notes=bnotes, build_seconds=round(time.time() - t0, 1), schema=schema.SCHEMA_VERSION, joint="isopod", fill_mm=0,
+                           head=head or "crescent", body=bspec)
+                json.dump(P, open(os.path.join(folder, "params.json"), "w")); json.dump(man, open(manifest, "w")); _evict()
+                PROGRESS.update(done=n_parts); return 200, json.dumps(man, default=str)
+        if _SYNC_BUILD.get():                                     # called from inside the server (the sheet): wait for it here
+            st, txt = work(); return app.response_class(txt, status=st, mimetype="application/json")
+        return _keepalive(work)                                    # 10 Nov 2026: the answer starts at once and the build finishes behind it
     jtag = ("" if joint == "pin" else f"-{joint}") + (f"-fill{fill:g}" if fill > 0.05 and joint == "pin" else "")  # pin stays untagged (matches the sheet key)
     key = schema.param_hash(P) + "-b" + BUILD_SIG + jtag   # params + builder-source hash: a code change never serves stale parts
     folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
@@ -966,7 +999,10 @@ def api_sheet():
         except (KeyError, ValueError) as ex: return jsonify(error=f"body or head spec: {str(ex)[:200]}"), 400
         folder = os.path.join(CACHE, key); manifest = os.path.join(folder, "manifest.json")
         if not os.path.exists(manifest):
-            with app.test_request_context(json={"P": P, "joint": "isopod", "head": head, "body": bspec}): api_build()
+            tok = _SYNC_BUILD.set(True)
+            try:
+                with app.test_request_context(json={"P": P, "joint": "isopod", "head": head, "body": bspec}): api_build()
+            finally: _SYNC_BUILD.reset(tok)
         if not os.path.exists(manifest): return jsonify(error="the build failed; nothing to draw"), 500   # a refused build leaves no manifest
         man = json.load(open(manifest)); png = os.path.join(folder, f"sheet_isopod_{cmap}.png")   # cache per colormap
         if os.path.exists(png): return jsonify(url=f"/files/{key}/sheet_isopod_{cmap}.png", measured=False)
