@@ -13,6 +13,7 @@ web/heads/
 web/bodies/
 segment/out/
 web/heads_cache/
+web/files/
 
 # local (not committed)
 .venv312/
