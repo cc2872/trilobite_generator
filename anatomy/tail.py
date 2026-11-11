@@ -77,6 +77,7 @@ def plan(P):
     # phi deg, len mm, rise, roll, blade), right side only (phi <= 90), mirrored here. rise / roll None = P's.
     spines = []
     own = P.get("_tailSpines")
+    bent = False                                                   # 10 Nov 2026: any lobe curved or aimed (the band then follows the bend)
     if own:
         for sd in own:
             L_full = float(sd.get("len", 0.0)); bl = float(sd.get("blade", 0.0)); phi_k = math.radians(float(sd.get("phi", 90.0)))
@@ -89,7 +90,8 @@ def plan(P):
         # each lobe was echoed in scaled copies across the shield as folds (undercut lips, small tunnels). The inner shield
         # is then sampled on smooth rings and the lobes keep the outer AUTO_LOBE_BAND of it. A band set in the studio
         # (pygLobeBand > 0) or deliberate creases (the fan ribs, pygRibFan) are left exactly as set.
-        if band < 0.01 and float(P.get("pygRibFan", 0.0) or 0.0) < 0.01 and any(abs(s_.get("curve", 0.0)) > 1e-6 or abs(s_.get("aim", 0.0)) > 1e-6 for s_ in spines):
+        bent = any(abs(s_.get("curve", 0.0)) > 1e-6 or abs(s_.get("aim", 0.0)) > 1e-6 for s_ in spines)
+        if band < 0.01 and float(P.get("pygRibFan", 0.0) or 0.0) < 0.01 and bent:
             band = AUTO_LOBE_BAND
         # 25 Oct 2026: a list of flat lobes (blade 1, no rise) stays a flat margin -- no solid spine runs on top of a lobe
         tube = any(abs(s_["rise"]) > 1e-6 or abs(s_["roll"]) > 1e-6 or s_["Lk"] < s_["L_full"] - 1e-6 for s_ in spines)
@@ -125,10 +127,12 @@ def plan(P):
                     ex = np.where(win, b, ex); ln = np.where(win, sgn * sd.get("lean", 0.0), ln)
                     if lean_out: who = np.where(win, len(_LOBES), who); _LOBES.append((pm, sgn, sd))
         return (ex, ln, who) if lean_out else ex
-    def margin_pt(phi):
+    def margin_pt(phi, frac=1.0):
+        """The margin at phi -- or, with frac < 1, the point frac of the way out along its lobe (0 = the lobe's base on the
+        shield's margin), on the lobe's own bent centre line (10 Nov 2026)."""
         x0, y0 = wp * se(np.cos(phi)), Lp * se(np.sin(phi))
         if nk > 0.005: x0 = x0 * neck_f(y0 / Lp)
-        r0 = np.maximum(np.hypot(x0, y0), 1e-6); ex, ln, who = radial_extra(phi, lean_out=True)
+        r0 = np.maximum(np.hypot(x0, y0), 1e-6); ex, ln, who = radial_extra(phi, lean_out=True); ex = ex * frac
         th = np.arctan2(y0, x0) + ln                                   # the radial direction, leaned toward the rear
         X_, Y_ = x0 + ex * np.cos(th), y0 + ex * np.sin(th)
         for i, (pm, sgn, sd) in enumerate(list(_LOBES)):               # 9 Nov 2026: a curved lobe (its `curve`, deg at the tip, + toward the
@@ -153,6 +157,14 @@ def plan(P):
             vi = min(v, 1 - band); ix, iy = (1 - vi) * fx + vi * bx, vi * by   # to the margin with its lobes -- never of zero width,
             if v <= 1 - band: return float(ix), float(iy)          # as it would be where there is no lobe if it began on the margin
             w_ = (v - (1 - band)) / band
+            if bent:                                               # 10 Nov 2026: a bent lobe swings its margin far sideways, and the
+                ex_ = float(radial_extra(np.array([phi]))[0])      # straight lines from the inner ring out to it crossed their neighbours:
+                if ex_ > 1e-9:                                     # the grid lapped over itself, two coincident sheets inside the tail
+                    lb = math.hypot(bx - ix, by - iy); s_ = w_ * (lb + ex_)   # (the lichid's pincers), which tore every thorn rooted on them.
+                    if s_ > lb:                                    # Now: straight out to the lobe's base, then along the lobe's own
+                        qx, qy = margin_pt(np.array([phi]), (s_ - lb) / ex_)   # bent centre line at each height -- the lobe's sections,
+                        return float(qx[0]), float(qy[0])          # as the margin itself is drawn
+                    t_ = s_ / max(lb, 1e-9); return float(ix + t_ * (bx - ix)), float(iy + t_ * (by - iy))
             return float(ix + w_ * (mx[0] - ix)), float(iy + w_ * (my[0] - iy))
         return float((1 - v) * fx + v * mx[0]), float(v * my[0])
     def outline(u, v):
