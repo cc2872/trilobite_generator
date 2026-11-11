@@ -1129,6 +1129,33 @@ def _extent_print(parts, s):
     return float((hi - lo).max() / s)
 
 
+def _extent18_file():
+    return os.path.join(HEAD_CACHE, "extent18.json")
+
+
+def _extent18_get(key):
+    """The remembered size of an animal at the isopod's pitch: this process's, else the one on disk (it survives restarts
+    and redeploys; a stale entry -- the builder changed -- only makes one build a few per cent off, and is replaced by it)."""
+    if key in _EXTENT18: return _EXTENT18[key]
+    try:
+        v = json.load(open(_extent18_file())).get(key)
+        if v: _EXTENT18[key] = float(v); return float(v)
+    except (OSError, ValueError): pass
+    return None
+
+
+def _extent18_put(key, E18):
+    _EXTENT18[key] = float(E18)
+    try:
+        f = _extent18_file(); os.makedirs(os.path.dirname(f), exist_ok=True)
+        try: d = json.load(open(f))
+        except (OSError, ValueError): d = {}
+        d[key] = round(float(E18), 3)
+        if len(d) > 5000: d = dict(list(d.items())[-4000:])
+        tmp = f + ".part"; json.dump(d, open(tmp, "w")); os.replace(tmp, f)
+    except OSError: pass
+
+
 def _size_key(P, head, face, outline, rows):
     import hashlib
     blob = json.dumps(dict(P=schema.param_hash(P), head=head, face=face, outline=outline, rows={k: v for k, v in (rows or {}).items() if k != "print_scale"}),
@@ -1187,15 +1214,16 @@ def build(P, head=None, face=None, outline=None, rows=None, preview=False):
             return _build_rows(P, head, face, outline, rows, kit=hand_kit(float(rows["print_scale"]) / s18, fit, cap), s18=s18)
         R0 = RW.plans(P, rows, strict=False); s18 = RW.default_scale(R0["rows"]); fit = kit_fit18(R0["rows"])
         key = _size_key(P, head, face, outline, rows)
-        E18 = _EXTENT18.get(key)
-        if E18 is None: E18 = float(P["length"]) * s18 * 1.1                    # a first guess: the body plus ~10 % of spines
+        E18 = _extent18_get(key)
+        if E18 is None:                                                          # not measured yet: a preview (the pieces as drawn, no
+            r0 = hand_ratio(float(P["length"]) * s18 * 1.1, fit)                 # clearances -- about a quarter of a build) at a guess gives
+            keep = PREVIEW; PREVIEW = True                                       # the size, then ONE build at it. (10 Nov 2026: building twice
+            try: pv = _build_rows(P, head, face, outline, dict(rows, print_scale=s18 * r0), kit=hand_kit(r0, fit, cap), s18=s18)   # ran past the
+            finally: PREVIEW = keep                                              # site tunnel's ~100 s and every queued build failed with its
+            E18 = _extent_print(pv[0], pv[3]["s"]) / r0; del pv; gc.collect()    # HTML error page)
         ratio = hand_ratio(E18, fit)
         out = _build_rows(P, head, face, outline, dict(rows, print_scale=s18 * ratio), kit=hand_kit(ratio, fit, cap), s18=s18)
-        E = _extent_print(out[0], out[3]["s"]); E18 = E / ratio; _EXTENT18[key] = E18
-        r2 = hand_ratio(E18, fit)
-        if abs(r2 / ratio - 1.0) > SIZE_TOL:                                     # the guess was off (long spines, a wide brim): once more, at size
-            out = _build_rows(P, head, face, outline, dict(rows, print_scale=s18 * r2), kit=hand_kit(r2, fit, cap), s18=s18)
-            E = _extent_print(out[0], out[3]["s"]); _EXTENT18[key] = E / r2
+        _extent18_put(key, _extent_print(out[0], out[3]["s"]) / ratio)          # remembered (also on disk) for the next build of this animal
         return out
     ROWS_INFO.clear()
     plans = placed_plans(P)
