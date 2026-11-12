@@ -19,4 +19,9 @@ web/files/
 .venv312/
 isopod_model/source/cache/
 prism_points.csv
-PREREG_block2_percolation.md
+
+# research-process artifacts — keep OUT of this public repo (privacy)
+CHANGES_*.md
+CHANGES_*.pdf
+CHANGES_*.tex
+PREREG_*.md
