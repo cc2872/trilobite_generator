@@ -91,7 +91,7 @@ let inflight=null;
 // back to the generator, carrying the live body so its build reflects these edits (sessionStorage; only when actually edited)
 function goHome(){
   try{ if(S.edited) sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, spec:S.spec, savedName:S.savedName})); }catch(_){}
-  location.href='/?preset='+encodeURIComponent(S.preset||'')+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+(S.edited?'&bodydraft=1':'')+(S.savedName?'&body='+encodeURIComponent(S.savedName):'');
+  location.href='/studio?preset='+encodeURIComponent(S.preset||'')+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+(S.edited?'&bodydraft=1':'')+(S.savedName?'&body='+encodeURIComponent(S.savedName):'');
 }
 // slider ranges per row key (the page's; rows.py carries units and docs, not ranges) and per body key
 const R={len:[1,40], width:[1,80], axis:[0.12,0.5], relief:[3,40], margin:[0.05,0.6], sweep:[-20,70], curve:[-30,60], tip:[0,80], tip_w:[0.1,1.5], arch:[0,0.5], fulcrum:[0.1,0.95], slope:[0,1.2], rear_round:[0,1]};

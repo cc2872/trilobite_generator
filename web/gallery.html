@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trilobite - Orders</title>
+<!-- The gallery (11 Nov 2026): the ten order presets as the front page. Each card opens that animal in the studio
+     (/studio?preset=<order>). Thumbnails are the per-order blueprint sheets already served at /static/blueprints/. -->
+<link rel="icon" href="/static/trilobite-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#000;--ink:#fff;--mid:#9a9a9a;--line:#262626;--soft:#141414;--accent:#f6704f;
+   --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"IBM Plex Sans",system-ui,"Helvetica Neue",Arial,sans-serif}
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:12px;-webkit-font-smoothing:antialiased}
+  header{padding:26px 28px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px}
+  h1{font-family:var(--mono);font-size:13px;letter-spacing:.14em;text-transform:uppercase;font-weight:normal;margin:0}
+  h1 .sub{color:var(--mid);margin-left:10px;letter-spacing:.08em}
+  .nav{display:flex;gap:6px} .nav button{background:var(--bg);color:var(--mid);border:1px solid var(--line);padding:7px 12px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} .nav button:hover{color:var(--ink);border-color:var(--ink)}
+  .intro{color:var(--mid);font-size:12px;line-height:1.5;max-width:640px;padding:16px 28px 0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);margin:22px 0 0}
+  .card{background:var(--bg);text-decoration:none;color:inherit;display:flex;flex-direction:column;cursor:pointer;transition:background .12s} .card:hover{background:var(--soft)}
+  .thumb{aspect-ratio:1/1;background:#050505 center/cover no-repeat;border-bottom:1px solid var(--line)} .card:hover .thumb{filter:brightness(1.08)}
+  .meta{padding:12px 14px;display:flex;justify-content:space-between;align-items:baseline}
+  .name{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:capitalize}
+  .go{font-family:var(--mono);font-size:11px;color:var(--mid)} .card:hover .go{color:var(--accent)}
+  footer{color:var(--mid);font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:18px 28px 28px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Trilobite <span class="sub">ten orders</span></h1>
+  <div class="nav">
+    <button onclick="location.href='/studio'" title="start from a blank trilobite in the editor">blank studio</button>
+    <button onclick="location.href='/tree'" title="browse the orders as a ring/spiral family tree">family tree</button>
+    <button onclick="location.href='/generator'" title="the instrument and advanced page: all parameters, measurement, landmarks and share">measure / advanced &rarr;</button>
+  </div>
+</header>
+<p class="intro">Pick an order to open it in the studio &mdash; edit its head and body, build the 3D print, and download the STL. Each is a hand-sized, print-in-place articulated model.</p>
+<div class="grid" id="grid"></div>
+<footer>Click any order to edit &amp; print it &middot; parametric trilobite generator</footer>
+<script>
+  // the ten order presets (match presets/<name>.json and web/static/blueprints/<name>.png)
+  const ORDERS = ["agnostida","asaphida","corynexochida","harpetida","lichida","odontopleurida","phacopida","proetida","ptychopariida","redlichiida"];
+  document.getElementById('grid').innerHTML = ORDERS.map(n => `
+    <a class="card" href="/studio?preset=${encodeURIComponent(n)}" title="open ${n} in the studio">
+      <div class="thumb" style="background-image:url('/static/blueprints/${n}.png')"></div>
+      <div class="meta"><span class="name">${n}</span><span class="go">open &rarr;</span></div>
+    </a>`).join('');
+</script>
+</body>
+</html>

@@ -67,7 +67,7 @@
 <body>
 <div class="panel">
   <h1><span>Head - editor</span></h1>
-  <div class="nav"><button id="home" onclick="const h=S.savedName||S.style; location.href='/'+(h&&h!=='crescent'?'?head='+encodeURIComponent(h):'')" title="back to the generator, keeping this head, preset and body">home</button><button id="bodyeditor" onclick="const h=S.savedName||S.style; location.href='/body'+(h&&h!=='crescent'?'?head='+encodeURIComponent(h):'')" title="the body as rows: length, width, trajectory and height per row">body editor</button></div>
+  <div class="nav"><button id="home" onclick="const h=S.savedName||S.style; location.href='/studio'+(h&&h!=='crescent'?'?head='+encodeURIComponent(h):'')" title="back to the studio, keeping this head, preset and body">home</button><button id="bodyeditor" onclick="const h=S.savedName||S.style; location.href='/body'+(h&&h!=='crescent'?'?head='+encodeURIComponent(h):'')" title="the body as rows: length, width, trajectory and height per row">body editor</button></div>
 
   <div class="sect"><span>Head type</span><span id="pg"></span></div>
   <select id="style"></select>

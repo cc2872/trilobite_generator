@@ -926,7 +926,7 @@ function selectEye(x){   // an eye-type node: a preset that opens the generator 
   document.getElementById('p-reading').innerHTML = '<span class="dim">-</span>';
   document.getElementById('p-diff').innerHTML = '<span class="dim">-</span>';
   document.getElementById('p-feat').innerHTML = x.name;
-  const open=document.getElementById('p-open'); open.textContent='Open'; open.href='/?eye='+encodeURIComponent(x.key);
+  const open=document.getElementById('p-open'); open.textContent='Open'; open.href='/generator?eye='+encodeURIComponent(x.key);
   document.getElementById('p-child').textContent='Save as child';
   markSites(null); setTime(x.t);
 }

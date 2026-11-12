@@ -295,7 +295,10 @@ def _presets():
     return out
 
 @app.get("/")
-def index(): return send_file(os.path.join(ROOT, "web", "studio.html"))               # the combined head+body editor is the front page (12 Oct 2026)
+def index(): return send_file(os.path.join(ROOT, "web", "gallery.html"))               # the ten order presets are the front page (11 Nov 2026); the editor moved to /studio
+
+@app.get("/gallery")
+def gallery(): return send_file(os.path.join(ROOT, "web", "gallery.html"))              # alias -> the orders gallery
 
 @app.get("/generator")
 def generator(): return send_file(os.path.join(ROOT, "web", "index.html"))             # the parametric generator (blueprint / 3D / measure / params), now the build backend

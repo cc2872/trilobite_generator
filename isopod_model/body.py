@@ -1091,7 +1091,7 @@ PREVIEW = False   # 25 Oct 2026: set by build(preview=True) -- the pieces as dra
 # model itself, scaled down whole to 1/2 and 1/3, still prints and articulates (Claire, 10 Nov), so the default print now
 # scales the whole animal, joints included, to a hand-held size.
 HAND_SIZE = True          # printLength 0 = hand size (False: the isopod's 18 mm pitch, as before 10 Nov 2026)
-HAND_MM = 160.0           # the longest side of the printed animal (plan), mm
+HAND_MM = 240.0           # the longest side of the printed animal (plan), mm (11 Nov 2026: 160 -> 240, 1.5x bigger prints)
 KIT_MIN = 1.0 / 3.0       # the smallest joint kit, x the isopod's: the isopod printed whole at 1/3 still articulates (10 Nov 2026)
 SIZE_TOL = 0.04           # rebuild once when the measured size is off the target by more than this
 ISO_CLEAR = 0.244         # the isopod kit's ball-socket clearance at 1:1, mm (measured on its STL, 10 Nov 2026); scales with the kit

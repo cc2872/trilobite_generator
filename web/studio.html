@@ -402,7 +402,7 @@ $('toblue').onclick=()=>setView('blue'); $('to3d').onclick=()=>setView('3d'); $(
 $('toprism').onclick=()=>{ try{ sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec, P:S.P})); }catch(_){}   // 30 Oct 2026: the prism reads this draft (?mine=1)
   location.href='/prism?mine=1'; };
 $('generator').onclick=()=>{ try{ if(S.edited) sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, spec:S.spec, savedName:S.savedBody})); }catch(_){}
-  location.href='/?preset='+encodeURIComponent(S.preset||'')+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+(S.edited?'&bodydraft=1':'')+(S.savedBody?'&body='+encodeURIComponent(S.savedBody):''); };
+  location.href='/generator?preset='+encodeURIComponent(S.preset||'')+(S.head&&S.head!=='crescent'?'&head='+encodeURIComponent(S.head):'')+(S.edited?'&bodydraft=1':'')+(S.savedBody?'&body='+encodeURIComponent(S.savedBody):''); };
 
 // ---------- the drawing ----------
 new p5(s=>{

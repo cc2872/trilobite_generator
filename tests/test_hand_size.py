@@ -44,6 +44,7 @@ def test_presets_are_hand_sized_or_held_by_the_joint_floor():
         r = B.hand_ratio(e); size = e * r                                        # fit18 1 (rows at the isopod's pitch)
         assert size <= B.HAND_MM + 1e-6 or r == pytest.approx(B.KIT_MIN), name
         assert size <= e / 3 + 1e-6 or size <= B.HAND_MM + 1e-6, name
+        if e >= B.HAND_MM: assert size == pytest.approx(B.HAND_MM), name         # a preset bigger than hand size prints exactly at it (unless the joint floor binds, which it doesn't here)
 
 
 def test_size_key_ignores_the_print_scale():
@@ -53,14 +54,15 @@ def test_size_key_ignores_the_print_scale():
 
 @pytest.mark.slow
 def test_agnostid_builds_hand_sized():
-    """The agnostid's drawing through the studio path (~30 s): longest side within SIZE_TOL of HAND_MM, every piece
-    watertight, the kit at the ratio it was printed at, nothing touching at rest."""
+    """The agnostid's drawing through the studio path (~30 s): longest side no bigger than hand size, every piece
+    watertight, the kit at the ratio it was printed at, nothing touching at rest. The agnostid at ~223 mm is naturally
+    smaller than HAND_MM (240), so it is not enlarged -- it prints at its full isopod pitch, under hand size."""
     os.environ.setdefault("TRILO_RECORD", "0")
     import app as A, check as CHECK, trimesh
     R = A._drawing_resolve("agnostida", A._preset_record("agnostida")[1]["drawing"]); IB = A._isopod_body()
     parts, plans, PV, K = IB.build(R["P"], "shaped", face=R["head"]["face"], outline=R["head"]["outline"], rows=R["body"])
     s = K["s"]; whole = trimesh.util.concatenate([p.copy().apply_scale(1.0 / s) for p in parts])
-    assert abs(max(whole.extents[:2]) / IB.HAND_MM - 1) <= IB.SIZE_TOL + 0.01
+    assert max(whole.extents[:2]) <= IB.HAND_MM * (1 + IB.SIZE_TOL) + 0.5
     assert IB.KIT_MIN <= K["kit"] <= 1.0 and IB.ROWS_INFO["hand"]
     assert all(p.is_watertight for p in parts)
     assert CHECK.contacts(parts, [(y, z) for y, z in PV], 0.0) == []
