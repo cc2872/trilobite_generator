@@ -6,7 +6,7 @@ leaves the hinge barrels, bores and knuckles untouched (they sit under the ring 
 depths <= 3 mm never reach them; deeper fills are clipped 0.5 mm clear of the hinge band). depth = 0 is identity.
 Print only: /api/build applies it when the request carries "fill": <mm>; the cache key gets a -fill<mm> suffix.
 """
-import numpy as np, mesh as M, assemble
+import mesh as M, assemble
 from anatomy import head as HEAD, thorax as THORAX, tail as TAIL
 from anatomy.common import pitch, GRID_SEG, GRID_TAIL
 from anatomy.port import Port

@@ -52,7 +52,7 @@ def _resample(poly, n):
 def cephalon(P):
     from anatomy import head as H
     S = H.plan(dict(P, organic=0.0))     # 1 Nov 2026: landmarks are the design's points (the spine's own tip), not the organic finish
-    Lc, wh, a = S["Lc"], S["wh"], S["a"]
+    Lc, wh = S["Lc"], S["wh"]
     yf = lambda x: float(_yfront(S, x))                                                        # front edge at |x|
     yr = lambda x: float(S["outline"](x / _xtip(S), 0.0)[1])                                  # rear edge at |x| (v = 0)
     gh = lambda y: float(_glab_half(S, P, y))

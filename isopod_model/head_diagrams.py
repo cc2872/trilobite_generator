@@ -7,7 +7,7 @@ on black, with the handles. Drawn from shaped_head.diagram(), i.e. from the curv
 import os, sys, json
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, os.path.join(HERE, "..")); sys.path.insert(0, HERE)
 import numpy as np, matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
-import schema, shaped_head as SH, head_styles as HS, presets as PR, body as BODY
+import shaped_head as SH, head_styles as HS, presets as PR, body as BODY
 
 LINE, DIM, INK = "#9a9a9a", "#4a4a4a", "#ffffff"
 

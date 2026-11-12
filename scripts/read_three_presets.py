@@ -1,5 +1,5 @@
-import json, time, sys
-import schema, instrument as I
+import json, time
+import instrument as I
 for name in ["proetida", "asaphida", "agnostida"]:
     P = json.load(open(f"presets/{name}.json"))["params"]
     t = time.time()

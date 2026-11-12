@@ -1,6 +1,6 @@
 import sys, os, json, time, numpy as np, trimesh
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import schema, parts, mesh as M, printjoint2 as J2
+import schema, mesh as M, printjoint2 as J2
 P = schema.coerce(dict(maxAngle=36))
 SETS = {"tight": dict(gap_axial=0.15, gap_vertical=0.25, gap_lateral=0.20), "default": {}, "loose": dict(gap_axial=0.30, gap_vertical=0.40, gap_lateral=0.35)}
 out = {}

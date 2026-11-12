@@ -11,7 +11,7 @@ import operator
 import numpy as np
 from anatomy import organic as OR
 import mesh as M
-from fields import seg_halfwidth, furrow_amp
+from fields import seg_halfwidth
 
 GRID_SEG = (121, 61)      # (nu, nv), 10 Sep verdict: 120x60 per part; nu odd so the axis is a vertex column
 GRID_TAIL = (121, 61)

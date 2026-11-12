@@ -26,7 +26,7 @@ Parameters (all print-only, mm unless noted):
 import math, numpy as np, trimesh
 import mesh as M
 from anatomy.common import pitch, ring_top, spine_solid
-from anatomy import thorax as THORAX, head as HEAD
+from anatomy import thorax as THORAX
 from manifold3d import Manifold, OpType
 
 NAME = "flexi"; MEASURED = False; BASE = "solid"

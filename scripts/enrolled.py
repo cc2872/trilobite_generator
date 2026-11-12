@@ -4,7 +4,7 @@ The printable pieces stay flat (as built); this is the assembly.
 
     python scripts/enrolled.py OUTDIR [preset] [head_deg]
 """
-import os, sys, warnings, math
+import os, sys, warnings
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..")); os.chdir(ROOT)
 sys.path[:0] = [ROOT, ROOT + "/isopod_model", ROOT + "/scripts"]; warnings.filterwarnings("ignore")
 import numpy as np, trimesh

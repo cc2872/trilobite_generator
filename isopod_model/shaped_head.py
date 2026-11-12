@@ -21,6 +21,7 @@ from anatomy import genal as GN
 from anatomy.common import smoothstep
 
 RO = HC.RO
+from anatomy.organic import smax as OR_smax
 # 20 Oct 2026: the defaults are an ANATOMICAL head (a pointed shield, slim tapered genal spines leaving a near-straight rear
 # margin), not the print kit's. Until today OUTLINE held the crescent piece's own silhouette (head3d: a round dome widest at
 # the rear, two parallel round-ended bands 1/6 of the half-width wide, and a U notch as deep as the bands are long), which
@@ -402,8 +403,8 @@ class Shape:
             if web > 0.01:
                 xa = x0 - web * (x0 - 0.12 * RO)
                 if body_reach is not None:                             # 9 Nov 2026: the web stays BESIDE the thorax -- an anchor inside
-                    xa = max(xa, min(float(body_reach) + 1.0, x0 - 0.2))   # the segments' reach put the web over the body, where the kit
-                anchor = (xa, float(np.interp(xa, axb, yrb)))          # lifts it onto the segments (a flat shelf at their height)
+                    xa = max(xa, min(float(body_reach) + 1.0, x0 - 0.2))   # the segments' reach put the web over the body (then lifted
+                anchor = (xa, float(np.interp(xa, axb, yrb)))          # onto them as a shelf; now the pocket would hollow it)
             self.piece = GN.Piece((x0, y0), Lh, w0, o["genal_angle"], kink=o["genal_kink"], kink_angle=o["genal_kink_angle"],
                                   tip=o["genal_tip"], web=anchor, web_round=o["genal_web_round"], hw_min=0.35, inward=inward, organic=organic)
             self.notes += self.piece.notes
@@ -457,11 +458,6 @@ class Shape:
         if not (self.o.get("dots")): return np.zeros(2)
         return self.ring_D[self._T_ring0.query([float(x), float(y)])[1]]
 
-    def dot_shift(self, x, y):
-        """How far the dots moved the margin nearest (x, y) (scale 1): (0, 0) without dots."""
-        if not (self.o.get("dots")): return np.zeros(2)
-        return self.ring_D[self._T_ring0.query([float(x), float(y)])[1]]
-
     def edges(self, x):
         a = np.abs(np.asarray(x, float)); return np.interp(a, self.ax, self.yf), np.interp(a, self.ax, self.yr)
 
@@ -506,7 +502,40 @@ class Shape:
             if self.T_oc is not None:                              # at the genal corner the plate takes the piece's own section, so
                 zp = self._piece_section(ax, y)                    # the posterior border's furrow and rim do not cross the brim there
                 z = corner * z + (1 - corner) * zp                 # (they made an X-shaped crease and a seam line at the root)
+        if self.piece is not None and not o["brim_w"] > 0:             # 12 Nov 2026: the spine's ridge runs on into the plate (spine_field)
+            G, e_ = self.spine_field(ax, y, face); wG = smoothstep(0.0, 0.25, G)
+            z = (1 - wG) * z + wG * OR_smax(z, e_ + G, 0.3)
         return z + HC._detail(ax, Yh, face) if HC.has_detail(face) else z
+
+    def spine_field(self, x, y, face=None):
+        """12 Nov 2026 -- ONE SURFACE for the genal spine and the head. The spine's ridge as a function of the plan point
+        alone: its height above the shield's edge floor at (|x|, y), scale 1. The centreline is the piece's own, run on
+        FORWARD into the head from the root (along the side border) for `lead`; there the ridge keeps the root's width and
+        its crest fades out, so the border swells into the spine instead of the spine standing on the corner. The head's
+        plate (z) and the piece's bands (piece_z) both read this, so they are the same surface where they meet. Returns
+        (height above the floor, the floor)."""
+        p = self.piece; e_ = 0.6 * float(HC.face_of(face).get("rim", HC.RIM))
+        ax = np.abs(np.asarray(x, float)); y = np.broadcast_to(np.asarray(y, float), ax.shape)
+        if p is None: return np.zeros(ax.shape), e_
+        sk = np.asarray(p.skeleton, float); t0 = sk[1] - sk[0]; t0 = t0 / max(np.hypot(*t0), 1e-12)
+        lead = min(3.0 * p.W, 0.45 * self.L1)
+        pts = np.vstack([sk[0] - lead * t0, sk]); seg = np.hypot(*np.diff(pts, axis=0).T); sc = np.r_[0, np.cumsum(seg)] - lead
+        best_d = np.full(ax.shape, np.inf); best_s = np.zeros(ax.shape)
+        for i in range(len(seg)):
+            a = pts[i]; d = (pts[i + 1] - a) / max(seg[i], 1e-12)
+            t = np.clip((ax - a[0]) * d[0] + (y - a[1]) * d[1], 0, seg[i])
+            dist = np.hypot(ax - (a[0] + t * d[0]), y - (a[1] + t * d[1]))
+            m = dist < best_d; best_d = np.where(m, dist, best_d); best_s = np.where(m, sc[i] + t, best_s)
+        Ltot = max(float(sc[-1]), 1e-9); sn = np.clip(best_s / Ltot, 0, 1)            # 0 root .. 1 tip
+        hw = np.maximum(p.hw(np.clip(best_s, 0, p.Ls)), 1e-6)
+        gs = float(self.o.get("genal_sharp", 0.0))
+        crest = self.o["horn_h"] * HC.RELIEF * (1 - (0.55 + 0.42 * gs) * sn)
+        crest = np.minimum(crest, float(self.o.get("horn_aspect", 1.0)) * 2.0 * hw / max(getattr(self, "zk", 1.0), 1e-6))
+        crest = crest * (1 - smoothstep(0.0, lead, -best_s))                           # fading out forward, inside the head
+        crest = crest * np.sqrt(np.clip(1 - np.clip((best_s - p.Ls) / max(Ltot - p.Ls, 1e-9), 0, 1) ** 2, 0, 1)) if Ltot > p.Ls + 1e-9 else crest
+        t_ = np.clip(1 - best_d / hw, 0, 1)
+        sect = (1 - gs) * np.sqrt(np.clip(1 - (1 - t_) ** 2, 0, 1)) + gs * t_ ** 0.75
+        return crest * sect, e_
 
     def _piece_section(self, x, y):
         """A brimmed head's genal piece (9 Nov 2026): the brim's profile from the combined outer margin (head + piece; see
@@ -529,6 +558,9 @@ class Shape:
         0.6 rim, to a crest horn_h x relief tapering along the length), rising out of the head's own surface at the root.
         The web is a low plate at the edge floor; the root stub follows the head's surface just under it."""
         s = np.asarray(s, float); v = np.asarray(v, float)
+        if not self.o["brim_w"] > 0:                                # 12 Nov 2026: every band reads the one surface
+            G, e0 = self.spine_field(x, y, face)
+            return (e0 + G) * (0.9 if name == "web" else 1.0)          # the web a shade under the spine's strip: two equal surfaces unioned left a ragged seam
         e_ = 0.6 * float(HC.face_of(face).get("rim", HC.RIM))                # 9 Nov 2026: the shield's edge floor follows the face's
         if name in ("root", "web") and not self.o["brim_w"] > 0: return np.full(np.shape(s), e_ + 0.15)   # rim (it was HC.RIM: a 0.9-unit plinth under every spine,
         gs = float(self.o.get("genal_sharp", 0.0))                           # the vertical walls that made the spines read as slabs)
@@ -632,7 +664,6 @@ def diagram(outline=None, face=None, n=260):
     ax = sh.ax; plan_ = plan_outline(sh) * u
     gl = float(F_["glab_len"]); f = np.linspace(0, min(0.92 * gl, 1.0), n)
     gw = HC._glab_half(f / gl, face) * (1 - smoothstep(0.80, 0.92, f / gl) * 0.0)
-    nose = np.clip(1 - np.clip((f / gl - 0.70) / 0.30, 0, 1) ** F_["glab_front"], 0, 1) ** (1 / F_["glab_front"])
     glab = np.c_[gw, -f * sh.L1] * u
     cap = None                                                     # 9 Nov 2026: with front_furrow the glabella is a CLOSED capsule --
     if float(F_.get("front_furrow", 0.0)) > 0.005:                 # flanks to f0, then an elliptical cap (half-width g(f0), length

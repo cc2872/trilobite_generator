@@ -31,10 +31,10 @@ from the same schema parameters thorax.plan and tail.plan read, so an animal wit
 """
 import math
 import numpy as np
-from anatomy.common import pitch, smoothstep, plateau, trough
+from anatomy.common import pitch, plateau, trough
 from anatomy import thorax as THORAX, tail as TAIL
 import fields as _F
-from fields import seg_halfwidth, pleural_spine_field, furrow_amp, tail_halfwidth, landmarks
+from fields import pleural_spine_field, furrow_amp, tail_halfwidth, landmarks
 
 # The thorax model hands thorax.plan / tail.plan a P with two private keys: "_w" (this row's half-width) and "_spines"
 # (per-segment spine fractions). Those modules read the width and spine fields through their own module globals, so
@@ -99,7 +99,7 @@ def rows_from_P(P, spec=None, model="thorax"):
     keys of `spec` (thorax_rows, pyg_rows, thorax_len, pyg_len) change how many rows there are and over what length
     BEFORE any per-row edit: the preset's width and spine fields are re-sampled over the new rows."""
     spec = spec or {}
-    d0 = pitch(P); h = float(P["relief"]); F = furrow_amp(P)
+    d0 = pitch(P); h = float(P["relief"])
     for k, (lo, hi) in BODY_RANGE.items():
         if spec.get(k) is not None: _num(spec[k], k, lo, hi, "body")
     n = int(spec.get("thorax_rows") or P["segCount"]); Lt = float(spec.get("thorax_len") or d0 * int(P["segCount"])); d = Lt / n
@@ -931,7 +931,6 @@ def diagram(P, spec=None, n=60):
     WALL, GAP_Z, PIV_Z = 2.0, 0.5, 7.5 / scale
     side = []; prev = None
     for k, (name, mod, S, off) in enumerate(R["parts"]):
-        nxt_len = R["parts"][k + 1][2]["d"] if k + 1 < len(R["parts"]) else S["d"]
         ovl = S.get("ovl", 0.0)
         if SOLID and "edges" in S: y_end = off + float(S["edges"](np.array([0.0]))[1][0]) if k + 1 < len(R["parts"]) else off + S["d"]   # the plate's real end
         else: y_end = off + S["d"] + (ovl if k + 1 < len(R["parts"]) else 0.0)
@@ -943,8 +942,6 @@ def diagram(P, spec=None, n=60):
                 pb = np.interp(yy[under], prev["y"], prev["bottom"]); top = top.copy(); top[under] = np.minimum(top[under], pb - GAP_Z)
         bottom = np.maximum(top - WALL, 0.0)
         if SOLID: bottom = np.where(yy > off + S["d"] + 1e-6, bottom, 0.0)   # solid to the bed ahead of the rear joint plane
-        piece = dict(y=yy.tolist(), top=np.round(top, 3).tolist(), bottom=np.round(bottom, 3).tolist(), y0=off, y_end=y_end,
-                     rows=R["groups"][k], column=[off + 0.5 * (0.0), off + S["d"]])
         side.append(dict(k=k, rows=R["groups"][k], y0=round(off, 3), y1=round(off + S["d"], 3), y_end=round(y_end, 3),
                          top=np.round(np.c_[yy, top], 3).tolist(), bottom=np.round(np.c_[yy, bottom], 3).tolist()))
         prev = dict(y=yy, bottom=bottom, y_end=y_end)

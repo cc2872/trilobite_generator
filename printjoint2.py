@@ -4,7 +4,7 @@ overhang pass are assemble.py. New code calls assemble.animal(P, "flexi") / asse
 """
 import assemble
 from joints import flexi as _FX
-from joints.flexi import DEFAULTS, MIN_PITCH, clean, geometry, transforms_deg
+from joints.flexi import geometry
 
 def print_head(P, J=None):    return assemble.part(P, "head", _FX, opts=J)
 def print_tail(P, J=None):    return assemble.part(P, "tail", _FX, opts=J)

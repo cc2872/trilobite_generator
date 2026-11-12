@@ -181,7 +181,7 @@ def head_of(name, base="diagram"):
     H, _ = BODY.isopod_head(P, plans, J, PV, K, face=face); H.apply_scale(1.0 / K["s"]); return H, P
 
 if __name__ == "__main__":
-    import numpy as np, render as R, time
+    import render as R, time
     crescent = "--crescent" in sys.argv                                 # the fixed crescent on the isopod head piece (the first version)
     want = [a for a in sys.argv[1:] if not a.startswith("--")] or names(); rows = []; os.makedirs(os.path.join(HERE, "photos"), exist_ok=True); os.makedirs(os.path.join(HERE, "stl", "heads"), exist_ok=True)
     for n in want:

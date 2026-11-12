@@ -5,7 +5,7 @@ import os, sys, json, glob, time, traceback, warnings, shutil
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..")); os.chdir(ROOT)
 sys.path.insert(0, ROOT); sys.path.insert(0, ROOT + "/isopod_model"); sys.path.insert(0, ROOT + "/scripts")
 warnings.filterwarnings("ignore")
-import numpy as np, trimesh
+import trimesh
 import schema, mesh as M, body as BODY, head_styles as HS, render as RD
 from PIL import Image, ImageDraw
 from build_ornaments import CASES

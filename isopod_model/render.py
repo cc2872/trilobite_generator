@@ -6,7 +6,7 @@ and the sheets build.py makes.
 
 numba makes it fast (seconds); without it the same code runs in plain Python (minutes).
 """
-import os, sys, math
+import os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..")); sys.path.insert(0, HERE)
 import numpy as np, trimesh

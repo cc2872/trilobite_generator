@@ -20,11 +20,11 @@ every row says kinematics = "isopod ball (isopod_model)".
 
     python isopod_model/enroll.py [preset ...]   -> readings in isopod_model/readings/<preset>.json
 """
-import os, sys, json, time, math
+import os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..")); sys.path.insert(0, HERE)
-import numpy as np, trimesh
-import schema, mesh as M
+import numpy as np
+import schema
 import instrument as INS
 import check as CHECK
 import kinematics as KIN

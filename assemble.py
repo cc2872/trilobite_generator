@@ -14,7 +14,6 @@ this file, so swapping a head or a joint changes exactly one module and nothing 
 Build order is the 11 Sep order, kept so the pin meshes stay bit-identical to the frozen references:
     plate (shell + doublure)  ->  rear joint  ->  front joint  ->  ornaments in the anatomy's order.
 """
-import math
 import numpy as np
 import trimesh
 import mesh as M
@@ -22,7 +21,6 @@ import joints
 from anatomy import head as HEAD, thorax as THORAX, tail as TAIL
 from anatomy.common import GRID_SEG, GRID_TAIL, GRID_HEAD
 from anatomy import organic as OR
-from manifold3d import Manifold, OpType
 
 # ---------------------------------------------------------------- naming
 def part_names(P): return ["head"] + [f"seg{i}" for i in range(int(P["segCount"]))] + ["tail"]

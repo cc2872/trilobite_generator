@@ -9,7 +9,6 @@ instrument (instrument.read: build at the fixed measurement bevel, probe, measur
 the hinge kinematics so the browser animates the animal to its stop with the limiting pair flashing.
 """
 import os, sys, re, json, glob, time, threading, hashlib, shutil
-import trimesh
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, ROOT)
 from flask import Flask, request, jsonify, send_from_directory, send_file
 import schema, instrument as I, assemble, joints
@@ -358,7 +357,6 @@ def _iso_problems(P, head, spec):
     """Why this animal cannot be built: the rows' problems (the kit does not fit, the print too big) and the head's
     (its spines would make the print longer than the bed). Checked before a build is started (11 Oct 2026)."""
     _isopod_body(); import rows as RW
-    from anatomy.common import pitch
     from fields import seg_halfwidth
     out = []
     IB = _isopod_body()

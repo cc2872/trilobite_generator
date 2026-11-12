@@ -137,7 +137,7 @@ class Piece:
         tl_max = 0.8 * min(L1, L2); tl = rf * math.tan(0.5 * th)
         if tl > tl_max: rf = tl_max / math.tan(0.5 * th); tl = tl_max
         if rf < 1.05 * hw0: return None
-        A = K - tl * d1; B = K + tl * d2
+        A = K - tl * d1
         sgn = 1.0 if (d1[0] * d2[1] - d1[1] * d2[0]) > 0 else -1.0
         nt = sgn * np.array([-d1[1], d1[0]]); C = A + rf * nt
         v0 = A - C; arc = []

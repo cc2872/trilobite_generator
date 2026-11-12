@@ -1,7 +1,7 @@
 """Build the 'diagram' preset, export the STL, and lay its top-view silhouette over the textbook diagram at the same length."""
 import os, sys, warnings; ROOT=os.path.abspath(os.path.join(os.path.dirname(__file__), "..")); os.chdir(ROOT); sys.path[:0]=[ROOT, ROOT+"/isopod_model", ROOT+"/scripts"]; warnings.filterwarnings("ignore")
-import numpy as np, trimesh, schema, body as BODY, head_styles as HS, mesh as M, render as RD
-from PIL import Image, ImageDraw
+import numpy as np, trimesh, schema, body as BODY, head_styles as HS, render as RD
+from PIL import Image
 P=schema.preset("diagram"); P,face=HS.apply(P,"diagram"); P=schema.coerce(dict(P, **schema.PRESETS["diagram"]))
 parts,plans,PV,K=BODY.build(P,"shaped",face=face,outline=HS.outline("diagram")); s=K["s"]
 pieces=[p.copy().apply_scale(1/s) for p in parts]; whole=trimesh.util.concatenate(pieces)

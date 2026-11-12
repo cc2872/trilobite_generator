@@ -107,7 +107,7 @@ def _rear_joint(body, P, J, zj, y_piv):
 def _front_joint(body, P, J, zj, yc, front_face_y):
     """Convex SPHERE lobe about the pivot with a spherical socket + round mouth (captures the previous part's ball).
     No enrolment stop: the front face below the lobe band is cut flat."""
-    ga, gv, gl = J["gap_axial"], J["gap_vertical"], J["gap_lateral"]; r = 0.5 * J["ballD"]; Rc = J["lip"] + ga + r; big = 400.0
+    ga, gv = J["gap_axial"], J["gap_vertical"]; r = 0.5 * J["ballD"]; Rc = J["lip"] + ga + r; big = 400.0
     body = _force(body)
     ztop = zj - Rc - ga
     # carve only BELOW the lobe equator (replace with the bearing hemisphere); keep the full body above zj so the

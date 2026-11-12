@@ -15,7 +15,7 @@ import math
 import numpy as np
 import mesh as M
 from fields import seg_halfwidth, head_halfwidth, furrow_amp
-from anatomy.common import pitch, ring_top, smoothstep, plateau, trough, vault, spine_solid, curved_spine, prong, safe_expr, GRID_HEAD
+from anatomy.common import pitch, ring_top, smoothstep, plateau, trough, vault, spine_solid, curved_spine, prong, GRID_HEAD
 from anatomy import genal as GN
 from anatomy import organic as OR
 from anatomy.port import Port

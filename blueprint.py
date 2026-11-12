@@ -398,7 +398,7 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None, cmap="
         # the closure gap, dimensioned between the nearest head and tail points of the section (from the part split)
         gap = meas.get("closure_gap_mm")
         if gap not in (None, "—") and float(gap) > 0:
-            (ey0, ez0), (ey1, ez1) = en.bounds[0][1:], en.bounds[1][1:]
+            ey0, ez0 = en.bounds[0][1:]
             ax3.text(ey0, ez0 - 6, f"closure gap {float(gap):.1f} mm", color=INK, fontsize=7, family="monospace")
         elif gap not in (None, "—"):
             ax3.text(en.bounds[0][1], en.bounds[0][2] - 6, "closed", color=INK, fontsize=7, family="monospace")

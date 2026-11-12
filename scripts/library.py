@@ -95,7 +95,7 @@ def load_named_presets(names):
 
 
 def sample_presets(n, rng, names=None):
-    import schema, sweep, numpy as np
+    import schema, sweep
     presets = load_named_presets(names); names = list(presets); keys = list(sweep.AXES)
     per = -(-n // len(names))
     for name in names:
@@ -153,7 +153,7 @@ def stl_path(lib, h): return os.path.join(lib, "stl", h[:2], f"{h}.stl.gz")
 def one(lib, design_csv, row_i, out_json, measure):
     """Build one animal, write its gzip STL by hash, write a result JSON for the parent."""
     warnings.filterwarnings("ignore"); os.chdir(ROOT)
-    import numpy as np, trimesh, schema, instrument as I, landmarks
+    import trimesh, schema, instrument as I, landmarks
     d = list(csv.DictReader(open(design_csv)))[row_i]
     P = schema.coerce(json.loads(d["params"]), base=schema.table_defaults(), quiet=True)
     h = d["hash"]; assert recipe_hash(P) == h, "design hash does not match its params (schema changed since design?)"

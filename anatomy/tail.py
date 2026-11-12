@@ -6,7 +6,7 @@ import numpy as np
 from anatomy import organic as OR
 import mesh as M
 from fields import tail_halfwidth, furrow_amp
-from anatomy.common import pitch, ring_top, smoothstep, plateau, trough, vault, spine_solid, curved_spine, prong, GRID_TAIL
+from anatomy.common import pitch, ring_top, smoothstep, plateau, trough, vault, curved_spine, prong, GRID_TAIL
 from anatomy.port import Port
 
 AUTO_LOBE_BAND = 0.35   # 9 Nov 2026: the inner shield's smooth share when the lobes are curved (see tail_plan)
@@ -132,7 +132,7 @@ def plan(P):
         shield's margin), on the lobe's own bent centre line (10 Nov 2026)."""
         x0, y0 = wp * se(np.cos(phi)), Lp * se(np.sin(phi))
         if nk > 0.005: x0 = x0 * neck_f(y0 / Lp)
-        r0 = np.maximum(np.hypot(x0, y0), 1e-6); ex, ln, who = radial_extra(phi, lean_out=True); ex = ex * frac
+        ex, ln, who = radial_extra(phi, lean_out=True); ex = ex * frac
         th = np.arctan2(y0, x0) + ln                                   # the radial direction, leaned toward the rear
         X_, Y_ = x0 + ex * np.cos(th), y0 + ex * np.sin(th)
         for i, (pm, sgn, sd) in enumerate(list(_LOBES)):               # 9 Nov 2026: a curved lobe (its `curve`, deg at the tip, + toward the

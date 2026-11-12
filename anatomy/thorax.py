@@ -15,7 +15,7 @@ import math
 import numpy as np
 import mesh as M
 from fields import seg_halfwidth, pleural_spine_field, furrow_amp
-from anatomy.common import pitch, smoothstep, plateau, trough, vault, spine_solid, curved_spine, GRID_SEG
+from anatomy.common import pitch, smoothstep, plateau, trough, vault, curved_spine, GRID_SEG
 from anatomy.port import Port
 from anatomy import organic as OR
 
@@ -173,7 +173,7 @@ def ornaments(P, S):
         # on underneath. The root is 2.5 mm inboard of the tip, at the blade's mid-height, sloping as the blade does.
         # (A root at the tip was a 4.7 mm bulb on a 1.8 mm blade kinked off it at 55 deg -- the junction close-ups, 11:10.)
         xt = float(S["X_tip"]); xs = np.linspace(0.45 * S["w"], xt, 120); yf, yr = S["edges"](xs)
-        chord = np.asarray(yr) - np.asarray(yf); ymid = 0.5 * (np.asarray(yf) + np.asarray(yr)); zs = np.asarray(S["zfun"](xs, ymid)).ravel()
+        chord = np.asarray(yr) - np.asarray(yf); ymid = 0.5 * (np.asarray(yf) + np.asarray(yr))
         # The blade's MATERIAL along the mid-chord (24 Oct 2026, the spine audit): solid to the bed ahead of the rear joint
         # plane; behind it (the swept tip usually is) a plate S["t"] thick over the next part's lip. The section is that
         # material -- centre at its middle, half-height to its faces -- not bed-to-top, which filled the hollow under the

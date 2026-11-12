@@ -28,7 +28,7 @@ What a segment has (Whittington's terms), each with its own number:
                     pleura ahead can slide over it when the animal enrols
   tip               rounded (tip = 0) or drawn into a spine of length `tip`
 """
-import argparse, json, math, os, sys
+import argparse, json, math, os
 import numpy as np
 import trimesh
 

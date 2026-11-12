@@ -3,7 +3,7 @@ web/static/blueprints/<preset>.png, drawn AS the finished animal: the preset's d
 as the studio opens it). A preset without a drawing block is not finished and gets no card -- the menu shows it as a
 placeholder until it is drawn.
     python scripts/blueprint_cards.py [preset ...]        (no names: every preset with a drawing block)"""
-import json, os, sys, time
+import os, sys, time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for p in (ROOT, os.path.join(ROOT, "web"), os.path.join(ROOT, "isopod_model")): sys.path.insert(0, p)
 os.chdir(ROOT)
