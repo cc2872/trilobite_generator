@@ -65,9 +65,9 @@ def test_saved_heads_round_trip(c, tmp_path, monkeypatch):
     assert [h["name"] for h in c.get("/api/heads").get_json()] == ["t-harpes"]
 
 def test_opening_page_links_and_share(c):
-    front = c.get("/").get_data(as_text=True)                                                    # 11 Nov: the front page is now the orders gallery (gallery.html)
-    assert 'id="grid"' in front and '/studio?preset=' in front and 'agnostida' in front          # the ten order cards, each opening in the studio
-    studio = c.get("/studio").get_data(as_text=True)                                             # the combined editor moved to /studio
+    front = c.get("/").get_data(as_text=True)                                                    # 11 Nov: the front page is the tree page's blueprint menu (the ten order presets)
+    assert 'id="menugrid"' in front and 'Universal Trilobite Generator' in front and '/studio?preset=' in front   # the ten order cards, each opening in the studio
+    studio = c.get("/studio").get_data(as_text=True)                                             # the combined editor is at /studio
     assert 'id="stage"' in studio and 'id="build"' in studio                                     # its canvas + build button
     html = c.get("/generator").get_data(as_text=True)                                            # the parametric generator moved to /generator
     assert 'id="editor"' in html and 'id="familytree"' in html                                   # the generator's nav row
