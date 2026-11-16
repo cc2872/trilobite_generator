@@ -25,3 +25,6 @@ CHANGES_*.md
 CHANGES_*.pdf
 CHANGES_*.tex
 PREREG_*.md
+
+# Earth layout downloads (scripts/earth/fetch.sh), ~300 MB
+earth_raw/

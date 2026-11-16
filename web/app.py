@@ -830,6 +830,25 @@ def api_classify():
     return jsonify(characters=[dict(key=k, name=schema.CHARACTERS[k]["name"]) for k in ch],
                    nearest=best if best_score > 0 else None, nearest_score=round(best_score, 2))
 
+_EARTH_SITES = None
+@app.get("/api/earth/site/<path:sid>")
+def api_earth_site(sid):
+    """One fossil locality on the tree page's globe, with its detail (assets/earth/fossils/sites_full.json.gz, built by
+    scripts/earth/build_globe.py). Loaded on first use."""
+    global _EARTH_SITES
+    if _EARTH_SITES is None:
+        import gzip
+        path = os.path.join(ROOT, "assets", "earth", "fossils", "sites_full.json.gz")
+        if not os.path.exists(path): return jsonify(error="no fossil data on this server"), 404
+        with gzip.open(path, "rt", encoding="utf-8") as f: _EARTH_SITES = {r["id"]: r for r in json.load(f)}
+    r = _EARTH_SITES.get(sid)
+    if r is None: return jsonify(error="unknown locality"), 404
+    keep = ("id", "src", "name", "place", "cc", "interval", "max_ma", "min_ma", "formation", "group", "member", "environment",
+            "lithology", "lagerstatte", "museum", "dataset", "datasetKey", "institution", "n", "genera", "age_from", "license", "uncertainty_m")
+    out = {k: r[k] for k in keep if r.get(k) not in (None, "")}
+    out["taxa"] = r.get("taxa", [])[:40]; out["refs"] = r.get("refs", [])[:5]; out["types"] = r.get("types", [])[:10]
+    return jsonify(out)
+
 @app.get("/api/preset_chars")
 def api_preset_chars():
     """For the tree page: the characters each preset's own parameters express (schema.characters), so an option
