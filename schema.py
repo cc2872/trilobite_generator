@@ -36,18 +36,28 @@ class Param:
     doc: str = ""
     kind: str = "float"          # "float" | "int" | "odd_int" | "expr" (a text formula in s ∈ [0,1])
     unit: str = ""
+    # 21 Nov 2026: lo..hi is the range the sliders show and the libraries sample. For the body-plan keys it was drawn around the
+    # measured fossils, so clamping to it put every animal inside the fossils' own box. dlo..dhi is the domain coerce() clamps to:
+    # only what the quantity itself allows (a count of at least 1, a length above 0, a fraction of the body). None = no limit on
+    # that side; both unset = clamp to lo..hi as before, so every other parameter behaves exactly as it did.
+    dlo: float = None
+    dhi: float = None
+    free: bool = False           # True: the domain is dlo..dhi (None = unbounded), not lo..hi
+
+    def domain(self):
+        return (self.dlo, self.dhi) if self.free else (self.lo, self.hi)
 
 PARAMS = [
     # ---- body proportions
-    Param("length", "Body length", 130, 60, 250, 1, "Body", "Whole animal, head tip to tail shield tip (spines extra)", unit="mm"),
+    Param("length", "Body length", 130, 60, 250, 1, "Body", "Whole animal, head tip to tail shield tip (spines extra)", unit="mm", free=True, dlo=1.0),
     Param("width", "Max width", 65, 30, 140, 1, "Body", "Widest point of the body", unit="mm"),
     Param("relief", "Relief", 16, 6, 40, 0.5, "Body", "Dorsal height of the vault at the axis", unit="mm"),
     # 9 Nov 2026: body-plan ranges widened to the 70 TriloMorph whole bodies (data/prism/fossils_trilomorph.csv: head 0.20-0.455,
     # tail 0.0375-0.418, 6-19 segments; 10 of 70 were outside 0.18-0.45 / 0.05-0.40 / 2-16). preglabField may now be 0 (41 % of the
     # 20-key fits sat at the old 0.02 floor; TriloMorph 5-95 % starts at 0).
-    Param("segCount", "Thoracic segments", 6, 2, 20, 1, "Body", "Number of articulating thoracic segments", kind="int"),
-    Param("cephFrac", "Head length fraction", 0.33, 0.18, 0.50, 0.005, "Body", "Cephalon length / body length"),
-    Param("pygFrac", "Tail shield fraction", 0.14, 0.03, 0.45, 0.005, "Body", "Pygidium length / body length (spines extra)"),
+    Param("segCount", "Thoracic segments", 6, 2, 20, 1, "Body", "Number of articulating thoracic segments", kind="int", free=True, dlo=1),
+    Param("cephFrac", "Head length fraction", 0.33, 0.18, 0.50, 0.005, "Body", "Cephalon length / body length", free=True, dlo=0.01, dhi=0.98),
+    Param("pygFrac", "Tail shield fraction", 0.14, 0.03, 0.45, 0.005, "Body", "Pygidium length / body length (spines extra)", free=True, dlo=0.0, dhi=0.98),
     Param("marginHeight", "Margin height", 0.34, 0.05, 0.60, 0.01, "Body", "Pleural margin height / relief"),
     Param("fulcrum", "Fulcrum", 0.55, 0.3, 0.9, 0.01, "Body", "Where the pleura bends down, as a fraction of half-width"),
     Param("overlap", "Shingle overlap", 0.5, 0.1, 0.8, 0.01, "Body", "Rear flap length as a fraction of segment pitch"),
@@ -395,6 +405,7 @@ def express(P, *keys):
     return coerce(Q)
 
 BY_KEY = {p.key: p for p in PARAMS}
+BODY_MAX = 0.98            # head fraction + tail fraction may not exceed this: at least 2 % of the body is thorax
 GROUPS = []
 for _p in PARAMS:
     if _p.group not in GROUPS: GROUPS.append(_p.group)
@@ -496,11 +507,15 @@ def coerce(P, base=None, quiet=False):
             try: v = float(v)
             except (TypeError, ValueError): v = float(p.default)       # "abc"/None -> the default, never a crash or a 500
             if v != v or v == float("inf") or v == -float("inf"): v = float(p.default)   # NaN/inf -> default, never into a hash or the geometry
-            v = min(max(v, p.lo), p.hi)
+            d0, d1 = p.domain()
+            if d0 is not None: v = max(v, d0)
+            if d1 is not None: v = min(v, d1)
             if p.kind in ("int", "odd_int"):
                 v = int(round(v))
                 if p.kind == "odd_int" and v % 2 == 0: v = min(v + 1, int(p.hi))
             Q[k] = v
+    tot = float(Q.get("cephFrac", 0)) + float(Q.get("pygFrac", 0))          # head + tail cannot exceed the body: the edge of the triangle itself
+    if tot > BODY_MAX: Q["cephFrac"] = Q["cephFrac"] * BODY_MAX / tot; Q["pygFrac"] = Q["pygFrac"] * BODY_MAX / tot
     if P and hits == 0 and not quiet:
         warnings.warn(f"schema.coerce: none of the {len(P)} given keys is a parameter "
                       f"({', '.join(sorted(map(str, P))[:4])}) — the animal is the base/default one, not yours. "
@@ -551,7 +566,9 @@ def coerce_report(P, base=None):
         try: f = float(v)
         except (TypeError, ValueError):
             notes.append(f"{k}: non-numeric {v!r}"); continue
-        if f < p.lo or f > p.hi: notes.append(f"{k}: {f} clamped to [{p.lo}, {p.hi}]")
+        d0, d1 = p.domain()
+        if (d0 is not None and f < d0) or (d1 is not None and f > d1): notes.append(f"{k}: {f} clamped to [{d0}, {d1}]")
+        elif f < p.lo or f > p.hi: notes.append(f"{k}: {f} is outside the sampled range [{p.lo}, {p.hi}], kept")
         elif p.kind in ("int", "odd_int") and abs(f - round(f)) > 1e-9: notes.append(f"{k}: {f} rounded to int")
         elif p.kind == "odd_int" and int(round(f)) % 2 == 0: notes.append(f"{k}: {f} bumped to odd")
     return coerce(P, base=base, quiet=True), notes      # the note above already says it; no duplicate warning

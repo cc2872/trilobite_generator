@@ -50,7 +50,14 @@ def width_curve(P):
     if s0 > smax + 0.02: pts.append((s0, P["widthThoraxFront"] * W))
     pts += [(L["s_t"] if L["s_t"] > s0 + 0.02 else s0 + 0.02, P["widthThoraxRear"] * W),
             (1.0, P["widthTail"] * W)]
-    return Curve(pts)
+    # 22 Nov 2026: knots must run strictly forward along the body. With no tail (pygFrac 0) the rear-of-thorax knot lands on the
+    # end of the body, and with a very large tail it lands in front of the widest point; both gave the spline two knots at one
+    # place (a division by zero) and every segment a width of NaN. A knot that does not move forward is dropped; nothing changes
+    # for body plans whose knots were already in order.
+    keep = [pts[0]]
+    for q in pts[1:]:
+        if q[0] > keep[-1][0] + 1e-6: keep.append(q)
+    return Curve(keep)
 
 def seg_halfwidth(P, i):
     return float(width_curve(P)(seg_s(P, i)))
