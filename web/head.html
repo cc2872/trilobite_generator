@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme-switch="on">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -11,9 +11,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
 <script src="/static/p5.min.js"></script>
+<script src="/static/theme.js"></script>
 <style>
   :root{--bg:#000;--ink:#fff;--mid:#9a9a9a;--line:#262626;--soft:#141414;--accent:#f6704f;--accent-dim:#7a3326;
  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"IBM Plex Sans",system-ui,"Helvetica Neue",Arial,sans-serif}
+  :root[data-theme=light]{--bg:#f7f6f3;--ink:#1a1a1a;--mid:#6b6b6b;--line:#d8d6d1;--soft:#ececea;--accent:#d8552f;--accent-dim:#e8c3b5}   /* 24 Nov 2026: soft-paper light mode */
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:12px;overflow:hidden;-webkit-font-smoothing:antialiased}
   body{display:grid;grid-template-columns:272px 1fr;height:100%}
@@ -202,7 +204,12 @@ new p5(s=>{
     ox=60-y0*px; oyP=50+xw*px; oyE=oyP+xw*px+40+zmax*px; }
   const X=y=>ox+y*px, YP=x=>oyP-x*px, YE=z=>oyE-z*px;
   function poly(pts, mirror){ s.beginShape(); for(const p of pts) s.vertex(X(p[1]), oyP+(mirror?1:-1)*p[0]*px); s.endShape(); }
-  function hair(a){ s.stroke(255,a); s.strokeWeight(1); s.noFill(); }
+  // 24 Nov 2026: ink/ground follow the light/dark switch (near-black on paper, else white on black); orange stays.
+  let INK=255, BG=0;
+  function themeColors(){ const L=window.TriloTheme&&window.TriloTheme.isLight(); INK=L?26:255; BG=L?247:0; }
+  themeColors();
+  window.TriloTheme && window.TriloTheme.onChange(()=>{ themeColors(); try{ s.redraw(); }catch(_){} });
+  function hair(a){ s.stroke(INK,a); s.strokeWeight(1); s.noFill(); }
   function handlePositions(){ const D=S.D.diagram; const out={}; for(const [k,v] of Object.entries(D.handles)) out[k]={sx:X(v[1]), sy:YP(v[0]), x:v[0], y:v[1]};
     let mi=0; D.profile.forEach((p,i)=>{ if(p[1]>D.profile[mi][1]) mi=i; }); crown={y:D.profile[mi][0], z:D.profile[mi][1]}; out.crown={sx:X(crown.y), sy:YE(crown.z), x:0, y:crown.y, z:crown.z, elev:true}; return out; }
   let HP={}; window.__handles=()=>HP;   // for tests
@@ -215,10 +222,10 @@ new p5(s=>{
     if(t.pts.length){ s.stroke(246,112,79); s.strokeWeight(t.frame?1.5*F_scale():1.5); s.noFill();
       if(t.pts.length>=2){ s.drawingContext.setLineDash([3,4]); s.line(t.pts[0].x,t.pts[0].y,t.pts[1].x,t.pts[1].y); s.drawingContext.setLineDash([]); }
       s.beginShape(); for(const p of t.pts.slice(2)) s.vertex(p.x,p.y); s.endShape();
-      t.pts.forEach((p,i)=>{ s.fill(i<2?0:s.color(246,112,79)); s.circle(p.x,p.y,(i<2?8:5)*F_scale()); }); }
+      t.pts.forEach((p,i)=>{ s.fill(i<2?BG:s.color(246,112,79)); s.circle(p.x,p.y,(i<2?8:5)*F_scale()); }); }
     s.pop();
     function F_scale(){ return t.frame?t.frame.maxA/px:1; } }
-  s.draw=()=>{ s.background(0); if(!S.D){ return; } fit(); const D=S.D.diagram; drawPhoto();
+  s.draw=()=>{ s.background(BG); if(!S.D){ return; } fit(); const D=S.D.diagram; drawPhoto();
     // axis + thorax half-width references
     hair(60); s.line(40, oyP, W-40, oyP);
     const tw=1/Math.max(D.size.width_vs_thorax,1e-6); s.drawingContext.setLineDash([2,5]); hair(70); s.line(X(ymin)-10, YP(tw), X(ymax)+10, YP(tw)); s.line(X(ymin)-10, oyP+tw*px, X(ymax)+10, oyP+tw*px); s.drawingContext.setLineDash([]);
@@ -235,13 +242,13 @@ new p5(s=>{
     hair(255); s.strokeWeight(1.2); run(D.section);
     hair(130); s.strokeWeight(1); run(D.profile);
     // labels
-    s.noStroke(); s.fill(255,120); s.textAlign(s.LEFT,s.BOTTOM); s.text('PLAN', 40, oyP-xw*px-8); s.text('ELEVATION', 40, oyE-Math.max(...D.profile.map(p=>p[1]))*px-8);
+    s.noStroke(); s.fill(INK,120); s.textAlign(s.LEFT,s.BOTTOM); s.text('PLAN', 40, oyP-xw*px-8); s.text('ELEVATION', 40, oyE-Math.max(...D.profile.map(p=>p[1]))*px-8);
     s.textAlign(s.LEFT,s.TOP); s.text('front', X(ymin)-4, oyE+8); s.textAlign(s.RIGHT,s.TOP); s.text('rear', X(ymax)+4, oyE+8);
     // handles
     HP=handlePositions(); const act=S.drag||S.pinned||S.hover;
-    for(const [k,h] of Object.entries(HP)){ const on=k===act; s.stroke(on?s.color(246,112,79):s.color(255)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):0); s.circle(h.sx,h.sy,on?9:7);
-      if(on||S.hover===k){ s.noStroke(); s.fill(on?s.color(246,112,79):s.color(255,200)); s.textAlign(s.LEFT,s.BOTTOM); s.text(k+'  '+keysFor(k).join(' - '), h.sx+9, h.sy-6); } }
-    s.noStroke(); s.fill(255,90); s.textAlign(s.RIGHT,s.BOTTOM); s.text((inflight?'drawing…':'')+' ', W-12, H-10);
+    for(const [k,h] of Object.entries(HP)){ const on=k===act; s.stroke(on?s.color(246,112,79):s.color(INK)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):BG); s.circle(h.sx,h.sy,on?9:7);
+      if(on||S.hover===k){ s.noStroke(); s.fill(on?s.color(246,112,79):s.color(INK,200)); s.textAlign(s.LEFT,s.BOTTOM); s.text(k+'  '+keysFor(k).join(' - '), h.sx+9, h.sy-6); } }
+    s.noStroke(); s.fill(INK,90); s.textAlign(s.RIGHT,s.BOTTOM); s.text((inflight?'drawing…':'')+' ', W-12, H-10);
   };
   function nearest(mx,my){ let best=null,bd=14; for(const [k,h] of Object.entries(HP)){ const d=Math.hypot(h.sx-mx,h.sy-my); if(d<bd){ bd=d; best=k; } } return best; }
   s.mouseMoved=()=>{ if(S.trace.on&&S.trace.img&&!S.trace.frame){ stage.style.cursor='crosshair'; return; } const h=nearest(s.mouseX,s.mouseY); if(h!==S.hover){ S.hover=h; if(!S.pinned) renderSliders(); } stage.style.cursor=h?'grab':'default'; };

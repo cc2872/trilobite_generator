@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme-switch="on">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Trilobite Morphospace</title>
@@ -7,10 +7,12 @@
 <link rel="help" type="text/plain" href="/llms.txt" title="Guide for programs and AI agents">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<script src="/static/theme.js"></script>
 <style>
-  :root{--bg:#000000;--ink:#ffffff;--mid:#9a9a9a;--line:#262626;--soft:#141414;
+  :root{--bg:#000000;--ink:#ffffff;--mid:#9a9a9a;--line:#262626;--soft:#141414;--regfill:#0b0b0b;
  --accent:#f6704f;--accent-dim:#7a3326;   /* magma-derived, used sparingly on active/primary states */
  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"IBM Plex Sans",system-ui,"Helvetica Neue",Arial,sans-serif}
+  :root[data-theme=light]{--bg:#f7f6f3;--ink:#1a1a1a;--mid:#6b6b6b;--line:#d8d6d1;--soft:#ececea;--regfill:#edece9;--accent:#d8552f;--accent-dim:#e8c3b5}   /* 24 Nov 2026: soft-paper light mode */
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;font-size:12px;-webkit-font-smoothing:antialiased}
   /* instrument data reads in mono; descriptive text stays sans */
@@ -48,16 +50,16 @@
   .printopt .cmapwrap{display:inline-flex;align-items:center;gap:5px}
   .printopt .headwrap{display:inline-flex;align-items:center;gap:5px} .printopt .headwrap.off{opacity:.3;pointer-events:none}
   .printopt select{width:auto;display:inline-block;padding:1px 2px;font:inherit;font-size:11px;border-bottom:1px solid var(--line);text-transform:lowercase}
-  .stage{position:relative;min-width:0;background:#000}
+  .stage{position:relative;min-width:0;background:var(--bg)}
   canvas{display:block}
-  img.sheet{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;opacity:1;transition:opacity .45s ease}
+  img.sheet{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:var(--bg);opacity:1;transition:opacity .45s ease}
   .stage3d{position:absolute;inset:0;display:none}
-  #view3d{position:absolute;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);color:var(--ink);border:1px solid rgba(255,255,255,.5);font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:0}
+  #view3d{position:absolute;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(128,128,128,.12);color:var(--ink);border:1px solid var(--ink);font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:0}
   #view3d.corner{background:var(--bg);border:1px solid var(--ink);padding:8px 14px;right:16px;top:16px;left:auto!important;bottom:auto!important;width:auto!important;height:auto!important}
   #view3d:hover{background:var(--ink);color:var(--bg)}
-  .readout{position:absolute;left:16px;top:14px;line-height:1.6;pointer-events:none;font-variant-numeric:tabular-nums;text-shadow:0 0 6px #000, 0 0 6px #000}
+  .readout{position:absolute;left:16px;top:14px;line-height:1.6;pointer-events:none;font-variant-numeric:tabular-nums;text-shadow:0 0 6px var(--bg), 0 0 6px var(--bg)}
   .readout b{font-weight:normal;border-bottom:1px solid var(--ink)}
-  .status{position:absolute;right:16px;top:14px;color:var(--mid);text-shadow:0 0 6px #000} .status.busy{color:var(--ink)}
+  .status{position:absolute;right:16px;top:14px;color:var(--mid);text-shadow:0 0 6px var(--bg)} .status.busy{color:var(--ink)}
   .look{position:absolute;right:16px;top:36px;color:var(--mid);font-size:11px;letter-spacing:.06em;text-transform:uppercase;user-select:none;display:none}
   .look span{cursor:pointer} .look span.on{color:var(--accent);border-bottom:1px solid var(--accent)}
   .rollbar{position:absolute;left:16px;right:16px;bottom:16px;display:none;grid-template-columns:1fr auto auto;gap:14px;align-items:center}
@@ -71,7 +73,7 @@
   .rbctl .rbdir{cursor:pointer;font-size:13px;display:inline-block;transition:transform .2s} .rbctl .rbdir.flip{transform:scaleY(-1)}
   .rbctl button{background:var(--bg);color:var(--ink);border:1px solid var(--ink);padding:3px 8px;font:inherit;font-size:10px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
   .rbctl button:hover{background:var(--soft)} .rbctl button:disabled{opacity:.4;cursor:default}
-  .loading{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#000;z-index:6}
+  .loading{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:var(--bg);z-index:6}
   .loading.on{display:flex}
   .loading img{width:min(60%,480px);height:auto;image-rendering:auto;opacity:.95}
   #loadsvg{width:240px;height:172px}
@@ -84,7 +86,7 @@
   /* the anatomy map: the picker is the animal, traced from the dorsal sketch */
   svg.map{width:100%;display:block;margin-top:8px;border:1px solid var(--line);background:var(--bg);touch-action:none;user-select:none}
   svg.map text{fill:var(--mid);font-size:9px;letter-spacing:.06em;text-transform:uppercase;pointer-events:none}
-  svg.map .reg{fill:#0b0b0b;stroke:var(--mid);stroke-width:1;cursor:pointer}
+  svg.map .reg{fill:var(--regfill);stroke:var(--mid);stroke-width:1;cursor:pointer}
   svg.map .reg:hover{fill:var(--soft);stroke:var(--ink)}
   svg.map .reg.on{fill:var(--soft);stroke:var(--accent);stroke-width:1.5}
   svg.map .mir{fill:none;stroke:var(--line);stroke-width:1;pointer-events:none}
@@ -111,7 +113,7 @@
   @keyframes hpulse{0%,100%{opacity:.5}50%{opacity:1}}
   svg.map.hint .h{animation:hpulse 1.5s ease-in-out 2}
   svg.map.hint .step,svg.map.hint .reg.on{animation:hpulse 1.5s ease-in-out 2}
-  #dragtip{position:fixed;z-index:30;pointer-events:none;display:none;background:#000;color:var(--ink);border:1px solid var(--ink);
+  #dragtip{position:fixed;z-index:30;pointer-events:none;display:none;background:var(--bg);color:var(--ink);border:1px solid var(--ink);
            padding:3px 7px;font:11px/1.25 ui-monospace,Menlo,Consolas,monospace;white-space:nowrap;font-variant-numeric:tabular-nums}
   .ctrl{transition:box-shadow .25s ease,background .25s ease}
   .ctrl.flash{box-shadow:-3px 0 0 var(--accent);background:var(--soft)}
@@ -205,7 +207,12 @@ let P = await (await fetch('/api/preset/'+START)).json(); let sel='frame', showM
 const _eye=_u.get('eye'); if(_eye){ const _t=(S.eye_types||[]).find(x=>x.key===_eye); if(_t) Object.assign(P,_t.set); }   // tree ?eye= deep link: apply the eye bundle
 const _ch=_u.get('chars'); if(_ch){ _ch.split(',').forEach(k=>{ const c=(S.characters||[]).find(x=>x.key===k); if(c) Object.assign(P,c.set); }); }   // tree ?chars= deep link: apply the character bundles, in order
 const _pp=_u.get('p'); if(_pp){ try{ const d=JSON.parse(decodeURIComponent(escape(atob(_pp)))); if(d&&typeof d==='object') P=Object.assign({...DFLT},d); }catch(_){} }   // ?p= shared permalink: defaults + the encoded changes
-const $=id=>document.getElementById(id); const INK='#ffffff', MID='#9a9a9a', LINE='#262626', SOFT='#141414';
+const $=id=>document.getElementById(id);
+// 24 Nov 2026: the little character-icon SVGs are built as strings with these colours; read them from the themed CSS
+// vars so they follow the light/dark switch (SVG presentation attributes can't take var() directly).
+let INK='#ffffff', MID='#9a9a9a', LINE='#262626', SOFT='#141414';
+function themeConsts(){ const cs=getComputedStyle(document.documentElement); INK=cs.getPropertyValue('--ink').trim()||INK; MID=cs.getPropertyValue('--mid').trim()||MID; LINE=cs.getPropertyValue('--line').trim()||LINE; SOFT=cs.getPropertyValue('--soft').trim()||SOFT; }
+themeConsts();
 const ROWOF={b1:'head',a1:'head',b2:'seg',a2:'seg',b3:'tail',a3:'tail'};
 const C=$('C');
 const ps=$('preset'); S.presets.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;if(n===START)o.selected=true;ps.appendChild(o);});
@@ -680,7 +687,7 @@ const SHEET_TRIES=3;                       // so the overlay lifts on the painte
 async function sheet(){ status('drawing sheet',true);
   for(let a=1;a<=SHEET_TRIES;a++){
     let r;
-    try{ r=await retryPost('/api/sheet','sheet',2,{P,joint,cmap,head:joint==='isopod'?headArg():null,body:joint==='isopod'?bodyArg():null}); if(!r.url) throw new Error(r.error||'no sheet'); }
+    try{ r=await retryPost('/api/sheet','sheet',2,{P,joint,cmap,light:!!(window.TriloTheme&&TriloTheme.isLight()),head:joint==='isopod'?headArg():null,body:joint==='isopod'?bodyArg():null}); if(!r.url) throw new Error(r.error||'no sheet'); }
     catch(ex){
       if(a>=SHEET_TRIES){ status('sheet failed - '+why(ex),false); return; }
       status(`sheet failed - retry ${a}/${SHEET_TRIES-1}`,true); await new Promise(z=>setTimeout(z,800*a)); continue; }
@@ -758,6 +765,21 @@ const fillMat=new THREE.MeshBasicMaterial({color:0x000000,polygonOffset:true,pol
 const inkLine=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.9});
 const faintLine=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.18});
 const shaded=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.78,metalness:0.0});   // the Relief look: per-vertex colormap by height
+// 24 Nov 2026: light/dark viewer. Paper ground + near-black ink in light; the blueprint fill becomes paper and its
+// feature edges go dark (edges are cloned per part, so recolour the ones already on screen too).
+const PAPER3D=0xf7f6f3, INK3D=0x1a1a1a;
+const bg3dHex=()=>(window.TriloTheme&&TriloTheme.isLight())?PAPER3D:0x000000;
+const gridHex=()=>(window.TriloTheme&&TriloTheme.isLight())?[0xcfcdc8,0xe4e2dd]:[0x2a2a2a,0x161616];
+function makeGrid(){ const [a,b]=gridHex(); const g=new THREE.GridHelper(400,40,a,b); g.position.y=-0.5; return g; }
+function apply3dTheme(){ const L=(window.TriloTheme&&TriloTheme.isLight());
+  fillMat.color.set(L?PAPER3D:0x000000); inkLine.color.set(L?INK3D:0xffffff); faintLine.color.set(L?INK3D:0xffffff);   // future clones
+  if(!threeReady) return;
+  scene.background=new THREE.Color(bg3dHex()); scene.remove(grid); grid=makeGrid(); scene.add(grid);
+  for(const g of Object.values(partMeshes)){ const e=g.getObjectByName('edges'), f=g.getObjectByName('faint'); if(e) e.material.color.set(L?INK3D:0xffffff); if(f) f.material.color.set(L?INK3D:0xffffff); }
+  dirty3d=true; }
+window.TriloTheme && TriloTheme.onChange(()=>{ themeConsts(); apply3dTheme();   // live toggle: recolour the map/icons (CSS flips the rest), re-backdrop the
+  try{ redraw(); }catch(_){}                                                    // viewer, and redraw the blueprint sheet dark-on-paper (or back)
+  if(mode==='sheet' && $('sheet').getAttribute('src')) sheet(); });
 // ---- rainbow (GPU): the hue is computed per-fragment on the card, from the rest-frame height and a time uniform.
 // Smooth on dense meshes, free while the animal also rolls, and whatever is on screen is exactly what gets recorded.
 // uMode 0 = flow (hues scroll by height), 1 = enrollment (hue tracks the roll fraction). Full saturation, no grey.
@@ -831,15 +853,16 @@ async function recordLoop(){ if(recording||!threeReady) return;
   }catch(ex){ cancelAnimationFrame(rafid); status('record failed - '+why(ex),false); }
   finally{ recording=false; btn.disabled=false; btn.textContent=label; } }
 $('rbrec').onclick=recordLoop;
-function init3d(){ if(threeReady) return; threeReady=true; const view=$('stage3d'); scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+function init3d(){ if(threeReady) return; threeReady=true; const view=$('stage3d'); scene=new THREE.Scene(); scene.background=new THREE.Color(bg3dHex());
   cam=new THREE.PerspectiveCamera(40,1,1,5000); cam.position.set(140,110,190); ren=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true}); view.appendChild(ren.domElement); ctl=new OrbitControls(cam,ren.domElement); ctl.target.set(0,10,0);   // preserveDrawingBuffer lets captureStream grab clean frames for the recorder
   scene.add(new THREE.HemisphereLight(0xffffff,0x888888,1.0)); const key=new THREE.DirectionalLight(0xffffff,1.2); key.position.set(80,160,120); scene.add(key);
-  grid=new THREE.GridHelper(400,40,0x2a2a2a,0x161616); grid.position.y=-0.5; scene.add(grid);
+  grid=makeGrid(); scene.add(grid);
   root=new THREE.Group(); root.rotation.x=-Math.PI/2; scene.add(root); loader=new STLLoader();
   const rs=()=>{ren.setSize(view.clientWidth,view.clientHeight); cam.aspect=view.clientWidth/view.clientHeight; cam.updateProjectionMatrix();}; window.addEventListener('resize',rs); rs();
   ctl.addEventListener('change',()=>{ dirty3d=true; }); window.addEventListener('resize',()=>{ dirty3d=true; });
   (function loop(){requestAnimationFrame(loop); const anim=(cmap==='rainbow');                 // 25 Oct 2026: draw only when something changed (the camera, a pose,
-    if(ctl.update()||dirty3d||anim){ rbU.uTime.value=performance.now()*0.001; ren.render(scene,cam); dirty3d=false; } })(); }   // a load) or the colormap animates   // one clock drives the flow; any window of a full cycle is a seamless loop
+    if(ctl.update()||dirty3d||anim){ rbU.uTime.value=performance.now()*0.001; ren.render(scene,cam); dirty3d=false; } })();   // a load) or the colormap animates   // one clock drives the flow; any window of a full cycle is a seamless loop
+  apply3dTheme(); }
 // 25 Oct 2026: a part shows as its mesh at once; its edge lines (two EdgesGeometry passes over 100k+ triangles each, the
 // slowest thing the viewer did, before anything was on screen) are added afterwards, one part per idle slice
 function partGroup(geo){ const g=new THREE.Group(); const m=new THREE.Mesh(geo, look==='blueprint'?fillMat:reliefMat()); m.name='fill'; g.add(m); return g; }
@@ -850,11 +873,11 @@ const idle=f=>setTimeout(f,30);                                            // a 
 function disposeAll(){ root.traverse(o=>{ if(o.geometry) o.geometry.dispose(); if(o.material&&o.material!==fillMat&&o.material.dispose&&o.name!=='fill') o.material.dispose(); }); root.clear(); partMeshes={}; }   // the old animal's buffers were never freed
 let loadGen=0; let dirty3d=true;
 function setLook(l){ look=l; [...$('look').children].forEach(s=>s.classList.toggle('on',s.dataset.look===l)); if(!threeReady) return; dirty3d=true;
-  scene.background=new THREE.Color(0x000000);                                  // dark for both; the colormap glows on black
+  scene.background=new THREE.Color(bg3dHex());                                 // paper in light mode, else black (the colormap glows on black)
   stopRainbow();                                                              // leaving Relief (or re-entering) always restarts clean
   if(l!=='blueprint'){ if(cmap==='rainbow') startRainbow(); else colorParts(); }
   for(const g of Object.values(partMeshes)){ g.getObjectByName('fill').material=(l==='blueprint'?fillMat:reliefMat()); const e=g.getObjectByName('edges'), f=g.getObjectByName('faint'); if(e) e.visible=true; if(f) f.visible=(l==='blueprint'); }   // white feature edges in both looks: the Relief keeps a blueprint outline over the colormap
-  scene.remove(grid); grid=new THREE.GridHelper(400,40,0x2a2a2a,0x161616); grid.position.y=-0.5; scene.add(grid); updateRbCtl(); }
+  scene.remove(grid); grid=makeGrid(); scene.add(grid); updateRbCtl(); }
 $('look').onclick=e=>{ if(e.target.dataset.look) setLook(e.target.dataset.look); };
 async function load3d(man, keepView){ init3d();
   if(!man&&joint==='isopod'){ try{ const pk=await post('/api/build',Object.assign(buildBody(),{peek:true})); if(pk&&pk.parts){ man=pk; status(`built (cached) - ${man.print&&man.print.print_valid?'printable':((man.print&&(man.print.violations||man.print.notes))||['not printable']).join('; ')}`,false); } }catch(_){ } }   // built before: straight to it

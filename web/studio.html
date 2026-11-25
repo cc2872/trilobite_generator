@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme-switch="on">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -12,9 +12,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
 <script src="/static/p5.min.js"></script>
+<script src="/static/theme.js"></script>
 <style>
   :root{--bg:#000;--ink:#fff;--mid:#9a9a9a;--line:#262626;--soft:#141414;--accent:#f6704f;--accent-dim:#7a3326;
  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"IBM Plex Sans",system-ui,"Helvetica Neue",Arial,sans-serif}
+  :root[data-theme=light]{--bg:#f7f6f3;--ink:#1a1a1a;--mid:#6b6b6b;--line:#d8d6d1;--soft:#ececea;--accent:#d8552f;--accent-dim:#e8c3b5}   /* 24 Nov 2026: soft-paper light mode */
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:12px;overflow:hidden;-webkit-font-smoothing:antialiased}
   body{display:grid;grid-template-columns:292px 1fr;height:100%}
@@ -46,10 +48,10 @@
   body.embed{grid-template-columns:1fr} body.embed .panel{display:none}                 /* embedded in the generator: show only the drawing */
   #embedbuild{display:none;position:absolute;right:16px;bottom:16px;z-index:6;background:var(--ink);color:var(--bg);border:none;padding:10px 20px;font:inherit;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
   body.embed #embedbuild{display:block} #embedbuild:hover{background:#ddd}
-  #sheetwrap{display:none;position:absolute;inset:0;background:#000;z-index:5;align-items:center;justify-content:center} #sheetwrap img{max-width:100%;max-height:100%;object-fit:contain}
+  #sheetwrap{display:none;position:absolute;inset:0;background:var(--bg);z-index:5;align-items:center;justify-content:center} #sheetwrap img{max-width:100%;max-height:100%;object-fit:contain}
   #sheetback{position:absolute;left:16px;top:14px;z-index:6;background:var(--bg);color:var(--ink);border:1px solid var(--ink);padding:8px 14px;font:inherit;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} #sheetback:hover{background:var(--soft)}
   #sheettoggle{position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:6;display:flex;border:1px solid var(--line)} #sheettoggle button{background:var(--bg);color:var(--mid);border:none;border-right:1px solid var(--line);padding:8px 14px;font:inherit;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer} #sheettoggle button:last-child{border-right:none} #sheettoggle button.on{background:var(--ink);color:var(--bg)}
-  #view3dframe,#prismframe{display:none;width:100%;height:100%;border:0;background:#000}
+  #view3dframe,#prismframe{display:none;width:100%;height:100%;border:0;background:var(--bg)}
   #sheetmenu{position:absolute;right:16px;top:14px;z-index:6;background:var(--bg);color:var(--ink);border:1px solid var(--line);padding:8px 14px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-decoration:none;text-transform:uppercase}
   #sheetmenu:hover{border-color:var(--ink)}
   #sheetwait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mid);font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;pointer-events:none}
@@ -382,9 +384,14 @@ $('build').onclick=async()=>{ const b=$('build'); b.disabled=true; const t0=Date
     else{ const bad=m.parts.filter(p=>!p.watertight||p.bodies!==1).length; status(`built ${m.parts.length} pieces in ${m.build_seconds} s${bad?` - ${bad} not watertight`:''}`,!!bad);
       S.built=m.key;                                                                     // this STL + the 3D embed now belong to this exact animal; an edit drops them (invalidateBuild)
       $('links').innerHTML=`<a href="/api/stl/${m.key}">download STL (all pieces, print mm)</a>`;
-      try{ status('drawing blueprint…',true); const sr=await fetch('/api/sheet',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({P, joint:'isopod', cmap:'none', head:headArg(), body:S.spec})}); const sj=await sr.json(); if(sj.url){ showSheet(sj.url); status(`built - ${m.parts.length} pieces - blueprint ready`,false); } else status('built - blueprint failed',true); }catch(_){ status('built - blueprint failed',true); } }
+      try{ status('drawing blueprint…',true); S._sheetReq={P, joint:'isopod', cmap:'none', head:headArg(), body:S.spec}; const sj=await drawSheet(); if(sj&&sj.url){ showSheet(sj.url); status(`built - ${m.parts.length} pieces - blueprint ready`,false); } else status('built - blueprint failed',true); }catch(_){ status('built - blueprint failed',true); } }
   }catch(e){ clearInterval(tick); status('build failed - '+e,true); } b.disabled=false; };
 function showSheet(url){ $('sheetwait').style.display='none'; $('sheetimg').src=url+(url.indexOf('?')>=0?'&':'?')+'t='+Date.now(); setView('blue'); $('sheetwrap').style.display='flex'; }   // Build shows the blueprint over the drawing; "← editor" returns to editing
+// the blueprint sheet for the current build, dark-on-paper or white-on-black per the switch (24 Nov 2026)
+async function drawSheet(){ if(!S._sheetReq) return null; try{ const body=Object.assign({}, S._sheetReq, {light:!!(window.TriloTheme&&window.TriloTheme.isLight())});
+  const sr=await fetch('/api/sheet',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); return await sr.json(); }catch(_){ return null; } }
+window.TriloTheme && window.TriloTheme.onChange(async()=>{   // the 3D + prism iframes follow via theme.js relay; redraw the blueprint image if that view is up
+  if($('sheetwrap').style.display!=='none' && $('toblue').classList.contains('on')){ const sj=await drawSheet(); if(sj&&sj.url) showSheet(sj.url); } });
 function _draft(){ try{ sessionStorage.setItem('trilo_body_draft', JSON.stringify({preset:S.preset, head:S.head, headOutline:S.headOutline, headFace:S.headFace, spec:S.spec, P:S.P})); }catch(_){} }
 function setView(v){   // 31 Oct 2026: three sheet views -- 'blue' (blueprint), '3d' (the generator's viewer), 'prism' (where this point sits)
   $('sheetimg').style.display=v==='blue'?'block':'none';
@@ -431,13 +438,13 @@ new p5(s=>{
       const rt=tn>1?[q.x,q.y,q.z]:pts[0], tp=tn>1?pr.tines[tn-1][16]:pts[16], md=tn>1?pr.tines[tn-1][8]:pts[8];
       const dots=[['fs_root',rt,true],['fs_tip',tp,false],['fs_mid',md,false]];
       if(tn>1){ dots.push(['fs_fork',pr.split,false]); dots.push(['fs_splay',pr.tines[0][16],false]); }   // the fork point (drag along: the stem's share) and the other outer tine's tip (drag: the fan)
-      for(const [k,p_,big] of dots){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):s.color(255,210)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(k==='fs_root'?s.color(255,120):0)); s.circle(sx,sy,on?(big?9:7):(big?6:4.5)); HP.push({kind:'fs',j,k,sx,sy}); }
+      for(const [k,p_,big] of dots){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):s.color(INK,210)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(k==='fs_root'?s.color(INK,120):BG)); s.circle(sx,sy,on?(big?9:7):(big?6:4.5)); HP.push({kind:'fs',j,k,sx,sy}); }
       if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`spine ${j} - ${q.len.toFixed(1)} mm - rise ${Math.round(q.rise)}° - roll ${Math.round(q.roll)}° - yaw ${Math.round(q.yaw)}°${(q.tines||1)>1?' - '+Math.round(q.tines)+' tines, fan '+Math.round(q.splay)+'°, stem '+Math.round(100*q.stem)+'%':''}${q.part==null?'':q.part<0?' - on the head':' - on piece '+(q.part+1)}${q.thin<0.999?' - '+Math.round(q.thin*100)+'% thick (the room on the plate)':''}${q.cover<0.999?' - collar '+Math.round(q.cover*100)+'% on the plate':''}`, X(tp[0])+9, Y(tp[1])-6); } }); }
   function drawGrooves(){ const L=S.spec.grooves||[]; if(!L.length) return; const GC=s.color(170,140,255);
     L.forEach((q,j)=>{ const on=S.sel&&S.sel.type==='groove'&&S.sel.j===j; const col=on?s.color(246,112,79):GC;
       for(const m of (q.pts.every(p=>Math.abs(p[0])<0.75)?[1]:[1,-1])){ s.stroke(on?s.color(246,112,79,90):s.color(170,140,255,80)); s.strokeWeight(Math.max(2,2*q.w*px)); s.noFill(); s.beginShape(); for(const p of q.pts) s.vertex(X(m*p[0]),Y(p[1])); s.endShape();
         s.stroke(col); s.strokeWeight(1); s.beginShape(); for(const p of q.pts) s.vertex(X(m*p[0]),Y(p[1])); s.endShape(); }
-      q.pts.forEach((p_,i)=>{ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(col); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(i===0?s.color(170,140,255,150):0)); s.rect(sx-(on?4:3),sy-(on?4:3),on?8:6,on?8:6); HP.push({kind:'gv',j,k:'gv_p'+i,sx,sy}); });
+      q.pts.forEach((p_,i)=>{ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(col); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(i===0?s.color(170,140,255,150):BG)); s.rect(sx-(on?4:3),sy-(on?4:3),on?8:6,on?8:6); HP.push({kind:'gv',j,k:'gv_p'+i,sx,sy}); });
       if(on){ const p0=q.pts[q.pts.length-1]; s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`groove ${j} - ${(2*q.w).toFixed(1)} mm wide, ${(+q.d).toFixed(1)} mm deep`, X(p0[0])+10, Y(p0[1])-6); } }); }
   function drawTextures(){ const L=S.spec.textures||[]; if(!L.length) return; const TC=s.color(235,190,120);
     L.forEach((q,j)=>{ const on=S.sel&&S.sel.type==='tex'&&S.sel.j===j; const col=on?s.color(246,112,79):TC;
@@ -447,7 +454,7 @@ new p5(s=>{
         q.pts.forEach((p,i)=>dots.push(['tx_p'+i,p,i===0])); }
       else { const [cx,cy]=q.pts[0], tr=(+q.turn||0)*Math.PI/180; for(const m of (Math.abs(cx)<0.75?[1]:[1,-1])){ s.push(); s.translate(X(m*cx),Y(cy)); s.rotate(m*tr); s.stroke(on?s.color(246,112,79,160):s.color(235,190,120,120)); s.noFill(); s.strokeWeight(1); s.ellipse(0,0,2*q.w*px,2*q.l*px); s.pop(); }
         dots.push(['tx_c',[cx,cy],true],['tx_w',[cx+Math.cos(tr)*q.w,cy+Math.sin(tr)*q.w],false],['tx_l',[cx-Math.sin(tr)*q.l,cy+Math.cos(tr)*q.l],false]); }
-      for(const [k,p_,big] of dots){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(col); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(big?s.color(235,190,120,150):0)); s.rect(sx-(on?4:3),sy-(on?4:3),on?8:6,on?8:6); HP.push({kind:'tx',j,k,sx,sy}); }
+      for(const [k,p_,big] of dots){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(col); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(big?s.color(235,190,120,150):BG)); s.rect(sx-(on?4:3),sy-(on?4:3),on?8:6,on?8:6); HP.push({kind:'tx',j,k,sx,sy}); }
       if(on){ const p0=q.pts[q.pts.length-1]; s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`spikes ${j} - ${texBase(q).length} x ${(+q.len).toFixed(1)} mm, every ${(+q.spacing).toFixed(1)} mm, rise ${Math.round(q.rise)}°`, X(p0[0])+10, Y(p0[1])-6); } }); }
   function drawDomes(){ const L=S.spec.domes||[]; if(!L.length) return; const DC=s.color(150,200,255);
     L.forEach((q,j)=>{ const on=S.sel&&S.sel.type==='dome'&&S.sel.j===j; const I=domeInst(q);
@@ -455,18 +462,23 @@ new p5(s=>{
         s.ellipse(0,0,2*d.w*px,2*d.l*px); s.stroke(on?s.color(246,112,79,90):s.color(150,200,255,70)); s.ellipse(0,0,d.w*px,d.l*px); s.pop(); }   // the footprint, and its half-height ring
       const t=(q.turn||0)*Math.PI/180, c=Math.cos(t), sn=Math.sin(t); const last=I.filter(d=>!d.mirror).slice(-1)[0];
       const dots=[['dm_c',[q.x,q.y],true],['dm_w',[q.x+c*q.w,q.y+sn*q.w],false],['dm_l',[q.x-sn*q.l,q.y+c*q.l],false]]; if((q.n||1)>1) dots.push(['dm_step',[last.x,last.y],false]);
-      for(const [k,p_,big] of dots){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):DC); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(big?s.color(150,200,255,140):0)); s.circle(sx,sy,on?(big?9:7):(big?6:4.5)); HP.push({kind:'dm',j,k,sx,sy}); }
+      for(const [k,p_,big] of dots){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):DC); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(big?s.color(150,200,255,140):BG)); s.circle(sx,sy,on?(big?9:7):(big?6:4.5)); HP.push({kind:'dm',j,k,sx,sy}); }
       if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`dome ${j} - ${(2*q.w).toFixed(1)} x ${(2*q.l).toFixed(1)} mm - ${q.h.toFixed(1)} mm high - shape ${(+q.shape).toFixed(1)}${(q.n||1)>1?' - row of '+Math.round(q.n):''}`, X(q.x+Math.abs(c*q.w))+9, Y(q.y)-6); } }); }
   function tailList(){ const D=S.BD, T=D&&D.tail; if(!T) return []; const own=!!S.spec.tail_spines;
     return own?S.spec.tail_spines.map(q=>{ const ph=q.phi*Math.PI/180; const x0=T.wp*Math.cos(ph), y0=T.y0+T.Lp*Math.sin(ph); const r0=Math.hypot(x0,y0-T.y0)||1e-6; return Object.assign({}, q, {root:[x0,y0], dir:[x0/r0,(y0-T.y0)/r0]}); }):T.spines; }
   const X=x=>ox+x*px, Y=y=>oy+y*px;
-  function hair(a,w=1){ s.stroke(255,a); s.strokeWeight(w); s.noFill(); }
+  // 24 Nov 2026: ink/ground follow the light/dark switch (near-black on paper, else white on black); orange stays.
+  let INK=255, BG=0;
+  function themeColors(){ const L=window.TriloTheme&&window.TriloTheme.isLight(); INK=L?26:255; BG=L?247:0; }
+  themeColors();
+  window.TriloTheme && window.TriloTheme.onChange(()=>{ themeColors(); try{ s.redraw(); }catch(_){} });
+  function hair(a,w=1){ s.stroke(INK,a); s.strokeWeight(w); s.noFill(); }
   function orange(w=1){ s.stroke(246,112,79); s.strokeWeight(w); s.noFill(); }
   function poly(pts,mir,sc,dy){ s.beginShape(); for(const p of pts) s.vertex(X((mir?-1:1)*p[0]*(sc||1)), Y(p[1]*(sc||1)+(dy||0))); s.endShape(); }
   const HEADDY=-0.5;
   const headSX=v=>X(v[0]*headScale()), headSY=v=>Y(v[1]*headScale()+HEADDY);   // a head-diagram point [across,foreaft] -> screen
   window.studioHeadPoint=v=>[headSX(v),headSY(v)];                                    // (for the browser tests: a head point on the canvas)
-  s.draw=()=>{ s.background(0); if(!S.BD||!S.HD) return; fit(); const D=S.BD; const headOn=S.sel&&S.sel.type==='head';
+  s.draw=()=>{ s.background(BG); if(!S.BD||!S.HD) return; fit(); const D=S.BD; const headOn=S.sel&&S.sel.type==='head';
     hair(60); s.line(X(0), 30, X(0), H-20);
     // the head (edited), composed onto the first row
     const HD=S.HD.diagram, sc=headScale();
@@ -493,16 +505,16 @@ new p5(s=>{
     const heX=z=>oxE+z*hsc*ZX*px, heY=b=>Y(b*hsc+HEADDY);
     if(HS.section&&HS.section.length){ if(headOn) orange(1.2); else hair(255,1.1); s.beginShape(); for(const p of HS.section) s.vertex(heX(p[1]), heY(p[0])); s.endShape(); }
     if(HS.profile&&HS.profile.length){ hair(130); s.beginShape(); for(const p of HS.profile) s.vertex(heX(p[1]), heY(p[0])); s.endShape(); }
-    s.noStroke(); s.fill(255,120); s.textAlign(s.LEFT,s.TOP); s.text('PLAN', 44, 30); s.text('HEAD SIDE', oxE+2, 30); s.text('ROWS SIDE - true scale', oxE+2, Y(-1.5));
+    s.noStroke(); s.fill(INK,120); s.textAlign(s.LEFT,s.TOP); s.text('PLAN', 44, 30); s.text('HEAD SIDE', oxE+2, 30); s.text('ROWS SIDE - true scale', oxE+2, Y(-1.5));
     // handles: rows (rear/edge/tip), the head's plan handles, and its elevation handles (height, eye height)
     HP=[];
-    D.rows.forEach((r,i)=>{ const h=r.handles; const on=S.sel&&S.sel.type==='row'&&i===S.sel.i; const col=on?s.color(246,112,79):(r.small?s.color(246,112,79,160):s.color(255));
+    D.rows.forEach((r,i)=>{ const h=r.handles; const on=S.sel&&S.sel.type==='row'&&i===S.sel.i; const col=on?s.color(246,112,79):(r.small?s.color(246,112,79,160):s.color(INK));
       const pts=[['rear',X(h.rear[0]),Y(h.rear[1])],['edge',X(h.edge[0]),Y(h.edge[1])]]; if(r.row.tip>0.05) pts.push(['tip',X(h.tip[0]),Y(h.tip[1])]);
-      for(const [k,sx,sy] of pts){ s.stroke(col); s.strokeWeight(1); s.fill(on?col:0); s.circle(sx,sy,on?8:5); HP.push({kind:'row',i,k,sx,sy}); }
+      for(const [k,sx,sy] of pts){ s.stroke(col); s.strokeWeight(1); s.fill(on?col:BG); s.circle(sx,sy,on?8:5); HP.push({kind:'row',i,k,sx,sy}); }
       if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`row ${i} - ${r.print_len.toFixed(1)} mm${r.small?' - fused':''}`, X(h.edge[0])+10, Y(h.edge[1])-6); } });
     const HH=S.HD.diagram.handles||{};
     for(const [k,v] of Object.entries(HH)){ if(HEADHANDLE_SKIP.has(k)) continue; const sx=headSX(v), sy=headSY(v); const on=headOn&&S.headSel===k;
-      s.stroke(headOn?s.color(246,112,79):s.color(255,210)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):0); s.circle(sx,sy,on?8:5); HP.push({kind:'head',k,sx,sy});
+      s.stroke(headOn?s.color(246,112,79):s.color(INK,210)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):BG); s.circle(sx,sy,on?8:5); HP.push({kind:'head',k,sx,sy});
       if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(k+'  '+headKeysFor(k).join(' - '), sx+9, sy-6); } }
     // 7 Nov 2026: the head's dots -- click the head's outline (head selected) to add one, drag it, double-click it to remove it
     { const DD=HD.dots||[]; const DOT=s.color(120,220,200);
@@ -519,7 +531,7 @@ new p5(s=>{
     drawDomes();                                                                     // the domes (9 Nov 2026): footprints in plan, with centre / size / step dots
     drawTextures();                                                                  // the spike textures (9 Nov 2026): path / patch, a tick per spike
     drawGrooves();                                                                   // the grooves (9 Nov 2026): their path, as wide as they carve
-    s.noStroke(); s.fill(255,90); s.textAlign(s.RIGHT,s.BOTTOM); s.text(((inflightB||inflightH)?'drawing…':'')+' ', W-12, H-10);
+    s.noStroke(); s.fill(INK,90); s.textAlign(s.RIGHT,s.BOTTOM); s.text(((inflightB||inflightH)?'drawing…':'')+' ', W-12, H-10);
     window.__hp=HP;                                                                  // the handles this frame (for scripted tests)
   };
   const HEADHANDLE_SKIP=new Set(['crown']);                 // elevation-only; edit via the slider in the panel
@@ -556,13 +568,13 @@ new p5(s=>{
       { const ax=axialOf(r.row,i); if(ax.L>0.5){ const ym=0.5*(yr+ye); const zt=pc?Math.max(...pc.top.filter(q=>Math.abs(q[0]-ym)<1.5).map(q=>q[1]),0):rel*0.6; const root=[0,ym,zt-1];
           const pts=arcPts(root,ax.L,0,ax.pitch,ax.bend,0,16); const on=S.sel&&S.sel.type==='row'&&S.sel.i===i;
           if(on) orange(1.3); else if(ax.own) hair(255,1.2); else hair(200,1.0); s.beginShape(); for(const q of pts) s.vertex(zS(q[2]),Y(q[1])); s.endShape();   // side view only: it stands on the axis
-          const tip=pts[16], mid=pts[8]; for(const [k,q] of [['ax_tip',tip],['ax_mid',mid]]){ const sx=zS(q[2]), sy=Y(q[1]); s.stroke(on?s.color(246,112,79):s.color(255,200)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):0); s.circle(sx,sy,on?7:4.5); HP.push({kind:'ax',i,k,sx,sy,root}); }
+          const tip=pts[16], mid=pts[8]; for(const [k,q] of [['ax_tip',tip],['ax_mid',mid]]){ const sx=zS(q[2]), sy=Y(q[1]); s.stroke(on?s.color(246,112,79):s.color(INK,200)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):BG); s.circle(sx,sy,on?7:4.5); HP.push({kind:'ax',i,k,sx,sy,root}); }
           if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`axial ${ax.L.toFixed(1)} mm - ${Math.round(ax.pitch)}° - bend ${Math.round(ax.bend)}°${ax.own?'':' (preset)'}`, zS(tip[2])+9, Y(tip[1])-6); } } }
       { const hn=hornOf(r.row,i); if(hn.L>0.5){ const tip=r.handles.tip&&r.row.tip>0.05?r.handles.tip:r.handles.edge; const root=[tip[0]-1.5,tip[1],0.15*rel];
           const pts=arcPts(root,hn.L,90-(+P.spineSweep||50)+(+r.row.curve||0)+hn.yaw,0,hn.turn,hn.roll,16); const on=S.sel&&S.sel.type==='row'&&S.sel.i===i;
           if(on) orange(1.3); else if(hn.own) hair(255,1.2); else hair(200,1.0); for(const m of [1,-1]){ s.beginShape(); for(const q of pts) s.vertex(X(m*q[0]),Y(q[1])); s.endShape(); }   // plan
           hair(150,1); s.beginShape(); for(const q of pts) s.vertex(zS(q[2]),Y(q[1])); s.endShape();                                                                        // side
-          const tp=pts[16], md=pts[8]; for(const [k,q] of [['ph_tip',tp],['ph_mid',md]]){ const sx=X(q[0]), sy=Y(q[1]); s.stroke(on?s.color(246,112,79):s.color(255,200)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):0); s.circle(sx,sy,on?7:4.5); HP.push({kind:'ph',i,k,sx,sy,root}); }
+          const tp=pts[16], md=pts[8]; for(const [k,q] of [['ph_tip',tp],['ph_mid',md]]){ const sx=X(q[0]), sy=Y(q[1]); s.stroke(on?s.color(246,112,79):s.color(INK,200)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):BG); s.circle(sx,sy,on?7:4.5); HP.push({kind:'ph',i,k,sx,sy,root}); }
           if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`horn ${hn.L.toFixed(1)} mm - rise ${Math.round(hn.turn)}° - roll ${Math.round(hn.roll)}° - yaw ${Math.round(hn.yaw)}°${hn.own?'':' (preset)'}`, X(tp[0])+9, Y(tp[1])-6); } } } });
     // the tail's spines, in plan, from tail.py's own margin (the body diagram's `tail`), with dots (24 Oct 2026)
     const T=D.tail; if(!T) return; const own=!!S.spec.tail_spines; const list=tailList();
@@ -573,26 +585,26 @@ new p5(s=>{
       if(flat&&(cvr||amr)){ const fl=c=>Array.from({length:13},(_,i)=>lobePt(c,i/12)); const A=fl(C.a), B=fl(C.b).reverse(); pts[16]=A[12]; pts[8]=lobePt(q.root,0.5); for(const m of [1,-1]){ s.beginShape(); for(const p_ of [...A,...B]) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); } }
       else for(const m of [1,-1]){ if(flat){ s.beginShape(); for(const p_ of [C.a,pts[16],C.b]) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); } else { s.beginShape(); for(const p_ of pts) s.vertex(X(m*p_[0]),Y(p_[1])); s.endShape(); } }
       const tp=pts[16], md=pts[8]; const dots=[['ts_tip',tp],['ts_root',q.root],['ts_width',C.a]]; if(!flat) dots.push(['ts_mid',md]);   // tip: length (+ where); root: where on the margin; width: the lobe's root corner
-      for(const [k,p_] of dots){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):s.color(255,200)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(k==='ts_root'?s.color(255,120):0)); s.circle(sx,sy,on?7:4.5); HP.push({kind:'ts',j,k,sx,sy}); }
+      for(const [k,p_] of dots){ const sx=X(p_[0]), sy=Y(p_[1]); s.stroke(on?s.color(246,112,79):s.color(INK,200)); s.strokeWeight(1); s.fill(on?s.color(246,112,79):(k==='ts_root'?s.color(INK,120):BG)); s.circle(sx,sy,on?7:4.5); HP.push({kind:'ts',j,k,sx,sy}); }
       if(on){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(`tail ${flat?'lobe':'spine'} ${j} - ${q.len.toFixed(1)} mm - at ${Math.round(q.phi)}° - width ${(q.width==null?1:q.width).toFixed(2)}${q.curve?' - curve '+Math.round(q.curve)+'°':''}${flat?'':' - rise '+Math.round(q.rise)+'° - roll '+Math.round(q.roll)+'°'}`, X(tp[0])+9, Y(tp[1])-6); } }); }
   function drawHorn(headOn){ const P=S.P; if(!P||!S.HD) return; const pts=hornPts(P,hornRoot(),24); if(!pts) return;
     for(const m of [1,-1]){ if(headOn) orange(1.3); else hair(255,1.1); s.beginShape(); for(const q of pts) s.vertex(headSX([m*q[0],q[1]]), headSY(q)); s.endShape(); }
     if(!headOn) return;
     const tip=pts[pts.length-1], mid=pts[12]; const on=k=>S.headSel===k;
-    for(const [k,q] of [['horn_tip',tip],['horn_mid',mid]]){ const sx=headSX(q), sy=headSY(q); s.stroke(246,112,79); s.strokeWeight(1); s.fill(on(k)?s.color(246,112,79):0); s.circle(sx,sy,on(k)?8:5); HP.push({kind:'horn',k,sx,sy});
+    for(const [k,q] of [['horn_tip',tip],['horn_mid',mid]]){ const sx=headSX(q), sy=headSY(q); s.stroke(246,112,79); s.strokeWeight(1); s.fill(on(k)?s.color(246,112,79):BG); s.circle(sx,sy,on(k)?8:5); HP.push({kind:'horn',k,sx,sy});
       if(on(k)){ s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.BOTTOM); s.text(k==='horn_tip'?'horn tip  genalHorn - genalHornYaw':'horn mid  genalHornBend - genalHornRoll', sx+9, sy-6); } } }
   function drawEye(){ const P=S.P; const ex=W-165, ey=250;                        // the eye in side view, drawn from P (top-right); drives the built eye
     const eyeSize=+P.eyeSize||0.14, eyeStalk=+P.eyeStalk||0, eyeLean=+P.eyeLean||0, eyeHeight=+P.eyeHeight||0.8;
     const er=Math.max(eyeSize*150,7), lean=eyeLean*Math.PI/180, dx=Math.sin(lean), dy=-Math.cos(lean), stalkPx=eyeStalk*er;
     const bx=ex+dx*stalkPx, by=ey+dy*stalkPx, domeH=Math.max(eyeHeight*er,2), htx=bx+dx*domeH, hty=by+dy*domeH;
-    s.noStroke(); s.fill(255,110); s.textAlign(s.LEFT,s.BOTTOM); s.text('EYE - side - drag to shape', ex-er-12, ey-er-stalkPx-domeH-16);
+    s.noStroke(); s.fill(INK,110); s.textAlign(s.LEFT,s.BOTTOM); s.text('EYE - side - drag to shape', ex-er-12, ey-er-stalkPx-domeH-16);
     hair(45); s.line(ex-er-12, ey, ex+er+80, ey);                                 // the cheek baseline
     if(stalkPx>1){ hair(190,1.2); s.line(ex,ey,bx,by); }                          // the stalk
     hair(255,1.3); s.circle(bx,by,er*2);                                          // the eye
     hair(150,1); s.line(bx,by,htx,hty);                                           // the dome height
     const sOn=S.eyeSel==='stalk', hOn=S.eyeSel==='height';
-    s.stroke(246,112,79); s.strokeWeight(1); s.fill(sOn?s.color(246,112,79):0); s.circle(bx,by,sOn?9:6); HP.push({kind:'eye',k:'stalk',sx:bx,sy:by,ex:ex,ey:ey,er:er});
-    s.fill(hOn?s.color(246,112,79):0); s.circle(htx,hty,hOn?9:6); HP.push({kind:'eye',k:'height',sx:htx,sy:hty,bx:bx,by:by,dx:dx,dy:dy,er:er});
+    s.stroke(246,112,79); s.strokeWeight(1); s.fill(sOn?s.color(246,112,79):BG); s.circle(bx,by,sOn?9:6); HP.push({kind:'eye',k:'stalk',sx:bx,sy:by,ex:ex,ey:ey,er:er});
+    s.fill(hOn?s.color(246,112,79):BG); s.circle(htx,hty,hOn?9:6); HP.push({kind:'eye',k:'height',sx:htx,sy:hty,bx:bx,by:by,dx:dx,dy:dy,er:er});
     s.noStroke(); s.fill(246,112,79); s.textAlign(s.LEFT,s.CENTER); s.text('stalk '+eyeStalk.toFixed(1)+' - lean '+Math.round(eyeLean)+'°', ex+er+14, ey-6); s.text('height '+eyeHeight.toFixed(2), htx+12, hty); }
   function drawProng(which,rx,ry,dir,Lref){ const P=S.P; const d=Math.round(P[which+'Prongs']||0); if(d<=0) return;   // the d-tine fan, reused from the generator's prong math
     const Lp=Math.max((P[which+'ProngLen']||0.5)*Lref,14), st=(P[which+'ProngStem']||0)*Lp, sp=(P[which+'ProngSplay']||30), n=Math.max(d,1);

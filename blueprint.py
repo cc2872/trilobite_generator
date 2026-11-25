@@ -14,6 +14,44 @@ RELIEF_ALPHA = 0.5   # the relief field sits semi-transparent under the blueprin
 BED_MM = 256         # target print bed (square), mm — common desktop FDM; the sheet flags a specimen that won't fit
 ISO_BALL_D, ISO_CLEAR = 11.5, 0.244   # 10 Nov 2026: the isopod kit's ball diameter and ball-socket clearance at 1:1 (isopod_model/body.py); x the kit
 
+def _light_invert(path):
+    """Re-save a rendered sheet dark-on-light (24 Nov 2026): invert HSL lightness while keeping hue and
+    saturation, so the black ground becomes white paper and the white ink becomes near-black, yet the
+    orange accents stay orange and a relief colormap keeps its hue (a plain 1-rgb would turn orange cyan).
+    A post-process on the PNG — the renderer is untouched, so nothing else about the sheet can change."""
+    img = plt.imread(path)                                    # H x W x (3|4), float32 in [0,1]
+    a = img[..., 3:] if img.shape[-1] == 4 else None
+    rgb = img[..., :3].astype(np.float64)
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    mx = rgb.max(-1); mn = rgb.min(-1); d = mx - mn
+    L = (mx + mn) / 2.0
+    nz = d > 1e-9
+    s = np.zeros_like(L)
+    denom = np.where(L < 0.5, mx + mn, 2.0 - mx - mn)
+    s[nz] = d[nz] / np.clip(denom[nz], 1e-9, None)
+    rc = np.zeros_like(L); gc = np.zeros_like(L); bc = np.zeros_like(L)
+    rc[nz] = (mx[nz] - r[nz]) / d[nz]; gc[nz] = (mx[nz] - g[nz]) / d[nz]; bc[nz] = (mx[nz] - b[nz]) / d[nz]
+    h = np.where(r == mx, bc - gc, np.where(g == mx, 2.0 + rc - bc, 4.0 + gc - rc))
+    h = (h / 6.0) % 1.0
+    Ln = 1.0 - L                                              # the inversion: everything else (h, s) held
+    m2 = np.where(Ln <= 0.5, Ln * (1.0 + s), Ln + s - Ln * s)
+    m1 = 2.0 * Ln - m2
+    def _ch(hue):
+        hue = hue % 1.0
+        out = np.array(m1, copy=True)
+        out = np.where(hue < 1 / 6.0, m1 + (m2 - m1) * 6.0 * hue, out)
+        out = np.where((hue >= 1 / 6.0) & (hue < 0.5), m2, out)
+        out = np.where((hue >= 0.5) & (hue < 2 / 3.0), m1 + (m2 - m1) * (2 / 3.0 - hue) * 6.0, out)
+        return out
+    gray = ~nz
+    nr = np.where(gray, Ln, _ch(h + 1 / 3.0))
+    ng = np.where(gray, Ln, _ch(h))
+    nb = np.where(gray, Ln, _ch(h - 1 / 3.0))
+    out = np.clip(np.stack([nr, ng, nb], -1), 0.0, 1.0)
+    if a is not None: out = np.concatenate([out, a], -1)
+    plt.imsave(path, out.astype(np.float32))
+    return path
+
 def _fits_bed(w, h, bed=BED_MM):
     """Does a w x h footprint fit on a square bed, flat or rotated? (print-in-place must lie flat)."""
     if max(w, h) <= bed: return True
@@ -309,7 +347,7 @@ def _fov_lines(P):
     except Exception as ex:
         return [f"FOV      — ({str(ex)[:20]})"]
 
-def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None, cmap="none"):
+def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None, cmap="none", light=False):
     bw = cmap not in CMAPS                                                     # 'none'/invalid -> black & white blueprint (default)
     m = m.copy(); m.apply_translation([-m.centroid[0], 0, 0])
     (x0, y0, z0), (x1, y1, z1) = m.bounds
@@ -455,7 +493,8 @@ def sheet(m, P, meas, path, title="TRILOBITE MORPHOSPACE", enrolled=None, cmap="
         _sv = str(P.get("schema", ""))
     spec = _json.dumps({"hash": meas.get("params", ""), "schema": _sv, "instrument": meas.get("instrument", ""),
                         "params": P}, sort_keys=True, default=str)
-    fig.savefig(path, dpi=110, facecolor=BG, metadata={"trilobite": spec}); plt.close(fig); return path
+    fig.savefig(path, dpi=110, facecolor=BG, metadata={"trilobite": spec}); plt.close(fig)
+    return _light_invert(path) if light else path
 
 if __name__ == "__main__" and len(__import__("sys").argv) > 1 and __import__("sys").argv[1] != "gallery":
     import sys, json
@@ -561,7 +600,7 @@ def _box(ax, color="#555555"):
     for s in ax.spines.values(): s.set_visible(True); s.set_color(color); s.set_linewidth(0.7)
     ax.set_xticks([]); ax.set_yticks([]); ax.axis("on")
 
-def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
+def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none", light=False):
     """parts: the pieces in their rest frame (print mm, head first). info: {names, pivots, curl_deg, params, schema,
     build_seconds, volumes, meta (per-piece bodies/watertight), checks (the manifest's print block), head, body,
     swing (free swing per joint, deg)}. cmap: a relief colormap, or 'none' for the black & white blueprint (default).
@@ -778,7 +817,8 @@ def isopod_sheet(parts, P, info, path, title="ISOPOD TRILOBITE", cmap="none"):
     st.text(0.50, 0.5, "SHEET 1/1 · mm · 3rd-angle · A3", fontsize=7.5, va="center", ha="center", **mono)
     st.text(0.992, 0.5, f"REV A · {info.get('date', '')} · Claire Choi · Cornell".replace("·  ·", "·"), fontsize=8, va="center", ha="right", **mono)
     spec = _json.dumps({"hash": info.get("params", ""), "schema": info.get("schema", ""), "model": "isopod", "params": P}, sort_keys=True, default=str)
-    fig.savefig(path, dpi=110, facecolor=BG, metadata={"trilobite": spec}); plt.close(fig); return path
+    fig.savefig(path, dpi=110, facecolor=BG, metadata={"trilobite": spec}); plt.close(fig)
+    return _light_invert(path) if light else path
 
 
 # ---------------------------------------------------------------- gallery mode (prompt 8: absorbs legacy/sheet10.py)
